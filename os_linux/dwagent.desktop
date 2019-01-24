@@ -1,0 +1,10 @@
+[Desktop Entry]
+Encoding=UTF-8
+Version=1.0
+Terminal=false
+Icon=@PATH_DWA@/images/logo.png
+Exec="@PATH_DWA@/native/dwagent"
+Categories=System;Application;
+Type=Application
+Name=DWAgent
+GenericName=DWAgent

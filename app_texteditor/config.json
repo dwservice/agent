@@ -1,0 +1,4 @@
+{
+	"app_dependencies": ["filesystem"],
+	"lib_dependencies": []
+}

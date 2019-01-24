@@ -1,0 +1,21 @@
+#!/bin/sh
+#This Source Code Form is subject to the terms of the Mozilla
+#Public License, v. 2.0. If a copy of the MPL was not distributed
+#with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+
+PATH_DWA="@PATH_DWA@"
+PATH_DWA_NATIVE="$PATH_DWA/native"
+PATH_DWA_RUNTIME="$PATH_DWA/runtime/bin"
+PATH_DWA_RUNTIME_LIBRARY="$PATH_DWA/runtime/lib"
+
+while [ ! -f "${PATH_DWA}/guilnc.run" ]
+do
+	sleep 1
+done
+if [ -f "${PATH_DWA}/guilnc.run" ]; then
+	cd "${PATH_DWA}"
+	export DYLD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
+	"${PATH_DWA_RUNTIME}/dwagent" agent.pyc guilnc
+fi
+exit 0

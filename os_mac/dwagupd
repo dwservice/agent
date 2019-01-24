@@ -1,0 +1,64 @@
+#!/bin/sh
+#This Source Code Form is subject to the terms of the Mozilla
+#Public License, v. 2.0. If a copy of the MPL was not distributed
+#with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+copy_recursive(){
+	retval=0
+	for file in $1**
+	do
+	  fsrc=$file
+	  fdst=$2${file##*/}
+	  if [ -d "$fsrc" ]; then
+		if [ ! -d "$fdst" ]; then
+			if ! mkdir "$fdst"; then
+				retval=1
+			fi
+		fi
+		fdir="$fsrc"
+		if copy_recursive "$fsrc/" "$fdst/"; then
+			if ! rm -r -f "$fdir"; then
+				retval=1
+			fi	
+		else
+			retval=1
+		fi
+	  elif [ -f "$fsrc" ];then
+		if [ -f "$fdst" ]; then
+			if ! rm -r -f "$fdst"; then
+				echo "ERROR:Coping file $file."
+	     			retval=1
+			fi
+	     	fi
+		if [ ! -f "$fdst" ]; then
+			if cp "$fsrc" "$fdst"; then
+				echo "Copied file $file."	
+				rm -r -f "$fsrc"
+			else
+				echo "ERROR:Coping file $file."
+				retval=1		
+			fi
+		fi
+	  fi
+	done
+	return $retval
+}
+
+check_update(){
+	PATH_DWA=$1
+	if [ -d "$1/update" ]; then
+		if copy_recursive "$1/update/" "$1/"; then
+			if ! rm -r -f "$1/update"; then
+				echo "Update error."
+				return 1
+			fi
+		else
+			echo "Update error."
+			return 1
+		fi
+	fi
+	return 0
+}
+
+
+

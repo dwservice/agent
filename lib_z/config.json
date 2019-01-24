@@ -1,0 +1,5 @@
+{
+	"filename_win": "zlib1.dll",
+	"filename_linux": "libz.so",
+	"filename_mac": "libz.so"
+}
