@@ -1,0 +1,7 @@
+[Desktop Entry]
+Encoding=UTF-8
+Type=Application
+Terminal=false
+Exec="@PATH_DWA@/native/systray"
+Icon=@PATH_DWA@/images/logo.png
+Name=DWAgent - Systray

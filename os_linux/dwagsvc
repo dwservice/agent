@@ -1,0 +1,426 @@
+#!/bin/sh
+#
+# chkconfig: 2345 80 30
+# description: DWAgent Service
+#
+### BEGIN INIT INFO
+# Provides: dwagsvc
+# Required-Start:
+# Required-Stop:
+# Should-Start:
+# Should-Stop:
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: Start and Stop DWAgent Service
+# Description: DWAgent Service
+### END INIT INFO
+#This Source Code Form is subject to the terms of the Mozilla
+#Public License, v. 2.0. If a copy of the MPL was not distributed
+#with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+RETVAL=0
+PATH_DWA="@PATH_DWA@"
+PATH_DWA_NATIVE="$PATH_DWA/native"
+PATH_DWA_RUNTIME="$PATH_DWA/runtime/bin"
+PATH_DWA_RUNTIME_LIBRARY="$PATH_DWA/runtime/lib"
+TIMEOUT_START_STOP=30
+
+
+install_systemctl(){
+	if [ ! -f /etc/systemd/system/dwagent.service ]; then
+		cp "${PATH_DWA_NATIVE}/dwagent.service" /etc/systemd/system/dwagent.service
+		if [ $? -eq 0 ]; then
+			systemctl --system daemon-reload
+			systemctl enable dwagent.service
+			if [ $? -eq 0 ]; then
+				echo "Installed"
+			else
+				echo "Error: Enable systemctl."
+				RETVAL=11
+			fi
+		else
+			echo "Error: Copy file service in systemd."
+			RETVAL=12
+		fi
+	else
+		echo "Error: Service already installed."
+		RETVAL=1
+	fi
+}
+
+install_chkconfig(){
+	if [ ! -f /etc/init.d/dwagent ]; then
+		ln -s "${PATH_DWA_NATIVE}/dwagsvc" /etc/init.d/dwagent
+		if [ $? -eq 0 ]; then
+			chkconfig --add dwagent
+			if [ $? -eq 0 ]; then
+				echo "Installed"
+			else
+				echo "Error: Add chkconfig."
+				RETVAL=11
+			fi
+		else
+			echo "Error: Create symbolic link."
+			RETVAL=12
+		fi
+	else
+		echo "Error: Service already installed."
+		RETVAL=1
+	fi
+}
+
+install_updatercd(){
+	if [ ! -f /etc/init.d/dwagent ]; then
+		ln -s "${PATH_DWA_NATIVE}/dwagsvc" /etc/init.d/dwagent
+		if [ $? -eq 0 ]; then
+			#update-rc.d -f dwagent start 80 2 3 4 5 . stop 30 0 1 6 .
+			update-rc.d -f dwagent defaults
+			if [ $? -eq 0 ]; then
+				echo "Installed"
+			else
+				echo "Error: Add update-rc.d."
+				RETVAL=11
+			fi
+		else
+			echo "Error: Create symbolic link."
+			RETVAL=12
+		fi
+	else
+		echo "Error: Service already installed."
+		RETVAL=1
+	fi
+}
+
+install(){
+	if [ "$(which "systemctl" 2>/dev/null)" ]; then
+    	install_systemctl
+    elif [ "$(which "chkconfig" 2>/dev/null)" ]; then
+    	install_chkconfig
+	elif [ "$(which "update-rc.d" 2>/dev/null)" ]; then
+        install_updatercd
+	else
+		echo "Error: Missing systemctl or chkconfig or update-rc.d command."
+		RETVAL=2
+	fi
+}
+
+delete_systemctl(){
+	if [ -f /etc/systemd/system/dwagent.service ]; then
+		systemctl disable dwagent.service
+		if [ $? -eq 0 ]; then
+			rm /etc/systemd/system/dwagent.service
+			if [ $? -eq 0 ]; then
+				systemctl --system daemon-reload
+				echo "Deleted"
+			else
+				echo "Error: Remove service file."
+				RETVAL=11
+			fi
+		else
+			echo "Error: Disable service in systemd."
+			RETVAL=12
+		fi
+	else
+		echo "Error: Service not installed."
+		RETVAL=1
+	fi
+}
+
+delete_chkconfig(){
+	if [ -f /etc/init.d/dwagent ]; then
+		chkconfig --del dwagent
+		if [ $? -eq 0 ]; then
+			rm /etc/init.d/dwagent
+			if [ $? -eq 0 ]; then
+				echo "Deleted"
+			else
+				echo "Error: Remove symbolic link."
+				RETVAL=12
+			fi
+		else
+			echo "Error: Del chkconfig."
+			RETVAL=11
+		fi
+	else
+		chkconfig --del dwagent &>/dev/null
+		echo "Error: Service not installed."
+		RETVAL=1
+	fi
+}
+
+delete_updatercd(){
+	if [ -f /etc/init.d/dwagent ]; then
+		update-rc.d -f dwagent remove
+		if [ $? -eq 0 ]; then
+			rm /etc/init.d/dwagent
+			if [ $? -eq 0 ]; then
+				echo "Deleted"
+			else
+				echo "Error: Remove symbolic link."
+				RETVAL=12
+			fi
+		else
+			echo "Error: Del update-rc.d."
+			RETVAL=11
+		fi
+	else
+		update-rc.d -f dwagent remove > /dev/null 2>&1
+		echo "Error: Service not installed."
+		RETVAL=1
+	fi
+}
+
+delete(){
+	if [ "$(which "systemctl" 2>/dev/null)" ]; then
+    	delete_systemctl
+    elif [ "$(which "chkconfig" 2>/dev/null)" ]; then
+    	delete_chkconfig
+	elif [ "$(which "update-rc.d" 2>/dev/null)" ]; then
+        delete_updatercd
+	else
+		echo "Error: Missing chkconfig or update-rc.d command."
+		RETVAL=2
+	fi
+}
+
+rem_file() {
+	if [ -f $1 ]; then
+		rm -f $1
+	fi
+}
+
+test_pid() {
+	if [ -f dwagent.pid ]; then
+		PIDDW=`cat dwagent.pid`
+		kill -0 $PIDDW > /dev/null 2>&1
+		if test $? -eq 0; then
+			return 1
+		else
+			echo "Warning: DWAgent is not running, but pid file exists "
+			rem_file dwagent.pid
+		fi
+	fi
+	return 0
+}
+
+run() {
+	cd "${PATH_DWA}"
+	test_pid
+	if [ $? -eq 0 ]; then
+		echo $$ > dwagent.pid
+		while [ ! -f dwagent.stop ]
+		do
+			. "${PATH_DWA_NATIVE}/dwagupd"
+			if check_update "${PATH_DWA}"; then
+				cd "${PATH_DWA}"
+				export LD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
+				export PYTHONIOENCODING=utf-8
+				"${PATH_DWA_RUNTIME}/dwagent" agent.pyc -filelog
+			fi
+			for X in $(seq 5)
+			do
+				if [ ! -f dwagent.stop ]; then
+					sleep 1
+				fi
+			done
+		done
+		rem_file dwagent.stop
+		rem_file dwagent.pid
+	else
+		echo "Error: DWAgent already run."
+	fi
+}
+
+start_internal() {
+	cd "${PATH_DWA}"
+	test_pid
+	if [ $? -eq 0 ]; then
+		echo "Starting DWAgent daemon"
+		rem_file dwagent.stop
+		rem_file dwagent.start
+		export LD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
+		export PYTHONIOENCODING=utf-8
+		"${PATH_DWA_RUNTIME}/dwagent" "${PATH_DWA}/daemon.pyc" "${PATH_DWA_NATIVE}/dwagsvc" run  > "${PATH_DWA_NATIVE}/service.log" 2>&1
+		c=0
+		while [ ! -f dwagent.start ]
+		do
+			sleep 1
+			c=`expr $c + 1`
+			if [ $c -ge $TIMEOUT_START_STOP ]; then
+				echo "Warning: Starting timeout."
+				RETVAL=11
+				break
+			fi
+		done
+		rem_file dwagent.start
+	else
+		echo "DWAgent already stared."
+		RETVAL=1
+	fi
+}
+
+start() {
+	if [ "$(which "update-rc.d" 2>/dev/null)" ]; then
+		if [ "$(which "start-stop-daemon" 2>/dev/null)" ]; then
+			if ! start-stop-daemon --start --quiet --oknodo --exec "${PATH_DWA_NATIVE}/dwagsvc" -- start_internal; then
+				RETVAL=1
+			fi
+		else
+			start_internal
+		fi
+	elif [ "$(which "chkconfig" 2>/dev/null)" ]; then
+		if [ "$(which "start-stop-daemon" 2>/dev/null)" ]; then
+			if ! start-stop-daemon --start --quiet --oknodo --exec "${PATH_DWA_NATIVE}/dwagsvc" -- start_internal; then
+				RETVAL=1
+			fi
+		else
+			start_internal
+		fi
+        elif [ "$(which "systemctl" 2>/dev/null)" ]; then
+	        if ! systemctl start dwagent.service; then
+			RETVAL=1
+		fi
+	else
+		start_internal
+	fi
+}
+
+stop_internal() {
+	cd "${PATH_DWA}"
+	test_pid
+	if [ $? -eq 1 ]; then
+		echo "Stopping DWAgent daemon"
+		echo "" > dwagent.stop
+		c=0
+		while [ -f dwagent.stop ]
+		do
+			sleep 1
+			c=`expr $c + 1`
+			if [ $c -ge $TIMEOUT_START_STOP ]; then
+				echo "Warning: Stopping timeout."
+				PIDDW=`cat dwagent.pid`
+				echo "Warning: Kill process $PIDDW."
+				kill -9 $PIDDW
+				break
+			fi
+		done
+	else
+		echo "DWAgent already stopped."
+		RETVAL=1
+	fi
+}
+
+stop() {
+	if [ "$(which "update-rc.d" 2>/dev/null)" ]; then
+		stop_internal
+	elif [ "$(which "chkconfig" 2>/dev/null)" ]; then
+		stop_internal
+        elif [ "$(which "systemctl" 2>/dev/null)" ]; then
+	        if ! systemctl stop dwagent.service; then
+			RETVAL=1
+		fi
+	else
+		stop_internal
+	fi
+}
+
+restart() {
+	stop
+	start
+}
+
+status() {
+	cd "${PATH_DWA}"
+	test_pid
+	if [ ! $? -eq 1 ]; then
+		echo "Not running."
+		RETVAL=3
+	else
+		echo "Running."
+	fi
+}
+
+install_bin(){
+	ln -s '@PATH_DWA@/native/dwagent' $1/dwagmonitor
+	ln -s '@PATH_DWA@/native/configure' $1/dwagconfigure
+	ln -s '@PATH_DWA@/native/uninstall' $1/dwaguninstall
+}
+
+uninstall_bin(){
+	if [ -f $1/dwagmonitor ]; then
+		rm $1/dwagmonitor
+	fi
+	if [ -f $1/dwagconfigure ]; then
+		rm $1/dwagconfigure
+	fi
+	if [ -f $1/dwaguninstall ]; then
+		rm $1/dwaguninstall
+	fi
+}
+
+install_shortcuts(){
+	if [ -d /usr/bin ]; then
+		install_bin /usr/bin
+	elif [ -d /bin ]; then
+		install_bin /bin
+	fi
+	if [ "$(which "xdg-desktop-menu")" ]; then
+		cd "${PATH_DWA_NATIVE}"
+		xdg-desktop-menu install --noupdate --mode system --novendor dwagent.desktop
+		xdg-desktop-menu forceupdate
+	else
+		RETVAL=1
+	fi
+}
+
+uninstall_shortcuts(){
+	uninstall_bin /usr/bin
+	uninstall_bin /bin
+	if [ "$(which "xdg-desktop-menu")" ]; then
+		cd "${PATH_DWA_NATIVE}"
+		xdg-desktop-menu uninstall --mode system --novendor dwagent.desktop
+	else
+		RETVAL=1
+	fi
+}
+
+case "$1" in
+start)
+  start
+;;
+start_internal)
+  start_internal
+;;
+stop_internal)
+  stop_internal
+;;
+stop)
+  stop
+;;
+restart)
+  restart
+;;
+status)
+  status
+;;
+run)
+  run
+;;
+install)
+  install
+;;
+delete)
+  delete
+;;
+install_shortcuts)
+  install_shortcuts
+;;
+uninstall_shortcuts)
+  uninstall_shortcuts
+;;
+*)
+echo $"Usage: $0 {start|stop|restart}"
+exit 1
+esac
+
+exit $RETVAL

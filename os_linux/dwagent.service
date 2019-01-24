@@ -1,0 +1,16 @@
+[Unit]
+Description=DWAgent
+After=syslog.target network.target
+
+[Service]
+Type=forking
+ExecStart=/bin/sh -c '"@PATH_DWA@/native/dwagsvc" start_internal'
+ExecStop=/bin/sh -c '"@PATH_DWA@/native/dwagsvc" stop_internal'
+
+[Install]
+WantedBy=multi-user.target
+
+
+
+
+

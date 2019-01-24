@@ -1,0 +1,15 @@
+.hg*
+*.pyc
+*.lock
+*.log
+*.log.[0-9]
+*.start
+*.stop
+*.shm
+*.DS_Store
+core/config.json
+make/native/*
+make/tmp/*
+*/.settings/*
+*/bld_*/*
+/.metadata/

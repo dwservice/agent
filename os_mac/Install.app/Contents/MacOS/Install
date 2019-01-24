@@ -1,0 +1,23 @@
+#!/bin/sh
+
+PATH_DWA="$1"
+PATH_DWA_NATIVE="$PATH_DWA/native"
+PATH_DWA_RUNTIME="$PATH_DWA/runtime/bin"
+PATH_DWA_RUNTIME_LIBRARY="$PATH_DWA/runtime/lib"
+
+if [ "$2" = "Y" ] && [ "$(id -u)" != "0" ]; then
+	LANGUAGE=$(defaults read -g AppleLocale | tr -d ' ' | tr -d \' | tr -d '\r' | cut -c1-2)
+	osascript << EOF
+do shell script "'$0' '$1' Y GOTOOPT=install LANG='$LANGUAGE'" with administrator privileges
+EOF
+	exit $?
+else
+	cd "${PATH_DWA}"
+	export DYLD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
+	if [ -z "$3" ] && [ -z "$4" ]; then
+		"${PATH_DWA_RUNTIME}/dwagent" installer.pyc
+	else
+		"${PATH_DWA_RUNTIME}/dwagent" installer.pyc $3 $4
+	fi
+fi
+exit 0

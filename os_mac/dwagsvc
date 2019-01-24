@@ -1,0 +1,91 @@
+#!/bin/sh
+#This Source Code Form is subject to the terms of the Mozilla
+#Public License, v. 2.0. If a copy of the MPL was not distributed
+#with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+
+RETVAL=0
+PATH_DWA="@PATH_DWA@"
+PATH_DWA_NATIVE="$PATH_DWA/native"
+PATH_DWA_RUNTIME="$PATH_DWA/runtime/bin"
+PATH_DWA_RUNTIME_LIBRARY="$PATH_DWA/runtime/lib"
+
+run() {
+	. "${PATH_DWA_NATIVE}/dwagupd"
+	if check_update "${PATH_DWA}"; then
+		cd "${PATH_DWA}"
+		export DYLD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
+                "${PATH_DWA_RUNTIME}/dwagent" agent.pyc -filelog -noctrlfile
+	fi
+}
+
+install() {
+	ln -s "${PATH_DWA_NATIVE}/dwagsvc.plist" /Library/LaunchDaemons/net.dwservice.agsvc.plist
+	if [ $? -eq 0 ]; then
+		echo "Installed"
+	else
+		echo "Error: Create symbolic link."
+		RETVAL=12
+	fi
+	ln -s "${PATH_DWA_NATIVE}/dwagguilnc.plist" /Library/LaunchAgents/net.dwservice.agguilnc.plist
+}
+
+delete() {
+	rm -f /Library/LaunchAgents/net.dwservice.agguilnc.plist
+	rm -f /Library/LaunchDaemons/net.dwservice.agsvc.plist
+	if [ $? -eq 0 ]; then
+		echo "Deleted"
+	else 
+		echo "Error: Remove symbolic link."
+		RETVAL=12
+	fi
+}
+
+start() {
+	if ! launchctl load -w -F /Library/LaunchDaemons/net.dwservice.agsvc.plist; then
+		RETVAL=1
+	fi
+}
+
+stop() {
+	if ! launchctl unload -F /Library/LaunchDaemons/net.dwservice.agsvc.plist; then
+		RETVAL=1
+	fi
+}
+
+installAutoRun() {
+	ln -s "${PATH_DWA_NATIVE}/dwagsystray.plist" /Library/LaunchAgents/net.dwservice.agsystray.plist
+}
+
+removeAutoRun() {
+	rm -f /Library/LaunchAgents/net.dwservice.agsystray.plist
+}
+
+case "$1" in
+start)
+  start
+;;
+stop)
+  stop
+;;
+run)
+  run
+;;
+install)
+  install
+;;
+delete)
+  delete
+;;
+installAutoRun)
+  installAutoRun
+;;
+removeAutoRun)
+  removeAutoRun
+;;
+*)
+echo $"Usage: $0 {start|stop}"
+exit 1
+esac
+
+exit $RETVAL

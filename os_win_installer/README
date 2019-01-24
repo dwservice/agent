@@ -1,0 +1,3 @@
+TO CREATE RESOURCE:
+windres -F pe-i386 resource.rc -O coff -o resource.res
+windres -F pe-i386 -i resource.rc -o resource.o
