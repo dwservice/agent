@@ -49,7 +49,7 @@ private:
 	#define MONITORS_INTERVAL 3000
 
 	DWDebugger* debugger;
-	LoadLib loadLib;
+	WindowsLoadLib loadLib;
 
 	struct MonitorInfo{
 		HMONITOR hMonitor;

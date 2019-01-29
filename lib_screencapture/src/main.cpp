@@ -16,7 +16,7 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //#pragma comment(lib,"UserEnv.lib")
 //#pragma warning(disable : 4995)
 
-LoadLib loadLib;
+WindowsLoadLib loadLib;
 OSVERSIONINFOEX m_osVerInfo = { 0 };
 //bool binit=false;
 //EXTERN_C IMAGE_DOS_HEADER __ImageBase;

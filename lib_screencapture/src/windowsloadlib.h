@@ -14,8 +14,8 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #include <windows.h>
 
-#ifndef LOADLIB_H_
-#define LOADLIB_H_
+#ifndef WINDOWSLOADLIB_H_
+#define WINDOWSLOADLIB_H_
 
 //WTS LIB
 typedef BOOL (WINAPI *IWTSQueryUserToken)(ULONG SessionId, PHANDLE phToken); 
@@ -36,11 +36,11 @@ typedef BOOL (WINAPI *IWinStationConnectW)(HANDLE server, ULONG connectSessionId
 										   ULONG activeSessionId, PCWSTR password,
 										   ULONG unknown); 
 
-class LoadLib{
+class WindowsLoadLib{
 
 public:
-	LoadLib();
-    ~LoadLib( void );
+	WindowsLoadLib();
+    ~WindowsLoadLib( void );
 
 	//WTS LIB
 	bool isAvailableWTS();
@@ -112,7 +112,7 @@ private:
 
 };
 
-#endif /* LOADLIB_H_ */
+#endif /* WINDOWSLOADLIB_H_ */
 
 
 #endif
