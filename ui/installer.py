@@ -1338,6 +1338,16 @@ class Install:
                 prpconf['listen_port'] = self._options["listenport"]
             else:
                 prpconf['listen_port'] = self._listen_port
+        
+        if self._runWithoutInstall:
+            try:
+                if utils.path_exists(self._install_path.get() + utils.path_sep +  u'config.json'):
+                    appconf = self.load_prop_json(self._install_path.get() + utils.path_sep +  u'config.json')
+                    if "preferred_run_user" in appconf:
+                        prpconf["preferred_run_user"]=appconf["preferred_run_user"]
+            except:
+                None
+                
         self.store_prop_json(prpconf, pth + utils.path_sep + u'config.json')
         
         if not (self._runWithoutInstall and utils.path_exists(pth + utils.path_sep + u"config.json") 
