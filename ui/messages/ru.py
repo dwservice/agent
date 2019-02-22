@@ -149,7 +149,7 @@ data={
     'runWithoutInstallationConnecting':u'Открытие сеанса...',
     'runWithoutInstallationEnd':u'Сеанс закончен.',
     'runWithoutInstallationOnlineBottom':u'ПРЕДУПРЕЖДЕНИЕ:\nНе сообщайте эту информацию людям, которым не доверяете, иначе позволите им получить доступ к агенту. Если вы не понимаете до конца, что именно вы делаете, пожалуйста, закройте это приложение.',
-    'runWithoutInstallationOnlineBottomPutCode':u'Внимание: сейчас агент готов принимать соединение. Если вы не уверены в том, что делаете, - закройте это окно.',
+    'runWithoutInstallationOnlineBottomPutCode':u'Внимание: \nсейчас агент готов принимать соединение. Если вы не уверены в том, что делаете, - закройте это окно.',
     'runWithoutInstallationOnlinePassword':u'Пароль: {0}',
     'runWithoutInstallationOnlineTop':u'Сеанс активен.\nДля подключения к агенту перейдите по ссылке https://www.dwservice.net',
     'runWithoutInstallationOnlineTopPutCode':u'Сессия активна.',

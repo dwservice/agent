@@ -7,7 +7,7 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
 data={
-    'accept':u'Eu aceitounins',
+    'accept':u'Eu aceito',
     'agentName':u'Nome do agente',
     'alreadyInstalled':u'DWAgent já instalado.\n\nO agente atualiza automaticamente para a última versão. Isso significa que você não precisa instalar manualmente as novas atualizações.',
     'back':u'Voltar',
