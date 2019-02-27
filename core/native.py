@@ -119,19 +119,22 @@ def _load_lib_obj(name):
     
 
 def _unload_lib_obj(olib):
-    if utils.is_windows():
-        import _ctypes
-        _ctypes.FreeLibrary(olib._handle)
-        del olib
-    elif utils.is_linux():
-        import _ctypes
-        _ctypes.dlclose(olib._handle)
-        del olib
-    elif utils.is_mac():
-        import _ctypes
-        _ctypes.dlclose(olib._handle)
-        del olib
-
+    if olib is not None:
+        try:
+            if utils.is_windows():
+                import _ctypes
+                _ctypes.FreeLibrary(olib._handle)
+                del olib
+            elif utils.is_linux():
+                import _ctypes
+                _ctypes.dlclose(olib._handle)
+                del olib
+            elif utils.is_mac():
+                import _ctypes
+                _ctypes.dlclose(olib._handle)
+                del olib
+        except:
+            None
 '''
 del olib
     olib.dlclose(olib._handle)
