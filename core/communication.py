@@ -680,16 +680,19 @@ class Response:
 
 class Counter:
     
-    def __init__(self):
+    def __init__(self, ms=None):
         self._semaphore = threading.Condition()
         self._current_elapsed = 0
         self._current_time = long(get_time() * 1000)
+        self._time_to_elapsed=ms
 
     def reset(self):
         self._current_elapsed = 0
         self._current_time = long(get_time() * 1000)
     
-    def is_elapsed(self, ms):
+    def is_elapsed(self, ms=None):
+        if ms is None:
+            ms=self._time_to_elapsed
         return self.get_value()>=ms
    
     def get_value(self):

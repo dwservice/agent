@@ -173,7 +173,7 @@ class Agent():
         self._brun=True
         self._brebootagent=False
         self._breloadconfig=True
-        self._breloadagent=False
+        self._breloadagentcnt=None
         if self._runonfly:
             self._cnt_min=0
             self._cnt_max=10
@@ -945,24 +945,26 @@ class Agent():
         finally:
             self._config_semaphore.release()    
     
-    def _reload_agent(self):
+    def _reload_agent(self, ms):
         self._config_semaphore.acquire()
         try:
-            self._breloadagent=True
+            self._breloadagentcnt=communication.Counter(ms)
         finally:
             self._config_semaphore.release()
     
     def _reload_agent_reset(self):
         self._config_semaphore.acquire()
         try:
-            self._breloadagent=False
+            self._breloadagentcnt=None
         finally:
             self._config_semaphore.release()
     
     def _is_reload_agent(self):
         self._config_semaphore.acquire()
         try:
-            return self._breloadagent
+            if self._breloadagentcnt is None:
+                return False
+            return self._breloadagentcnt.is_elapsed()
         finally:
             self._config_semaphore.release()
     
@@ -1295,7 +1297,6 @@ class Agent():
             self._reload_agent_reset()
             #ready agent
             suppapps=";".join(self.get_supported_applications());
-            cnt_check_suppapps=0
             m = {
                     'name':  'ready', 
                     'osType':  get_os_type(),
@@ -1326,34 +1327,21 @@ class Agent():
                         self._set_config("preferred_run_user",self._agent_key.split('@')[1]);
                 except:
                     None
-            
-            rnd_wait_reload=-1
+            checksuppappscnt=communication.Counter(20*1000) #20 SECONDS
             while self.is_run() and not conn.is_close() and not self._is_reboot_agent() and not self._is_reload_config():
                 time.sleep(1)
                 cntses=0;
                 self._connections_semaphore.acquire()
                 try:
                     cntses=len(self._sessions)
+                    if cntses==0 and self._is_reload_agent():
+                        break #RELOAD AGENT
                 finally:
                     self._connections_semaphore.release()
                 self._reload_apps(cntses==0)           
-                if rnd_wait_reload==0:
-                    self._connections_semaphore.acquire()
-                    try:
-                        if cntses==0:
-                            break
-                    finally:
-                        self._connections_semaphore.release()
-                elif rnd_wait_reload>0:
-                    rnd_wait_reload-=1
-                elif rnd_wait_reload==-1:
-                    if self._is_reload_agent():
-                        #ATTENDE UN TEMPO CASUALE PER NON RIAVVIARE TUTTI GLI AGENTI ASSIEME
-                        rnd_wait_reload = random.randrange(0, 6*3600) # 6 ORE
-                #Verifica ogni xx secondi se sono cambiate le applicazioni supportate
-                cnt_check_suppapps+=1
-                if cnt_check_suppapps>=20:
-                    cnt_check_suppapps=0
+                #CHECK IF SUPPORTED APPS IS CHANGED
+                if checksuppappscnt.is_elapsed():
+                    checksuppappscnt.reset()
                     sapps=";".join(self.get_supported_applications());
                     if suppapps!=sapps:
                         suppapps=sapps
@@ -1362,8 +1350,6 @@ class Agent():
                             'supportedApplications': suppapps
                         }
                         self._send_message(conn,m)
-                    
-
             if self._runonfly:
                 self._runonfly_user=None
                 self._runonfly_password=None
@@ -1697,7 +1683,9 @@ class Agent():
             if msg_name=="reboot":
                 self._reboot_agent()
             elif msg_name=="reload":
-                self._reload_agent()
+                #WAIT RANDOM TIME BEFORE TO REBOOT AGENT
+                wtime=random.randrange(0, 6*3600)*1000 # 6 ORE
+                self._reload_agent(wtime)
             elif msg_name=="reloadApps":
                 self._libs_apps_semaphore.acquire()
                 try:
