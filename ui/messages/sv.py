@@ -9,7 +9,7 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 data={
     'accept':u'Jag accepterar',
     'agentName':u'Agentnamn',
-    'alreadyInstalled':u'DWAgent är redan installerad.\n\nAgenten uppdateras automatiskt till den senaste versionen. Du behöver alltså inte själv installera nya uppdateringar.',
+    'alreadyInstalled':u'Alla prenumeranter får använda en speciell version av DWService-logotypen på sin webbplats, vilket visar att de är supportrar till DWService-projektet.',
     'back':u'Tillbaka',
     'cancel':u'Avbryt',
     'cancelInstall':u'Installationen avbröts.',
