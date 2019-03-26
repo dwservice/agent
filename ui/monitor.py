@@ -50,8 +50,10 @@ def is_mac():
 
 def get_user_dir():
     try:
-        from win32com.shell import shellcon, shell
-        return shell.SHGetFolderPath(0, shellcon.CSIDL_APPDATA, 0, 0)
+        import ctypes
+        buf = ctypes.create_unicode_buffer(1024)
+        ctypes.windll.shell32.SHGetFolderPathW(None, 40, None, 0, buf) #40 = CSIDL_PROFILE
+        return buf.value
     except:
         return utils.path_expanduser("~")
 

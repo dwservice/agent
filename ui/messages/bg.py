@@ -105,7 +105,7 @@ data={
     'monitorHide':u'Скрий',
     'monitorInvalidPassword':u'Невалидна парола.',
     'monitorShow':u'Покажи',
-    'monitorStatus':u'Състояние',
+    'monitorStatus':u'Статус',
     'monitorStatusDisabled':u'Изключен',
     'monitorStatusNoService':u'Няма услуга',
     'monitorStatusOffline':u'Офлайн',
