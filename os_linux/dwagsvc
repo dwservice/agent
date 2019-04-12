@@ -33,6 +33,7 @@ install_systemctl(){
 			systemctl --system daemon-reload
 			systemctl enable dwagent.service
 			if [ $? -eq 0 ]; then
+				echo "systemctl" > "${PATH_DWA_NATIVE}/service.mng"
 				echo "Installed"
 			else
 				echo "Error: Enable systemctl."
@@ -54,6 +55,7 @@ install_chkconfig(){
 		if [ $? -eq 0 ]; then
 			chkconfig --add dwagent
 			if [ $? -eq 0 ]; then
+				echo "chkconfig" > "${PATH_DWA_NATIVE}/service.mng"
 				echo "Installed"
 			else
 				echo "Error: Add chkconfig."
@@ -76,6 +78,7 @@ install_updatercd(){
 			#update-rc.d -f dwagent start 80 2 3 4 5 . stop 30 0 1 6 .
 			update-rc.d -f dwagent defaults
 			if [ $? -eq 0 ]; then
+				echo "updatercd" > "${PATH_DWA_NATIVE}/service.mng"
 				echo "Installed"
 			else
 				echo "Error: Add update-rc.d."
@@ -92,7 +95,7 @@ install_updatercd(){
 }
 
 install(){
-	if [ "$(which "systemctl" 2>/dev/null)" ]; then
+	if [ "$(which "systemctl" 2>/dev/null)" ] && [ "$(systemctl list-units -t service 2>/dev/null)" ]; then
     	install_systemctl
     elif [ "$(which "chkconfig" 2>/dev/null)" ]; then
     	install_chkconfig
@@ -111,6 +114,9 @@ delete_systemctl(){
 			rm /etc/systemd/system/dwagent.service
 			if [ $? -eq 0 ]; then
 				systemctl --system daemon-reload
+				if [ -f "${PATH_DWA_NATIVE}/service.mng" ]; then
+					rm "${PATH_DWA_NATIVE}/service.mng"
+				fi
 				echo "Deleted"
 			else
 				echo "Error: Remove service file."
@@ -132,6 +138,9 @@ delete_chkconfig(){
 		if [ $? -eq 0 ]; then
 			rm /etc/init.d/dwagent
 			if [ $? -eq 0 ]; then
+				if [ -f "${PATH_DWA_NATIVE}/service.mng" ]; then
+					rm "${PATH_DWA_NATIVE}/service.mng"
+				fi
 				echo "Deleted"
 			else
 				echo "Error: Remove symbolic link."
@@ -154,6 +163,9 @@ delete_updatercd(){
 		if [ $? -eq 0 ]; then
 			rm /etc/init.d/dwagent
 			if [ $? -eq 0 ]; then
+				if [ -f "${PATH_DWA_NATIVE}/service.mng" ]; then
+					rm "${PATH_DWA_NATIVE}/service.mng"
+				fi
 				echo "Deleted"
 			else
 				echo "Error: Remove symbolic link."
@@ -171,15 +183,25 @@ delete_updatercd(){
 }
 
 delete(){
-	if [ "$(which "systemctl" 2>/dev/null)" ]; then
-    	delete_systemctl
-    elif [ "$(which "chkconfig" 2>/dev/null)" ]; then
-    	delete_chkconfig
-	elif [ "$(which "update-rc.d" 2>/dev/null)" ]; then
-        delete_updatercd
+	if [ -f "${PATH_DWA_NATIVE}/service.mng" ]; then
+		if [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "systemctl" ]; then
+			delete_systemctl
+		elif [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "chkconfig" ]; then
+			delete_chkconfig
+		elif [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "updatercd" ]; then
+			delete_updatercd
+		fi				
 	else
-		echo "Error: Missing chkconfig or update-rc.d command."
-		RETVAL=2
+		if [ "$(which "systemctl" 2>/dev/null)" ] && [ "$(systemctl list-units -t service 2>/dev/null)" ]; then
+			delete_systemctl
+		elif [ "$(which "chkconfig" 2>/dev/null)" ]; then
+			delete_chkconfig
+		elif [ "$(which "update-rc.d" 2>/dev/null)" ]; then
+			delete_updatercd
+		else
+			echo "Error: Missing chkconfig or update-rc.d command."
+			RETVAL=2
+		fi
 	fi
 }
 
@@ -260,28 +282,54 @@ start_internal() {
 }
 
 start() {
-	if [ "$(which "update-rc.d" 2>/dev/null)" ]; then
-		if [ "$(which "start-stop-daemon" 2>/dev/null)" ]; then
-			if ! start-stop-daemon --start --quiet --oknodo --exec "${PATH_DWA_NATIVE}/dwagsvc" -- start_internal; then
+	if [ -f "${PATH_DWA_NATIVE}/service.mng" ]; then
+		if [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "systemctl" ]; then
+			if ! systemctl start dwagent.service; then
 				RETVAL=1
+			fi
+		elif [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "chkconfig" ]; then
+			if [ "$(which "start-stop-daemon" 2>/dev/null)" ]; then
+				if ! start-stop-daemon --start --quiet --oknodo --exec "${PATH_DWA_NATIVE}/dwagsvc" -- start_internal; then
+					RETVAL=1
+				fi
+			else
+				start_internal
+			fi
+		elif [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "updatercd" ]; then
+			if [ "$(which "start-stop-daemon" 2>/dev/null)" ]; then
+				if ! start-stop-daemon --start --quiet --oknodo --exec "${PATH_DWA_NATIVE}/dwagsvc" -- start_internal; then
+					RETVAL=1
+				fi
+			else
+				start_internal
 			fi
 		else
 			start_internal
-		fi
-	elif [ "$(which "chkconfig" 2>/dev/null)" ]; then
-		if [ "$(which "start-stop-daemon" 2>/dev/null)" ]; then
-			if ! start-stop-daemon --start --quiet --oknodo --exec "${PATH_DWA_NATIVE}/dwagsvc" -- start_internal; then
-				RETVAL=1
-			fi
-		else
-			start_internal
-		fi
-        elif [ "$(which "systemctl" 2>/dev/null)" ]; then
-	        if ! systemctl start dwagent.service; then
-			RETVAL=1
-		fi
+		fi				
 	else
-		start_internal
+		if [ "$(which "systemctl" 2>/dev/null)" ] && [ "$(systemctl list-units -t service 2>/dev/null)" ]; then
+			if ! systemctl start dwagent.service; then
+				RETVAL=1
+			fi
+		elif [ "$(which "chkconfig" 2>/dev/null)" ]; then
+			if [ "$(which "start-stop-daemon" 2>/dev/null)" ]; then
+				if ! start-stop-daemon --start --quiet --oknodo --exec "${PATH_DWA_NATIVE}/dwagsvc" -- start_internal; then
+					RETVAL=1
+				fi
+			else
+				start_internal
+			fi
+		elif [ "$(which "update-rc.d" 2>/dev/null)" ]; then
+			if [ "$(which "start-stop-daemon" 2>/dev/null)" ]; then
+				if ! start-stop-daemon --start --quiet --oknodo --exec "${PATH_DWA_NATIVE}/dwagsvc" -- start_internal; then
+					RETVAL=1
+				fi
+			else
+				start_internal
+			fi
+		else
+			start_internal
+		fi
 	fi
 }
 
@@ -311,16 +359,30 @@ stop_internal() {
 }
 
 stop() {
-	if [ "$(which "update-rc.d" 2>/dev/null)" ]; then
-		stop_internal
-	elif [ "$(which "chkconfig" 2>/dev/null)" ]; then
-		stop_internal
-        elif [ "$(which "systemctl" 2>/dev/null)" ]; then
-	        if ! systemctl stop dwagent.service; then
-			RETVAL=1
-		fi
+	if [ -f "${PATH_DWA_NATIVE}/service.mng" ]; then
+		if [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "systemctl" ]; then
+			if ! systemctl stop dwagent.service; then
+				RETVAL=1
+			fi
+		elif [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "chkconfig" ]; then
+			stop_internal
+		elif [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "updatercd" ]; then
+			stop_internal
+		else
+			stop_internal
+		fi				
 	else
-		stop_internal
+		if [ "$(which "systemctl" 2>/dev/null)" ] && [ "$(systemctl list-units -t service 2>/dev/null)" ]; then
+			if ! systemctl stop dwagent.service; then
+				RETVAL=1
+			fi
+		elif [ "$(which "chkconfig" 2>/dev/null)" ]; then
+			stop_internal
+		elif [ "$(which "update-rc.d" 2>/dev/null)" ]; then
+			stop_internal
+		else
+			stop_internal
+		fi
 	fi
 }
 
