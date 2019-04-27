@@ -2088,7 +2088,7 @@ class Session():
                     resp["Content-Type"] = "application/octet-stream"
                 else:
                     resp["Content-Type"] = mt[0]
-                resp["Content-Disposition"] = "attachment; filename=\"" + fdownload.get_name() + "\""
+                resp["Content-Disposition"] = "attachment; filename=\"" + fdownload.get_name() + "\"; filename*=UTF-8''" + urllib.quote(fdownload.get_name().encode("utf-8"), safe='')
                 #ret["Cache-Control"] = "no-cache, must-revalidate" NON FUNZIONA PER IE7
                 #ret["Pragma"] = "no-cache"
                 resp["Expires"] = "Sat, 26 Jul 1997 05:00:00 GMT"
