@@ -1753,9 +1753,9 @@ class Agent():
         
     
     def open_connection(self, msg):
-        cn = Connection(self,msg["id"],msg["userName"],msg["password"])
         self._connections_semaphore.acquire()
         try:
+            cn = Connection(self,msg["id"],msg["userName"],msg["password"])
             self._connections[cn.get_id()]=cn
         finally:
             self._connections_semaphore.release()
@@ -2688,7 +2688,7 @@ class Upload():
                         #print "UPLOAD - NAME:" + self._name + " LEN: " + str(self._calcbps.get_transfered()) +  "  BPS: " + str(self._calcbps.get_bps())
                         
         except:
-            self._status  = "E"
+            self._status = "E"
         finally:
             self._semaphore.release()
         
