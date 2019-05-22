@@ -244,19 +244,37 @@ int init(){
 		char *def_string;
 		//fontset = XCreateFontSet(display, "-*-*-*-r-normal--14-*-*-*-P-*-*-*", &missing, &nmissing, &def_string);
 		//fontset = XCreateFontSet(display, "-*-*-*-r-normal--*-120-100-100-*-*", &missing, &nmissing, &def_string);
-		fontset = XCreateFontSet(display, "fixed", &missing, &nmissing, &def_string);
-		if (!fontset){
-			fontset = XCreateFontSet(display, "-*-*-medium-r-normal--14-*-*-*-p-*-*-*", &missing, &nmissing, &def_string);
-			if (!fontset){
-				fontset = XCreateFontSet(display, "-*-*-*-*-*--*-*-*-*-*-*-*-*", &missing, &nmissing, &def_string);
-			}
-		}
+		//fontset = XCreateFontSet(display, "fixed", &missing, &nmissing, &def_string);
 
+
+
+		/*fontset = XCreateFontSet(display, "-*-*-medium-r-normal--14-*-*-*-p-*-*-*", &missing, &nmissing, &def_string);
+		if (!fontset){
+			fontset = XCreateFontSet(display, "-*-*-medium-r-normal--14-*-*-*-*-*-*-*", &missing, &nmissing, &def_string);
+		}
+		if (!fontset){*/
+			fontset = XCreateFontSet(display, "-*-*-medium-r-normal--13-*-*-*-p-*-*-*", &missing, &nmissing, &def_string);
+		//}
+		if (!fontset){
+			fontset = XCreateFontSet(display, "-*-*-medium-r-normal--13-*-*-*-*-*-*-*", &missing, &nmissing, &def_string);
+		}
+		if (!fontset){
+			fontset = XCreateFontSet(display, "-*-*-medium-r-normal--12-*-*-*-p-*-*-*", &missing, &nmissing, &def_string);
+		}
+		if (!fontset){
+			fontset = XCreateFontSet(display, "-*-*-medium-r-normal--12-*-*-*-*-*-*-*", &missing, &nmissing, &def_string);
+		}
+		if (!fontset){
+			fontset = XCreateFontSet(display, "fixed", &missing, &nmissing, &def_string);
+		}
+		if (!fontset){
+			fontset = XCreateFontSet(display, "-*-*-*-*-*--*-*-*-*-*-*-*-*", &missing, &nmissing, &def_string);
+		}
 		if (nmissing > 0) {
-			for(int i=0; i < nmissing; i++){
-					//fprintf(stderr, "%s: %s\n", "program_name", missing[i]);
-						//fprintf(stderr, "%s: The string %s will be used in place\n","program_name", def_string);
-								}
+			/*for(int i=0; i < nmissing; i++){
+				fprintf(stderr, "%s: %s\n", "program_name", missing[i]);
+				fprintf(stderr, "%s: The string %s will be used in place\n","program_name", def_string);
+			}*/
 			XFreeStringList(missing);
 		}
 		//CALCOLA DIMENSIONI FONT
