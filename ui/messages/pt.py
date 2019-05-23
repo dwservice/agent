@@ -148,7 +148,7 @@ data={
     'runWithoutInstallationClosing':u'Fechando sessão',
     'runWithoutInstallationConnecting':u'Abrindo sessão:',
     'runWithoutInstallationEnd':u'Sessão finalizada.',
-    'runWithoutInstallationOnlineBottom':u'ATENÇÃO:\nNão divulgue essas informações a pessoas que não são confiáveis, pois de outra forma irá permitir que elas acessem a este agente. Então, se não tem certeza do que está a fazer, feche esta aplicação.',
+    'runWithoutInstallationOnlineBottom':u'ATENÇÃO:\nNão divulgue essas informações a pessoas que não são confiáveis, pois de outra forma irá permitir que elas acedam a este agente. Então, se não tem certeza do que está a fazer, feche esta aplicação.',
     'runWithoutInstallationOnlineBottomPutCode':u'AVISO:\nAgora o agente está pronto para receber a ligação. Se não tem a certeza do que está a fazer, por favor feche esta aplicação.',
     'runWithoutInstallationOnlinePassword':u'Senha: {0}',
     'runWithoutInstallationOnlineTop':u'A sessão está ativa.\nPara se conectar a este agente vá para https://www.dwservice.net',
