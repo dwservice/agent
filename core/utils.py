@@ -35,22 +35,47 @@ def is_mac():
     return _bismac
 
 def exception_to_string(e):
-    if isinstance(e, unicode) or isinstance(e, str) or len(e.message)==0:
+    bamsg=False;
+    try:
+        if len(e.message)>0:
+            bamsg=True;
+    except:
+        None
+    try:
+        appmsg=None
+        if bamsg:
+            appmsg=e.message
+        elif isinstance(e, unicode) or isinstance(e, str):
+            appmsg=e
+        else:
+            try:
+                appmsg=unicode(e)
+            except:
+                appmsg=str(e)
         try:
-            return unicode(e)
+            if isinstance(appmsg, unicode):
+                return appmsg
+            elif isinstance(appmsg, str):
+                return appmsg.decode("UTF8")
         except:
-            return str(e)
-    elif isinstance(e.message, unicode):
-        return e.message;
-    else:
-        return unicode(e.message, errors='replace')
-
+            return unicode(appmsg, errors='replace')
+    except:
+        return "Unexpected error."
+    
 def get_stacktrace_string():
-    s = traceback.format_exc();
-    if isinstance(s, unicode):
-        return s;
-    else:
-        return unicode(s, errors='replace')
+    try:
+        s = traceback.format_exc();
+        if s is None:
+            s=u""
+        if isinstance(s, unicode):
+            return s;
+        else:
+            try:
+                return s.decode("UTF8")
+            except:
+                return unicode(s, errors='replace')
+    except:
+        return "Unexpected error."
 
 def get_time():
     if is_windows():

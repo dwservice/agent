@@ -55,22 +55,47 @@ def stop_monitor(installpath):
         None
 
 def exception_to_string(e):
-    if len(e.message)==0:
+    bamsg=False;
+    try:
+        if len(e.message)>0:
+            bamsg=True;
+    except:
+        None
+    try:
+        appmsg=None
+        if bamsg:
+            appmsg=e.message
+        elif isinstance(e, unicode) or isinstance(e, str):
+            appmsg=e
+        else:
+            try:
+                appmsg=unicode(e)
+            except:
+                appmsg=str(e)
         try:
-            return unicode(e)
+            if isinstance(appmsg, unicode):
+                return appmsg
+            elif isinstance(appmsg, str):
+                return appmsg.decode("UTF8")
         except:
-            return str(e)
-    elif isinstance(e.message, unicode):
-        return e.message;
-    else:
-        return unicode(e.message, errors='replace')
+            return unicode(appmsg, errors='replace')
+    except:
+        return "Unexpected error."
 
 def get_stacktrace_string():
-    s = traceback.format_exc();
-    if isinstance(s, unicode):
-        return s;
-    else:
-        return unicode(s, errors='replace')
+    try:
+        s = traceback.format_exc();
+        if s is None:
+            s=u""
+        if isinstance(s, unicode):
+            return s;
+        else:
+            try:
+                return s.decode("UTF8")
+            except:
+                return unicode(s, errors='replace')
+    except:
+        return "Unexpected error."
 
 class NativeLinux:
     def __init__(self):
@@ -1753,8 +1778,8 @@ class Install:
                 self._inatall_agent_mode="installNewAgent"
                 self._install_newag_user.set(self._options["user"])
                 self._install_newag_password.set(self._options["password"])
-                if "name" in self._options:
-                    self._install_newag_name.set(self._options["name"])
+                if "agentName" in self._options:
+                    self._install_newag_name.set(self._options["agentName"])
                 else:
                     self._install_newag_name.set(platform.node())
             else:
@@ -2494,7 +2519,7 @@ def fmain(args): #SERVE PER MACOS APP
         elif arg.lower().startswith("password="):
             arotps["password"]=arg[9:]
         elif arg.lower().startswith("name="):
-            arotps["name"]=arg[5:]
+            arotps["agentName"]=arg[5:]
         elif arg.lower().startswith("logpath="):
             arotps["logpath"]=arg[8:]
         elif arg.lower().startswith("lang="):
