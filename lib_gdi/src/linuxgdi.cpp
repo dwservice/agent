@@ -245,27 +245,22 @@ int init(){
 		//fontset = XCreateFontSet(display, "-*-*-*-r-normal--14-*-*-*-P-*-*-*", &missing, &nmissing, &def_string);
 		//fontset = XCreateFontSet(display, "-*-*-*-r-normal--*-120-100-100-*-*", &missing, &nmissing, &def_string);
 		//fontset = XCreateFontSet(display, "fixed", &missing, &nmissing, &def_string);
-
-
-
-		/*fontset = XCreateFontSet(display, "-*-*-medium-r-normal--14-*-*-*-p-*-*-*", &missing, &nmissing, &def_string);
+		//fontset = XCreateFontSet(display, "-*-*-medium-r-normal--13-*-*-*-p-*-*-*", &missing, &nmissing, &def_string);
+		fontset = XCreateFontSet(display, "-*-*-medium-*-*--13-*-*-*-*-*-*-*", &missing, &nmissing, &def_string);
 		if (!fontset){
-			fontset = XCreateFontSet(display, "-*-*-medium-r-normal--14-*-*-*-*-*-*-*", &missing, &nmissing, &def_string);
-		}
-		if (!fontset){*/
-			fontset = XCreateFontSet(display, "-*-*-medium-r-normal--13-*-*-*-p-*-*-*", &missing, &nmissing, &def_string);
-		//}
-		if (!fontset){
-			fontset = XCreateFontSet(display, "-*-*-medium-r-normal--13-*-*-*-*-*-*-*", &missing, &nmissing, &def_string);
+			fontset = XCreateFontSet(display, "-*-*-medium-*-*--12-*-*-*-*-*-*-*", &missing, &nmissing, &def_string);
 		}
 		if (!fontset){
-			fontset = XCreateFontSet(display, "-*-*-medium-r-normal--12-*-*-*-p-*-*-*", &missing, &nmissing, &def_string);
+			fontset = XCreateFontSet(display, "-*-*-*-*-*--13-*-*-*-*-*-*-*", &missing, &nmissing, &def_string);
 		}
 		if (!fontset){
-			fontset = XCreateFontSet(display, "-*-*-medium-r-normal--12-*-*-*-*-*-*-*", &missing, &nmissing, &def_string);
+			fontset = XCreateFontSet(display, "-*-*-*-*-*--12-*-*-*-*-*-*-*", &missing, &nmissing, &def_string);
 		}
 		if (!fontset){
-			fontset = XCreateFontSet(display, "fixed", &missing, &nmissing, &def_string);
+			fontset = XCreateFontSet(display, "-*-*-medium-*-*--14-*-*-*-*-*-*-*", &missing, &nmissing, &def_string);
+		}
+		if (!fontset){
+			fontset = XCreateFontSet(display, "-*-*-*-*-*--14-*-*-*-*-*-*-*", &missing, &nmissing, &def_string);
 		}
 		if (!fontset){
 			fontset = XCreateFontSet(display, "-*-*-*-*-*--*-*-*-*-*-*-*-*", &missing, &nmissing, &def_string);
