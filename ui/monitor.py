@@ -17,8 +17,8 @@ import gdi
 import time
 import images
 
-_WIDTH=360
-_HEIGHT=140
+_WIDTH=440
+_HEIGHT=180
 #_HEIGHT_BOTTOM=45
 #_CONTENT_HEIGHT=_HEIGHT-_HEIGHT_BOTTOM
 _WIDTH_RIGHT=140
@@ -172,6 +172,14 @@ class Main():
                     ret["connections"] = self._sharedmemclient.get_property("connections")
                 except:
                     None
+                try:
+                    ret["group"] = self._sharedmemclient.get_property("group")
+                except:
+                    None
+                try:
+                    ret["name"] = self._sharedmemclient.get_property("name")
+                except:
+                    None
                 return ret;
             else:
                 return ret
@@ -238,6 +246,17 @@ class Main():
             self._img_status_top.set_background_gradient(bground,"ffffff",gdi.GRADIENT_DIRECTION_TOPBOTTOM)
             self._img_status_bottom.set_background_gradient(bground,"ffffff",gdi.GRADIENT_DIRECTION_BOTTONTOP)
             apptx=[]
+            bexline=False
+            if "group" in appar and appar["group"]!="":
+                apptx.append(appar["group"])
+                apptx.append(u"\n")
+                bexline=True
+            if "name" in appar and appar["name"]!="":
+                apptx.append(appar["name"])
+                apptx.append(u"\n")
+                bexline=True            
+            if bexline is True:
+                apptx.append(u"\n")
             apptx.append(self._get_message("monitorStatus"))
             apptx.append(u": ")
             apptx.append(self.msgst)
