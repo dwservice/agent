@@ -32,6 +32,8 @@ class SharedMemServer(threading.Thread):
     def start(self):
         self._prop = sharedmem.Property()
         fieldsdef=[]
+        fieldsdef.append({"name":"group","size":100})
+        fieldsdef.append({"name":"name","size":100})
         fieldsdef.append({"name":"counter","size":30})
         fieldsdef.append({"name":"state","size":5})
         fieldsdef.append({"name":"connections","size":20})
@@ -77,6 +79,14 @@ class SharedMemStatus(threading.Thread):
             self._prop.set_property("counter", str(self._cnt))
             self._prop.set_property("state", str(self._agent.get_status()))
             self._prop.set_property("connections", str(self._agent.get_active_session_count())) #RIMASTO PER COMPATIBILITA DA ELIMINARE USARE RIGA SOTTO
+            sapp = self._agent.get_group()
+            if sapp is None:
+                sapp=""
+            self._prop.set_property("group", sapp)
+            sapp = self._agent.get_name()
+            if sapp is None:
+                sapp=""
+            self._prop.set_property("name", sapp)
             #self._prop.set_property("sessions", str(self._agent.get_session_count()))
             time.sleep(1)
         self._bclose=True        

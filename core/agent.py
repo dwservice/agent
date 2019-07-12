@@ -201,7 +201,9 @@ class Agent():
         self._libs_apps_semaphore = threading.Condition()
         self._agent_enabled = True
         self._agent_missauth = False
-        self._agent_status= self._STATUS_OFFLINE
+        self._agent_status = self._STATUS_OFFLINE
+        self._agent_group = None
+        self._agent_name = None
         self._agent_debug_mode = False
         self._agent_url_primary = None
         self._agent_key = None
@@ -385,6 +387,12 @@ class Agent():
     
     def get_osmodule(self):
         return self._osmodule 
+    
+    def get_group(self):
+        return self._agent_group
+    
+    def get_name(self):
+        return self._agent_name    
     
     def get_status(self):
         return self._agent_status
@@ -1680,7 +1688,12 @@ class Agent():
             if self._connection is None:
                 return
             msg_name = msg["name"]
-            if msg_name=="reboot":
+            if msg_name=="updateInfo":
+                if "agentGroup" in msg:
+                    self._agent_group=msg["agentGroup"]
+                if "agentName" in msg:
+                    self._agent_name=msg["agentName"]
+            elif msg_name=="reboot":
                 self._reboot_agent()
             elif msg_name=="reload":
                 #WAIT RANDOM TIME BEFORE TO REBOOT AGENT
