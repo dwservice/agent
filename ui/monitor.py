@@ -173,11 +173,11 @@ class Main():
                 except:
                     None
                 try:
-                    ret["group"] = self._sharedmemclient.get_property("group")
+                    ret["group"] = self._sharedmemclient.get_property("group").decode("unicode-escape")
                 except:
                     None
                 try:
-                    ret["name"] = self._sharedmemclient.get_property("name")
+                    ret["name"] = self._sharedmemclient.get_property("name").decode("unicode-escape")
                 except:
                     None
                 return ret;
