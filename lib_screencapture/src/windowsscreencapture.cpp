@@ -940,81 +940,70 @@ int ScreenCaptureNative::getKeyCode(const char* key){
 	return 0;
 }
 
-void ScreenCaptureNative::ctrlaltshift(bool ctrl, bool alt, bool shift){
+void ScreenCaptureNative::addCtrlAltShift(INPUT (&inputs)[20],int &p,bool ctrl, bool alt, bool shift){
 	if ((ctrl) && (!ctrlDown)){
 		ctrlDown=true;
-		INPUT inputs[1];
-		inputs[0].type= INPUT_KEYBOARD;
-		inputs[0].ki.wVk = VK_CONTROL;
-		inputs[0].ki.wScan = MapVirtualKey(VK_CONTROL & 0xFF, MAPVK_VK_TO_VSC);
-		inputs[0].ki.time = 0;
-		inputs[0].ki.dwExtraInfo = 0;
-		inputs[0].ki.dwFlags = 0;
-		SendInput(1, inputs, sizeof(INPUT));
-		Sleep(10);
+		inputs[p].type= INPUT_KEYBOARD;
+		inputs[p].ki.wVk = VK_CONTROL;
+		inputs[p].ki.wScan = MapVirtualKey(VK_CONTROL & 0xFF, MAPVK_VK_TO_VSC);
+		inputs[p].ki.time = 0;
+		inputs[p].ki.dwExtraInfo = 0;
+		inputs[p].ki.dwFlags = 0;
+		p++;
 	}else if ((!ctrl) && (ctrlDown)){
 		ctrlDown=false;
-		INPUT inputs[1];
-		inputs[0].type= INPUT_KEYBOARD;
-		inputs[0].ki.wVk = VK_CONTROL;
-		inputs[0].ki.wScan = MapVirtualKey(VK_CONTROL & 0xFF, MAPVK_VK_TO_VSC);
-		inputs[0].ki.time = 0;
-		inputs[0].ki.dwExtraInfo = 0;
-		inputs[0].ki.dwFlags = KEYEVENTF_KEYUP;
-		SendInput(1, inputs, sizeof(INPUT));
-		Sleep(10);
+		inputs[p].type= INPUT_KEYBOARD;
+		inputs[p].ki.wVk = VK_CONTROL;
+		inputs[p].ki.wScan = MapVirtualKey(VK_CONTROL & 0xFF, MAPVK_VK_TO_VSC);
+		inputs[p].ki.time = 0;
+		inputs[p].ki.dwExtraInfo = 0;
+		inputs[p].ki.dwFlags = KEYEVENTF_KEYUP;
+		p++;
 	}
 	if ((alt) && (!altDown)){
 		altDown=true;
-		INPUT inputs[1];
-		inputs[0].type= INPUT_KEYBOARD;
-		inputs[0].ki.wVk = VK_MENU;
-		inputs[0].ki.wScan = MapVirtualKey(VK_MENU & 0xFF, MAPVK_VK_TO_VSC);
-		inputs[0].ki.time = 0;
-		inputs[0].ki.dwExtraInfo = 0;
-		inputs[0].ki.dwFlags = 0;
-		SendInput(1, inputs, sizeof(INPUT));
-		Sleep(10);
+		inputs[p].type= INPUT_KEYBOARD;
+		inputs[p].ki.wVk = VK_MENU;
+		inputs[p].ki.wScan = MapVirtualKey(VK_MENU & 0xFF, MAPVK_VK_TO_VSC);
+		inputs[p].ki.time = 0;
+		inputs[p].ki.dwExtraInfo = 0;
+		inputs[p].ki.dwFlags = 0;
+		p++;
 	}else if ((!alt) && (altDown)){
 		altDown=false;
-		INPUT inputs[1];
-		inputs[0].type= INPUT_KEYBOARD;
-		inputs[0].ki.wVk = VK_MENU;
-		inputs[0].ki.wScan = MapVirtualKey(VK_MENU & 0xFF, MAPVK_VK_TO_VSC);
-		inputs[0].ki.time = 0;
-		inputs[0].ki.dwExtraInfo = 0;
-		inputs[0].ki.dwFlags = KEYEVENTF_KEYUP;
-		SendInput(1, inputs, sizeof(INPUT));
-		Sleep(10);
+		inputs[p].type= INPUT_KEYBOARD;
+		inputs[p].ki.wVk = VK_MENU;
+		inputs[p].ki.wScan = MapVirtualKey(VK_MENU & 0xFF, MAPVK_VK_TO_VSC);
+		inputs[p].ki.time = 0;
+		inputs[p].ki.dwExtraInfo = 0;
+		inputs[p].ki.dwFlags = KEYEVENTF_KEYUP;
+		p++;
 	}
 	if ((shift) && (!shiftDown)){
 		shiftDown=true;
-		INPUT inputs[1];		
-		inputs[0].type= INPUT_KEYBOARD;
-		inputs[0].ki.wVk = VK_LSHIFT;
-		inputs[0].ki.wScan = MapVirtualKey(VK_LSHIFT & 0xFF, MAPVK_VK_TO_VSC);
-		inputs[0].ki.time = 0;
-		inputs[0].ki.dwExtraInfo = 0;
-		inputs[0].ki.dwFlags = 0;
-		SendInput(1, inputs, sizeof(INPUT));
-		Sleep(10);
+		inputs[p].type= INPUT_KEYBOARD;
+		inputs[p].ki.wVk = VK_LSHIFT;
+		inputs[p].ki.wScan = MapVirtualKey(VK_LSHIFT & 0xFF, MAPVK_VK_TO_VSC);
+		inputs[p].ki.time = 0;
+		inputs[p].ki.dwExtraInfo = 0;
+		inputs[p].ki.dwFlags = 0;
+		p++;
 	}else if ((!shift) && (shiftDown)){
 		shiftDown=false;
-		INPUT inputs[1];
-		inputs[0].type= INPUT_KEYBOARD;
-		inputs[0].ki.wVk = VK_LSHIFT;
-		inputs[0].ki.wScan = MapVirtualKey(VK_LSHIFT & 0xFF, MAPVK_VK_TO_VSC);
-		inputs[0].ki.time = 0;
-		inputs[0].ki.dwExtraInfo = 0;
-		inputs[0].ki.dwFlags = KEYEVENTF_KEYUP;
-		SendInput(1, inputs, sizeof(INPUT));
-		Sleep(10);
-	}	
+		inputs[p].type= INPUT_KEYBOARD;
+		inputs[p].ki.wVk = VK_LSHIFT;
+		inputs[p].ki.wScan = MapVirtualKey(VK_LSHIFT & 0xFF, MAPVK_VK_TO_VSC);
+		inputs[p].ki.time = 0;
+		inputs[p].ki.dwExtraInfo = 0;
+		inputs[p].ki.dwFlags = KEYEVENTF_KEYUP;
+		p++;
+	}
 }
 
 void ScreenCaptureNative::inputKeyboard(const char* type,const char* key, bool ctrl, bool alt, bool shift){
+	INPUT inputs[20];
+	int p=0;
 	if (strcmp(type,"CHAR")==0){
-
 		bool sendunicode=false; 
 		SHORT vkKeyScanResult = 0;
 		short btlo = 0;
@@ -1051,85 +1040,77 @@ void ScreenCaptureNative::inputKeyboard(const char* type,const char* key, bool c
 		}
 
 		if (sendunicode){
-			INPUT inputs[1];
-			inputs[0].type= INPUT_KEYBOARD;
-			inputs[0].ki.wVk = 0;
-			inputs[0].ki.wScan = atoi(key);
-			inputs[0].ki.time = 0;
-			inputs[0].ki.dwExtraInfo = 0;
-			inputs[0].ki.dwFlags = KEYEVENTF_UNICODE;
-			SendInput(1, inputs, sizeof(INPUT));
-			Sleep(10);
+			inputs[p].type= INPUT_KEYBOARD;
+			inputs[p].ki.wVk = 0;
+			inputs[p].ki.wScan = atoi(key);
+			inputs[p].ki.time = 0;
+			inputs[p].ki.dwExtraInfo = 0;
+			inputs[p].ki.dwFlags = KEYEVENTF_UNICODE;
+			p++;
 
-			inputs[0].type= INPUT_KEYBOARD;
-			inputs[0].ki.wVk = 0;
-			inputs[0].ki.wScan = atoi(key);
-			inputs[0].ki.time = 0;
-			inputs[0].ki.dwExtraInfo = 0;
-			inputs[0].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
-			SendInput(1, inputs, sizeof(INPUT));
-			Sleep(10);
+			inputs[p].type= INPUT_KEYBOARD;
+			inputs[p].ki.wVk = 0;
+			inputs[p].ki.wScan = atoi(key);
+			inputs[p].ki.time = 0;
+			inputs[p].ki.dwExtraInfo = 0;
+			inputs[p].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+			p++;
 
 		}else{			
+			addCtrlAltShift(inputs,p,wCtrl,wAlt,wShift);
 			
-			ctrlaltshift(wCtrl,wAlt,wShift);
+			inputs[p].type= INPUT_KEYBOARD;
+			inputs[p].ki.wVk = btlo;
+			inputs[p].ki.wScan = MapVirtualKey(btlo, MAPVK_VK_TO_VSC);
+			inputs[p].ki.time = 0;
+			inputs[p].ki.dwExtraInfo = 0;
+			inputs[p].ki.dwFlags = 0;
+			p++;
+
+			inputs[p].type= INPUT_KEYBOARD;
+			inputs[p].ki.wVk = btlo;
+			inputs[p].ki.wScan = MapVirtualKey(btlo, MAPVK_VK_TO_VSC);
+			inputs[p].ki.time = 0;
+			inputs[p].ki.dwExtraInfo = 0;
+			inputs[p].ki.dwFlags = KEYEVENTF_KEYUP;
+			p++;
 			
-			INPUT inputs[1];
-			inputs[0].type= INPUT_KEYBOARD;
-			inputs[0].ki.wVk = btlo;
-			inputs[0].ki.wScan = MapVirtualKey(btlo, MAPVK_VK_TO_VSC);
-			inputs[0].ki.time = 0;
-			inputs[0].ki.dwExtraInfo = 0;
-			inputs[0].ki.dwFlags = 0;
-			SendInput(1, inputs, sizeof(INPUT));
-			Sleep(10);
-
-			inputs[0].type= INPUT_KEYBOARD;
-			inputs[0].ki.wVk = btlo;
-			inputs[0].ki.wScan = MapVirtualKey(btlo, MAPVK_VK_TO_VSC);
-			inputs[0].ki.time = 0;
-			inputs[0].ki.dwExtraInfo = 0;
-			inputs[0].ki.dwFlags = KEYEVENTF_KEYUP;
-			SendInput(1, inputs, sizeof(INPUT));
-
-			ctrlaltshift(false,false,false);
+			addCtrlAltShift(inputs,p,false,false,false);
 		}
 		
 
 	}else if (strcmp(type,"KEY")==0){
-		ctrlaltshift(ctrl,alt,shift);
+		addCtrlAltShift(inputs,p,ctrl,alt,shift);
 
 		int kc = getKeyCode(key);
 		short btlo = kc & 0xff;
 		//short bthi = (kc>>8) & 0xff;
 
 		bool extk=isExtendedKey(btlo);
-		INPUT inputs[1];
-		inputs[0].type= INPUT_KEYBOARD;
-		inputs[0].ki.wVk = kc;
-		inputs[0].ki.wScan = MapVirtualKey(btlo, MAPVK_VK_TO_VSC);
-		inputs[0].ki.time = 0;
-		inputs[0].ki.dwExtraInfo = 0;
-		inputs[0].ki.dwFlags = 0;
+		inputs[p].type= INPUT_KEYBOARD;
+		inputs[p].ki.wVk = kc;
+		inputs[p].ki.wScan = MapVirtualKey(btlo, MAPVK_VK_TO_VSC);
+		inputs[p].ki.time = 0;
+		inputs[p].ki.dwExtraInfo = 0;
+		inputs[p].ki.dwFlags = 0;
 		if (extk){
-			inputs[0].ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
+			inputs[p].ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
 		}
-		SendInput(1, inputs, sizeof(INPUT));
-		Sleep(10);
+		p++;
 			
-		inputs[0].type= INPUT_KEYBOARD;
-		inputs[0].ki.wVk = kc;
-		inputs[0].ki.wScan = MapVirtualKey(btlo, MAPVK_VK_TO_VSC);
-		inputs[0].ki.time = 0;
-		inputs[0].ki.dwExtraInfo = 0;
-		inputs[0].ki.dwFlags = KEYEVENTF_KEYUP;
+		inputs[p].type= INPUT_KEYBOARD;
+		inputs[p].ki.wVk = kc;
+		inputs[p].ki.wScan = MapVirtualKey(btlo, MAPVK_VK_TO_VSC);
+		inputs[p].ki.time = 0;
+		inputs[p].ki.dwExtraInfo = 0;
+		inputs[p].ki.dwFlags = KEYEVENTF_KEYUP;
 		if (extk){
-			inputs[0].ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
+			inputs[p].ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
 		}
-		SendInput(1, inputs, sizeof(INPUT));
-		Sleep(10);
-			
-		ctrlaltshift(false,false,false);
+		p++;
+
+		addCtrlAltShift(inputs,p,false,false,false);
+
 	}else if (strcmp(type,"CTRLALTCANC")==0){
 		debugger->print((char *)"inputKeyboard CTRLALTCANC");
 		if (selectDesktop((char *)"Winlogon")) {
@@ -1141,22 +1122,28 @@ void ScreenCaptureNative::inputKeyboard(const char* type,const char* key, bool c
 			wcsncpy(prevDesktopName,L"",0); //Alla prossima cattura si posizione sul desktop corretto
 		}
 	}
+
+	if (p>0){
+		SendInput(p, inputs, sizeof(INPUT));
+	}
 }
 
-void ScreenCaptureNative::sendInputMouse(int x, int y,DWORD dwFlags,int mouseData){
-	INPUT inputs;
-	inputs.type= INPUT_MOUSE;
-	inputs.mi.dx = x;
-	inputs.mi.dy = y;
-	inputs.mi.dwFlags = dwFlags;
-	inputs.mi.time = 0;
-	inputs.mi.dwExtraInfo = 0;
-	inputs.mi.mouseData = mouseData;
-	SendInput(1, &inputs, sizeof(INPUT));
+void ScreenCaptureNative::addInputMouse(INPUT (&inputs)[20],int &p,int x, int y,DWORD dwFlags,int mouseData){
+	inputs[p].type= INPUT_MOUSE;
+	inputs[p].mi.dx = x;
+	inputs[p].mi.dy = y;
+	inputs[p].mi.dwFlags = dwFlags;
+	inputs[p].mi.time = 0;
+	inputs[p].mi.dwExtraInfo = 0;
+	inputs[p].mi.mouseData = mouseData;
+	p++;
 }
 
 void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift){
-	ctrlaltshift(ctrl,alt,shift);
+	INPUT inputs[20];
+	int p=0;
+	addCtrlAltShift(inputs,p,ctrl,alt,shift);
+
 	int appx = 0;
 	int appy = 0;
 	int mouseData=0;
@@ -1179,17 +1166,13 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 		appy = (int)((my - desktopOffsetY) * 65535 / (desktopHeight));
     }
 	if (button==64) { //CLICK
-		sendInputMouse(appx,appy,dwFlags | MOUSEEVENTF_LEFTDOWN,mouseData);
-		Sleep(10);
-		sendInputMouse(appx,appy,dwFlags | MOUSEEVENTF_LEFTUP,mouseData);
+		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTDOWN,mouseData);
+		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTUP,mouseData);
 	}else if (button==128) { //DBLCLICK
-		sendInputMouse(appx,appy,dwFlags | MOUSEEVENTF_LEFTDOWN,mouseData);
-		Sleep(10);
-		sendInputMouse(appx,appy,dwFlags | MOUSEEVENTF_LEFTUP,mouseData);
-		Sleep(10);
-		sendInputMouse(appx,appy,dwFlags | MOUSEEVENTF_LEFTDOWN,mouseData);
-		Sleep(10);
-		sendInputMouse(appx,appy,dwFlags | MOUSEEVENTF_LEFTUP,mouseData);
+		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTDOWN,mouseData);
+		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTUP,mouseData);
+		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTDOWN,mouseData);
+		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTUP,mouseData);
 	}else{
 		if (button!=-1) {
 			if ((button & 1) && (!mousebtn1Down)){
@@ -1220,7 +1203,10 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 			dwFlags |= MOUSEEVENTF_WHEEL;
 			mouseData = wheel*120;
 		}
-		sendInputMouse(appx,appy,dwFlags,mouseData);
+		addInputMouse(inputs,p,appx,appy,dwFlags,mouseData);
+	}
+	if (p>0){
+		SendInput(p, inputs, sizeof(INPUT));
 	}
 }
 

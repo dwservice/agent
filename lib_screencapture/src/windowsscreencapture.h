@@ -124,9 +124,9 @@ private:
 	bool isWin8OrLater();
 	bool isExtendedKey(int key);
 	int getKeyCode(const char* key);
-	void ctrlaltshift(bool ctrl, bool alt, bool shift);
-	void sendInputMouse(int x, int y,DWORD dwFlags,int mouseData);
-	void newScreenShotInfo(ScreenShotInfo* ii, int w, int h) ;
+	void addCtrlAltShift(INPUT (&inputs)[20],int &p,bool ctrl, bool alt, bool shift);
+	void addInputMouse(INPUT (&inputs)[20],int &p,int x, int y,DWORD dwFlags,int mouseData);
+	void newScreenShotInfo(ScreenShotInfo* ii, int w, int h);
 	void initScreenShotInfo(ScreenShotInfo* ii);
 	void termScreenShotInfo(ScreenShotInfo* ii);
 	void resetScreenshotData(ScreenShotInfo* ii);
