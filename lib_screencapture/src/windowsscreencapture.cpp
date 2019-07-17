@@ -1171,6 +1171,9 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 	}else if (button==128) { //DBLCLICK
 		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTDOWN,mouseData);
 		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTUP,mouseData);
+		SendInput(p, inputs, sizeof(INPUT));
+		Sleep(10);
+		p=0;
 		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTDOWN,mouseData);
 		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTUP,mouseData);
 	}else{
