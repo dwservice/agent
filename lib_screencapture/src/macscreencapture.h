@@ -35,7 +35,7 @@ public:
 	void terminate();
     void getResolution(int* size);
     long captureScreen(int monitor, int distanceFrameMs, CAPTURE_IMAGE* capimage);
-    bool captureCursor(int monitor, int* info, long* id, unsigned char** data);
+    bool captureCursor(int monitor, int* info, long& id, unsigned char** data);
     bool getActiveWinPos(long* id, int* info);
     void getCursorPixel(int x, int y, unsigned char* rgba);
     void inputKeyboard(const char* type, const char* key, bool ctrl, bool alt, bool shift);
@@ -90,9 +90,9 @@ private:
 	bool mousebtn1Down;
 	bool mousebtn2Down;
 	bool mousebtn3Down;
-	/*bool ctrlDown;
+	bool ctrlDown;
 	bool altDown;
-	bool shiftDown;*/
+	bool shiftDown;
 	unsigned long long previousTotalTicks;
 	unsigned long long previousIdleTicks;
 	double percentCpu;
@@ -100,6 +100,7 @@ private:
 	float calculateCPULoad(unsigned long long idleTicks, unsigned long long totalTicks);
 	void wakeupMonitor();
 	CGKeyCode getCGKeyCode(const char* key);
+	void ctrlaltshift(bool ctrl, bool alt, bool shift);
 	int getModifiers(bool ctrl, bool alt, bool shift);
 	void newScreenShotInfo(ScreenShotInfo* ii, int w, int h);
 	void termScreenShotInfo(ScreenShotInfo* ii);

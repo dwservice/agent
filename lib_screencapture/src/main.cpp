@@ -451,11 +451,29 @@ int wmain(int argc, wchar_t **argv) {
 #else
 	int main(int argc, char **argv) {
 #endif
+
+
+	/*Sleep(4000);
+	HWND hwnd = GetForegroundWindow();
+	if (hwnd != 0) {
+
+		printf("hwnd %d\n", hwnd);
+
+
+		int id = 0;
+		init(id);
+		inputKeyboard(id, "CHAR", "46", false, false, false); //.
+		//inputKeyboard(id, "CHAR", "64", false, false, false); //@
+		//inputKeyboard(id, "CHAR", "35", false, false, false);
+		term(id);
+
+		printf("FINE\n");
+
+	}*/
+
+
 	int id = 0;
 	init(id);
-
-
-
 	TimeCounter tc;
 
 	int i=0;

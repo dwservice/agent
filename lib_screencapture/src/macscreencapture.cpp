@@ -14,9 +14,9 @@ ScreenCaptureNative::ScreenCaptureNative(DWDebugger* dbg) {
 	mousebtn3Down=false;
 	mousex=0;
 	mousey=0;
-	/*ctrlDown=false;
+	ctrlDown=false;
 	altDown=false;
-	shiftDown=false;*/
+	shiftDown=false;
 	cursorX=0;
 	cursorY=0;
 	cursoroffsetX=0;
@@ -121,6 +121,15 @@ int ScreenCaptureNative::getMonitorCount(){
 		CGDisplayModeRef dmd = CGDisplayCopyDisplayMode(did);
 		int w = CGDisplayModeGetWidth(dmd);
 		int h = CGDisplayModeGetHeight(dmd);
+		//FIX RISOLUZIONI SIMILE A 1366x768
+		/*
+		if (((float)w/(float)8)!=(w/8)){
+			w=(int)((int)((float)w/(float)8)+(float)1) * 8;
+		}
+		//if (((float)h/(float)8)!=(mi.h/8)){
+		//   h=(int)((int)((float)h/(float)8)+(float)1) * 8;
+		//}
+		 */
 		if (firstmonitorscheck){
 			MonitorInfo mi;
 			mi.id=did;
@@ -218,6 +227,15 @@ long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTUR
 		CFDataRef dataref = CGDataProviderCopyData(provider);
 		w = CGImageGetWidth(image_ref);
 		h = CGImageGetHeight(image_ref);
+		//FIX RISOLUZIONI SIMILE A 1366x768
+		/*
+		if (((float)w/(float)8)!=(w/8)){
+			w=(int)((int)((float)w/(float)8)+(float)1) * 8;
+		}
+		//if (((float)h/(float)8)!=(mi.h/8)){
+		//   h=(int)((int)((float)h/(float)8)+(float)1) * 8;
+		//}
+		 */
 		mi->w=w;
 		mi->h=h;
 		int bpp = CGImageGetBitsPerPixel(image_ref);
@@ -245,18 +263,18 @@ long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTUR
 	return ii->shotID;
 }
 
-bool ScreenCaptureNative::captureCursor(int monitor, int* info, long* id, unsigned char** data){
+bool ScreenCaptureNative::captureCursor(int monitor, int* info, long& id, unsigned char** data){
 	CGEventRef event = CGEventCreate(NULL);
 	if (event!=NULL){
 		CGPoint cursor = CGEventGetLocation(event);
 		cursorX=cursor.x;
 		cursorY=cursor.y;
 		CFRelease(event);
-		if (cursorID==0){
+		if (id==-1){
 			getCursorImage(CURSOR_TYPE_ARROW_18_18,&cursorW,&cursorH,&cursoroffsetX,&cursoroffsetY,data);
-			cursorID=1;
+			cursorID++;
 		}
-		*id=cursorID;
+		id=cursorID;
 		info[0]=true;
 		info[1]=cursorX;
 		info[2]=cursorY;
@@ -350,15 +368,15 @@ CGKeyCode ScreenCaptureNative::getCGKeyCode(const char* key){
 	return 0;
 }
 
-/*void ScreenCaptureNative::ctrlaltshift(bool ctrl, bool alt, bool shift){
+void ScreenCaptureNative::ctrlaltshift(bool ctrl, bool alt, bool shift){
 	if ((ctrl) && (!ctrlDown)){
 		ctrlDown=true;
-		CGEventRef kdown = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)0x3B, true);
+		CGEventRef kdown = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)0x37, true); //(CGKeyCode)0x3B = CTRL    (CGKeyCode)0x37 = COMMAND
 		CGEventPost(kCGHIDEventTap, kdown);
 		CFRelease(kdown);
 	}else if ((!ctrl) && (ctrlDown)){
 		ctrlDown=false;
-		CGEventRef kup = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)0x3B, false);
+		CGEventRef kup = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)0x37, false); //(CGKeyCode)0x3B = CTRL    (CGKeyCode)0x37 = COMMAND
 		CGEventPost(kCGHIDEventTap, kup);
 		CFRelease(kup);
 	}
@@ -386,7 +404,7 @@ CGKeyCode ScreenCaptureNative::getCGKeyCode(const char* key){
 		CGEventPost(kCGHIDEventTap, kup);
 		CFRelease(kup);
 	}
-}*/
+}
 
 void ScreenCaptureNative::wakeupMonitor(){
 	MonitorInfo* ii = &monitorsInfo[0];
@@ -436,7 +454,6 @@ void ScreenCaptureNative::inputKeyboard(const char* type, const char* key, bool 
 		if (c!=0){
 			//ctrlaltshift(ctrl,alt,shift);
 			CGEventRef kdown = CGEventCreateKeyboardEvent(NULL, c, true);
-
 			CGEventSetFlags(kdown, (CGEventFlags)getModifiers(ctrl,alt,shift));
 			CGEventPost(kCGHIDEventTap, kdown);
 			CFRelease(kdown);
@@ -459,6 +476,7 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 		mousey=y;
 	}
 	if (button==64) { //CLICK
+
 		CGEventRef theEvent = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseDown, CGPointMake(mousex, mousey), kCGMouseButtonLeft);
 		CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift));
 		CGEventPost(kCGHIDEventTap, theEvent);

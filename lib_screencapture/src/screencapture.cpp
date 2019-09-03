@@ -147,11 +147,14 @@ void ScreenCapture::differenceCursor(SESSION &ses, CAPTURE_IMAGE &capimage,Callb
 	int elapsed=ses.cursorCounter.getCounter();
 	if (elapsed>=MOUSE_INTERVAL){
 		//CAPTURE CURSOR
-		long cursorID;
+		long cursorID=0;
+		if (ses.cursorID==-1){
+			cursorID=-1; //FORCE
+		}
 		int curInfo[7];
 		unsigned char* rgbdata=NULL;
 		dwdbg->print("ScreenCapture::prepareCursor#CAPTURE");
-		if (captureNative.captureCursor(ses.monitor,curInfo,&cursorID,&rgbdata)){
+		if (captureNative.captureCursor(ses.monitor,curInfo,cursorID,&rgbdata)){
 			bool cursorVisible=(curInfo[0]==1);
 			int cursorx=curInfo[1];
 			int cursory=curInfo[2];
