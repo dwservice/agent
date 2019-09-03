@@ -55,7 +55,7 @@ data={
     'configureUninstallationKey':u'卸載程式中...',
     'confirmExit':u'確定退出?',
     'confirmInstall':u'確認安装 DWAgent 到\'{0}\'吗?',
-    'confirmUninstall':u'確認删除 DWAgent ?',
+    'confirmUninstall':u'確認删除 DWAgent?',
     'copyFiles':u'複製文件中...',
     'createNewAgent':u'正在新建代理中...',
     'decline':u'我不接受',
