@@ -34,7 +34,7 @@ public:
     bool initialize();
 	void terminate();
 	long captureScreen(int monitor, int distanceFrameMs, CAPTURE_IMAGE* capimage);
-	bool captureCursor(int monitor, int* info, long* id, unsigned char** rgbdata);
+	bool captureCursor(int monitor, int* info, long& id, unsigned char** rgbdata);
 	//bool getActiveWinPos(long* id, int* info);
 	void inputKeyboard(const char* type,const char* key, bool ctrl, bool alt, bool shift);
 	void inputMouse(int monitor, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift);
@@ -124,8 +124,9 @@ private:
 	bool isWin8OrLater();
 	bool isExtendedKey(int key);
 	int getKeyCode(const char* key);
+	void sendInputs(INPUT (&inputs)[20],int max);
 	void addCtrlAltShift(INPUT (&inputs)[20],int &p,bool ctrl, bool alt, bool shift);
-	void addInputMouse(INPUT (&inputs)[20],int &p,int x, int y,DWORD dwFlags,int mouseData);
+	void addInputMouse(INPUT (&inputs)[20],int &p,int x, int y,DWORD dwFlags,int mouseData,int tm);
 	void newScreenShotInfo(ScreenShotInfo* ii, int w, int h);
 	void initScreenShotInfo(ScreenShotInfo* ii);
 	void termScreenShotInfo(ScreenShotInfo* ii);

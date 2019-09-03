@@ -754,16 +754,16 @@ long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTUR
 	return ii->shotID;
 }
 
-bool ScreenCaptureNative::captureCursor(int monitor, int* info, long* id, unsigned char** data) {
+bool ScreenCaptureNative::captureCursor(int monitor, int* info, long& id, unsigned char** data) {
 	unsigned int mask_return;
 	Window window_returned;
 	int win_x, win_y;
 	if (XQueryPointer(xdpy,root,&window_returned,&window_returned,&cursorX,&cursorY,&win_x,&win_y,&mask_return)==True){
-		if (cursorID==0){
+		if (id==-1){
 			getCursorImage(CURSOR_TYPE_ARROW_18_18,&cursorW,&cursorH,&cursoroffsetX,&cursoroffsetY,data);
-			cursorID=1;
+			cursorID++;
 		}
-		*id=cursorID;
+		id=cursorID;
 		info[0]=True;
 		MonitorInfo* mi = getMonitorInfo(monitor);
 		if (mi!=NULL){

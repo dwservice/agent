@@ -518,7 +518,375 @@ BOOL CALLBACK checkLayered(HWND hWnd, LPARAM lParam) {
 }
 
 
-bool ScreenCaptureNative::captureCursor(int monitor, int* info, long* id, unsigned char** rgbdata) {
+/*
+bool ScreenCaptureNative::captureCursor(int monitor, int* info, long& id, unsigned char** rgbdata) {
+	int cursorVis=1;
+	CURSORINFO appCursorInfo;
+	appCursorInfo.cbSize = sizeof(CURSORINFO);
+	if (GetCursorInfo(&appCursorInfo)){
+		if (appCursorInfo.flags!=0){
+			cursorVis=1;
+			cursorX=appCursorInfo.ptScreenPos.x;
+			cursorY=appCursorInfo.ptScreenPos.y;
+			if ((appCursorInfo.hCursor!=cursorHandle) || (id==-1)){
+				cursorHandle=appCursorInfo.hCursor;
+				ICONINFO info;
+				if (GetIconInfo(cursorHandle, &info)){
+					BITMAP bmMask;
+					GetObject(info.hbmMask, sizeof(BITMAP), (LPVOID)&bmMask);
+					if (bmMask.bmPlanes != 1 || bmMask.bmBitsPixel != 1) {
+						DeleteObject(info.hbmMask);
+					}else{
+						bool bok = false;
+						//unsigned char* dataNorm = NULL;
+						//unsigned char* dataMask = NULL;
+						bool isColorShape = (info.hbmColor != NULL);
+						int w = bmMask.bmWidth;
+						int h = isColorShape ? bmMask.bmHeight : bmMask.bmHeight/2;
+						//int nbit = bmMask.bmWidthBytes;
+
+						//IMAGE
+						HDC hdstImage = CreateCompatibleDC(NULL);
+						BITMAPINFO biImage;
+						ZeroMemory(&biImage, sizeof(BITMAPINFO));
+						biImage.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+						biImage.bmiHeader.biBitCount = 32;
+						biImage.bmiHeader.biCompression = BI_RGB;
+						biImage.bmiHeader.biPlanes = 1;
+						biImage.bmiHeader.biWidth = w;
+						biImage.bmiHeader.biHeight = -h;
+						biImage.bmiHeader.biSizeImage = 0;
+						biImage.bmiHeader.biXPelsPerMeter = 0;
+						biImage.bmiHeader.biYPelsPerMeter = 0;
+						biImage.bmiHeader.biClrUsed = 0;
+						biImage.bmiHeader.biClrImportant = 0;
+						void *bufferImage;
+						HANDLE hbmDIBImage = CreateDIBSection(hdstImage, (BITMAPINFO*)&biImage, DIB_RGB_COLORS, &bufferImage, NULL, 0);
+						HANDLE hbmDIBOLDImage = (HBITMAP)SelectObject(hdstImage, hbmDIBImage);
+						unsigned char* appDataImage = (unsigned char*)bufferImage;
+
+						//MASK
+						HDC hdstMask = CreateCompatibleDC(NULL);
+						BITMAPINFO biMask;
+						ZeroMemory(&biMask, sizeof(BITMAPINFO));
+						biMask.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+						biMask.bmiHeader.biBitCount = 32;
+						biMask.bmiHeader.biCompression = BI_RGB;
+						biMask.bmiHeader.biPlanes = 1;
+						biMask.bmiHeader.biWidth = w;
+						biMask.bmiHeader.biHeight = -h;
+						biMask.bmiHeader.biSizeImage = 0;
+						biMask.bmiHeader.biXPelsPerMeter = 0;
+						biMask.bmiHeader.biYPelsPerMeter = 0;
+						biMask.bmiHeader.biClrUsed = 0;
+						biMask.bmiHeader.biClrImportant = 0;
+						void *bufferMask;
+						HANDLE hbmDIBMask = CreateDIBSection(hdstMask, (BITMAPINFO*)&biMask, DIB_RGB_COLORS, &bufferMask, NULL, 0);
+						HANDLE hbmDIBOLDMask = (HBITMAP)SelectObject(hdstMask, hbmDIBMask);
+						unsigned char* appDataMask = (unsigned char*)bufferMask;
+
+
+						//NORMAL
+						HDC hdstNormal = CreateCompatibleDC(NULL);
+						BITMAPINFO biNormal;
+						ZeroMemory(&biNormal, sizeof(BITMAPINFO));
+						biNormal.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+						biNormal.bmiHeader.biBitCount = 32;
+						biNormal.bmiHeader.biCompression = BI_RGB;
+						biNormal.bmiHeader.biPlanes = 1;
+						biNormal.bmiHeader.biWidth = w;
+						biNormal.bmiHeader.biHeight = -h;
+						biNormal.bmiHeader.biSizeImage = 0;
+						biNormal.bmiHeader.biXPelsPerMeter = 0;
+						biNormal.bmiHeader.biYPelsPerMeter = 0;
+						biNormal.bmiHeader.biClrUsed = 0;
+						biNormal.bmiHeader.biClrImportant = 0;
+						void *bufferNormal;
+						HANDLE hbmDIBNormal = CreateDIBSection(hdstNormal, (BITMAPINFO*)&biNormal, DIB_RGB_COLORS, &bufferNormal, NULL, 0);
+						HANDLE hbmDIBOLDNormal = (HBITMAP)SelectObject(hdstNormal, hbmDIBNormal);
+						unsigned char* appDataNormal = (unsigned char*)bufferNormal;
+
+
+
+						DrawIconEx(hdstImage, 0, 0, (HICON)cursorHandle, 0, 0, 0, NULL, DI_IMAGE);
+						DrawIconEx(hdstMask, 0, 0, (HICON)cursorHandle, 0, 0, 0, NULL, DI_MASK);
+						DrawIconEx(hdstNormal, 0, 0, (HICON)cursorHandle, 0, 0, 0, NULL, DI_NORMAL);
+
+
+						bool cursorCheckMask=true;
+						int isck = 0;
+						for (int y=0; y<h; y++) {
+							for (int x=0; x<w; x++) {
+								if ((appDataImage[isck + 3])>0) {
+									cursorCheckMask = false;
+									break;
+								}
+								isck += 4;
+							}
+						}
+
+
+						unsigned char* cursorData = NULL;
+						cursorData = (unsigned char*)malloc(((w*3) * (h*3)) * 4);
+
+						int is = 0;
+						int id = 0;
+						for (int y=0; y<h; y++) {
+							int appis=is;
+							for (int x=0; x<w; x++) {
+								unsigned char r;
+								unsigned char g;
+								unsigned char b;
+								unsigned char a;
+
+								if (cursorCheckMask){
+									r = appDataImage[is + 2];
+									g = appDataImage[is + 1];
+									b = appDataImage[is];
+									if ((appDataMask[is + 2]==0) && (appDataMask[is + 1]==0) && (appDataMask[is]==0)){
+										a = 255;
+									}else{
+										if ((appDataMask[is + 2]==appDataImage[is + 2]) && (appDataMask[is + 1]==appDataImage[is + 1]) && (appDataMask[is]==appDataImage[is])){
+											r = 128;
+											g = 128;
+											b = 128;
+											a = 255;
+										}else{
+											a = 0;
+										}
+									}
+								}else{
+									r = appDataImage[is + 2];
+									g = appDataImage[is + 1];
+									b = appDataImage[is];
+									a = appDataImage[is + 3];
+								}
+								cursorData[id] = r;
+								cursorData[id + 1] = g;
+								cursorData[id + 2] = b;
+								cursorData[id + 3] = a;
+								id += 4;
+								is += 4;
+							}
+
+							is=appis;
+							for (int x=0; x<w; x++) {
+								cursorData[id] = appDataMask[is + 3];
+								cursorData[id + 1] = appDataMask[is + 3];
+								cursorData[id + 2] = appDataMask[is + 3];
+								cursorData[id + 3] = 0;
+								id += 4;
+								is += 4;
+							}
+
+							is=appis;
+							for (int x=0; x<w; x++) {
+								cursorData[id] = appDataNormal[is + 3];
+								cursorData[id + 1] = appDataNormal[is + 3];
+								cursorData[id + 2] = appDataNormal[is + 3];
+								cursorData[id + 3] = 0;
+								id += 4;
+								is += 4;
+							}
+
+						}
+
+						//NO TRANSPARENT
+						is = 0;
+						for (int y=0; y<h; y++) {
+							int appis=is;
+							for (int x=0; x<w; x++) {
+								unsigned char r;
+								unsigned char g;
+								unsigned char b;
+								unsigned char a;
+
+								r = appDataImage[is + 2];
+								g = appDataImage[is + 1];
+								b = appDataImage[is];
+								a = 255;
+								cursorData[id] = r;
+								cursorData[id + 1] = g;
+								cursorData[id + 2] = b;
+								cursorData[id + 3] = a;
+								id += 4;
+								is += 4;
+							}
+
+							is=appis;
+							for (int x=0; x<w; x++) {
+								unsigned char r;
+								unsigned char g;
+								unsigned char b;
+								unsigned char a;
+
+								r = appDataMask[is + 2];
+								g = appDataMask[is + 1];
+								b = appDataMask[is];
+								a = 255;
+								cursorData[id] = r;
+								cursorData[id + 1] = g;
+								cursorData[id + 2] = b;
+								cursorData[id + 3] = a;
+								id += 4;
+								is += 4;
+							}
+
+							is=appis;
+							for (int x=0; x<w; x++) {
+								unsigned char r;
+								unsigned char g;
+								unsigned char b;
+								unsigned char a;
+
+								r = appDataNormal[is + 2];
+								g = appDataNormal[is + 1];
+								b = appDataNormal[is];
+								a = 255;
+								cursorData[id] = r;
+								cursorData[id + 1] = g;
+								cursorData[id + 2] = b;
+								cursorData[id + 3] = a;
+								id += 4;
+								is += 4;
+							}
+
+						}
+
+						//TRANSPARENT
+						is = 0;
+						for (int y=0; y<h; y++) {
+							int appis=is;
+							for (int x=0; x<w; x++) {
+								unsigned char r;
+								unsigned char g;
+								unsigned char b;
+								unsigned char a;
+
+								r = appDataImage[is + 2];
+								g = appDataImage[is + 1];
+								b = appDataImage[is];
+								a = appDataImage[is + 3];
+								cursorData[id] = r;
+								cursorData[id + 1] = g;
+								cursorData[id + 2] = b;
+								cursorData[id + 3] = a;
+								id += 4;
+								is += 4;
+							}
+
+							is=appis;
+							for (int x=0; x<w; x++) {
+								unsigned char r;
+								unsigned char g;
+								unsigned char b;
+								unsigned char a;
+
+								r = appDataMask[is + 2];
+								g = appDataMask[is + 1];
+								b = appDataMask[is];
+								a = appDataMask[is + 3];
+								cursorData[id] = r;
+								cursorData[id + 1] = g;
+								cursorData[id + 2] = b;
+								cursorData[id + 3] = a;
+								id += 4;
+								is += 4;
+							}
+
+							is=appis;
+							for (int x=0; x<w; x++) {
+								unsigned char r;
+								unsigned char g;
+								unsigned char b;
+								unsigned char a;
+
+								r = appDataNormal[is + 2];
+								g = appDataNormal[is + 1];
+								b = appDataNormal[is];
+								a = appDataNormal[is + 3];
+								cursorData[id] = r;
+								cursorData[id + 1] = g;
+								cursorData[id + 2] = b;
+								cursorData[id + 3] = a;
+								id += 4;
+								is += 4;
+							}
+
+						}
+
+
+
+						bok = true;
+
+
+						if (bok){
+							cursorW=w*3;
+							cursorH=h*3;
+							int offsetX = 0;
+							int offsetY = 0;
+							if (info.fIcon==FALSE){
+								offsetX = info.xHotspot;
+								offsetY = info.yHotspot;
+							}else{
+								offsetX = w/2;
+								offsetY = h/2;
+							}
+							cursoroffsetX=offsetX;
+							cursoroffsetY=offsetY;
+							*rgbdata = cursorData;
+							cursorID++;
+						}
+
+						SelectObject(hdstImage, hbmDIBOLDImage);
+						DeleteObject(hbmDIBImage);
+						DeleteDC(hdstImage);
+
+						SelectObject(hdstMask, hbmDIBOLDMask);
+						DeleteObject(hbmDIBMask);
+						DeleteDC(hdstMask);
+
+						SelectObject(hdstNormal, hbmDIBOLDNormal);
+						DeleteObject(hbmDIBNormal);
+						DeleteDC(hdstNormal);
+
+					}
+				}
+			}
+		}else{
+			//Cursore nascosto
+			cursorVis=0;
+			cursorW=0;
+			cursorH=0;
+			cursoroffsetX=0;
+			cursoroffsetY=0;
+			if (cursorHandle!=NULL){
+				cursorHandle=NULL;
+				cursorID++;
+			}
+		}
+	}else{
+		return false;
+	}
+	info[0]=cursorVis;
+	MonitorInfo* mi = getMonitorInfo(monitor);
+	if (mi!=NULL){
+		info[1]=cursorX-mi->x;
+		info[2]=cursorY-mi->y;
+	}else{
+		info[1]=cursorX;
+		info[2]=cursorY;
+	}
+	info[3]=cursorW;
+	info[4]=cursorH;
+	info[5]=cursoroffsetX;
+	info[6]=cursoroffsetY;
+	id=cursorID;
+	return true;
+}*/
+
+
+bool ScreenCaptureNative::captureCursor(int monitor, int* info, long& id, unsigned char** rgbdata) {
 	int cursorVis=1; 
 	CURSORINFO appCursorInfo;
 	appCursorInfo.cbSize = sizeof(CURSORINFO);
@@ -527,7 +895,7 @@ bool ScreenCaptureNative::captureCursor(int monitor, int* info, long* id, unsign
 			cursorVis=1;
 			cursorX=appCursorInfo.ptScreenPos.x;
 			cursorY=appCursorInfo.ptScreenPos.y;
-			if (appCursorInfo.hCursor!=cursorHandle){
+			if ((appCursorInfo.hCursor!=cursorHandle) || (id==-1)){
 				cursorHandle=appCursorInfo.hCursor;
 				ICONINFO info;
 				if (GetIconInfo(cursorHandle, &info)){
@@ -584,18 +952,17 @@ bool ScreenCaptureNative::captureCursor(int monitor, int* info, long* id, unsign
 						HANDLE hbmDIBOLDMask = (HBITMAP)SelectObject(hdstMask, hbmDIBMask);
 						unsigned char* appDataMask = (unsigned char*)bufferMask;
 						
-						bool cursorHasAlpha = false;
+						bool cursorCheckMask=true;
 						unsigned char* cursorData = NULL;
-						if (DrawIconEx(hdstImage, 0, 0, (HICON)cursorHandle, 0, 0, 0, NULL, DI_NORMAL)) {
-							//cursorData = (unsigned char*)malloc((w * h) * 4);
-							int is = 0;
+						if (DrawIconEx(hdstImage, 0, 0, (HICON)cursorHandle, 0, 0, 0, NULL, DI_IMAGE)) {
+							int isck = 0;
 							for (int y=0; y<h; y++) {
 								for (int x=0; x<w; x++) {
-									if ((appDataImage[is + 3])>0) {
-										cursorHasAlpha = true;
+									if ((appDataImage[isck + 3])>0) {
+										cursorCheckMask = false;
 										break;
 									}
-									is += 4;
+									isck += 4;
 								}
 							}
 							if (DrawIconEx(hdstMask, 0, 0, (HICON)cursorHandle, 0, 0, 0, NULL, DI_MASK)) {
@@ -608,45 +975,34 @@ bool ScreenCaptureNative::captureCursor(int monitor, int* info, long* id, unsign
 										unsigned char g;
 										unsigned char b;
 										unsigned char a;
-										if ((appDataMask[is] == 0) && (appDataMask[is + 1] == 0) && (appDataMask[is + 2] == 0)) { // 0
-											if (cursorHasAlpha && (appDataImage[is] == 0) && (appDataImage[is + 1] == 0) && (appDataImage[is + 2] == 0)){ // 0
-												// 0 - 0 = TRASPARENTE
-												r=0;
-												g=0;
-												b=0;
-												a=0;
+										if (cursorCheckMask){
+											r = appDataImage[is + 2];
+											g = appDataImage[is + 1];
+											b = appDataImage[is];
+											if ((appDataMask[is + 2]==0) && (appDataMask[is + 1]==0) && (appDataMask[is]==0)){
+												a = 255;
 											}else{
-												// 0 - V = V
-												r = appDataImage[is + 2];
-												g = appDataImage[is + 1];
-												b = appDataImage[is];
-												if ((!cursorHasAlpha) || (appDataImage[is + 3]>0)) {
+												if ((appDataMask[is + 2]==appDataImage[is + 2]) && (appDataMask[is + 1]==appDataImage[is + 1]) && (appDataMask[is]==appDataImage[is])){
+													r = 128;
+													g = 128;
+													b = 128;
 													a = 255;
-												} else {
+												}else{
 													a = 0;
 												}
 											}
-										}else { // 1
-											if ((appDataImage[is] == 0) && (appDataImage[is + 1] == 0) && (appDataImage[is + 2] == 0)) { // 0
-												// 1 - 0 = TRASPARENTE
-												r = 0;
-												g = 0;
-												b = 0;
-												a = 0;
-											}else {
-												// 1 - V = DESKTOP INVERTITO (USO N COLORE CHE INVERTITO E  SEMPRE LO STESSO)
-												r = 128;
-												g = 128;
-												b = 128;
-												a = 255;
-											}
+										}else{
+											r = appDataImage[is + 2];
+											g = appDataImage[is + 1];
+											b = appDataImage[is];
+											a = appDataImage[is + 3];
 										}
 										cursorData[id] = r;
 										cursorData[id + 1] = g;
 										cursorData[id + 2] = b;
 										cursorData[id + 3] = a;
-										is += 4;
 										id += 4;
+										is += 4;
 									}
 								}
 								bok = true;
@@ -692,7 +1048,6 @@ bool ScreenCaptureNative::captureCursor(int monitor, int* info, long* id, unsign
 				cursorHandle=NULL;
 				cursorID++;
 			}
-			
 		}
 	}else{
 		return false;
@@ -710,9 +1065,11 @@ bool ScreenCaptureNative::captureCursor(int monitor, int* info, long* id, unsign
 	info[4]=cursorH;
 	info[5]=cursoroffsetX;
 	info[6]=cursoroffsetY;
-	*id=cursorID;
+	id=cursorID;
 	return true;
 }
+
+
 
 HDESK ScreenCaptureNative::getInputDesktop() {
 	HDESK hInputDesktop = OpenInputDesktop(0, FALSE,
@@ -850,6 +1207,27 @@ long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTUR
 	return ii->shotID;
 }
 
+void ScreenCaptureNative::sendInputs(INPUT (&inputs)[20],int max){
+	if (max>0){
+		INPUT sk[1];
+		for (int i=0;i<=max-1;i++){
+			sk[0]=inputs[i];
+			int tm = 0;
+			if (sk[0].type==INPUT_KEYBOARD){
+				tm = sk[0].ki.time;
+				sk[0].ki.time=0;
+			}else if (sk[0].type==INPUT_MOUSE){
+				tm = sk[0].mi.time;
+				sk[0].mi.time=0;
+			}
+			SendInput(1, sk, sizeof(INPUT));
+			if (tm>0){
+				Sleep(tm);
+			}
+		}
+	}
+}
+
 
 bool ScreenCaptureNative::isExtendedKey(int key){
 	return key == VK_RMENU || key == VK_RCONTROL || key == VK_NUMLOCK || key == VK_INSERT || key == VK_DELETE
@@ -944,17 +1322,17 @@ void ScreenCaptureNative::addCtrlAltShift(INPUT (&inputs)[20],int &p,bool ctrl, 
 	if ((ctrl) && (!ctrlDown)){
 		ctrlDown=true;
 		inputs[p].type= INPUT_KEYBOARD;
-		inputs[p].ki.wVk = VK_CONTROL;
-		inputs[p].ki.wScan = MapVirtualKey(VK_CONTROL & 0xFF, MAPVK_VK_TO_VSC);
-		inputs[p].ki.time = 0;
+		inputs[p].ki.wVk = VK_LCONTROL;
+		inputs[p].ki.wScan = MapVirtualKey(VK_LCONTROL & 0xFF, MAPVK_VK_TO_VSC);
+		inputs[p].ki.time = 5;
 		inputs[p].ki.dwExtraInfo = 0;
 		inputs[p].ki.dwFlags = 0;
 		p++;
 	}else if ((!ctrl) && (ctrlDown)){
 		ctrlDown=false;
 		inputs[p].type= INPUT_KEYBOARD;
-		inputs[p].ki.wVk = VK_CONTROL;
-		inputs[p].ki.wScan = MapVirtualKey(VK_CONTROL & 0xFF, MAPVK_VK_TO_VSC);
+		inputs[p].ki.wVk = VK_LCONTROL;
+		inputs[p].ki.wScan = MapVirtualKey(VK_LCONTROL & 0xFF, MAPVK_VK_TO_VSC);
 		inputs[p].ki.time = 0;
 		inputs[p].ki.dwExtraInfo = 0;
 		inputs[p].ki.dwFlags = KEYEVENTF_KEYUP;
@@ -963,17 +1341,17 @@ void ScreenCaptureNative::addCtrlAltShift(INPUT (&inputs)[20],int &p,bool ctrl, 
 	if ((alt) && (!altDown)){
 		altDown=true;
 		inputs[p].type= INPUT_KEYBOARD;
-		inputs[p].ki.wVk = VK_MENU;
-		inputs[p].ki.wScan = MapVirtualKey(VK_MENU & 0xFF, MAPVK_VK_TO_VSC);
-		inputs[p].ki.time = 0;
+		inputs[p].ki.wVk = VK_LMENU;
+		inputs[p].ki.wScan = MapVirtualKey(VK_LMENU & 0xFF, MAPVK_VK_TO_VSC);
+		inputs[p].ki.time = 5;
 		inputs[p].ki.dwExtraInfo = 0;
 		inputs[p].ki.dwFlags = 0;
 		p++;
 	}else if ((!alt) && (altDown)){
 		altDown=false;
 		inputs[p].type= INPUT_KEYBOARD;
-		inputs[p].ki.wVk = VK_MENU;
-		inputs[p].ki.wScan = MapVirtualKey(VK_MENU & 0xFF, MAPVK_VK_TO_VSC);
+		inputs[p].ki.wVk = VK_LMENU;
+		inputs[p].ki.wScan = MapVirtualKey(VK_LMENU & 0xFF, MAPVK_VK_TO_VSC);
 		inputs[p].ki.time = 0;
 		inputs[p].ki.dwExtraInfo = 0;
 		inputs[p].ki.dwFlags = KEYEVENTF_KEYUP;
@@ -984,7 +1362,7 @@ void ScreenCaptureNative::addCtrlAltShift(INPUT (&inputs)[20],int &p,bool ctrl, 
 		inputs[p].type= INPUT_KEYBOARD;
 		inputs[p].ki.wVk = VK_LSHIFT;
 		inputs[p].ki.wScan = MapVirtualKey(VK_LSHIFT & 0xFF, MAPVK_VK_TO_VSC);
-		inputs[p].ki.time = 0;
+		inputs[p].ki.time = 5;
 		inputs[p].ki.dwExtraInfo = 0;
 		inputs[p].ki.dwFlags = 0;
 		p++;
@@ -1004,7 +1382,7 @@ void ScreenCaptureNative::inputKeyboard(const char* type,const char* key, bool c
 	INPUT inputs[20];
 	int p=0;
 	if (strcmp(type,"CHAR")==0){
-		bool sendunicode=false; 
+		bool sendunicode=true;
 		SHORT vkKeyScanResult = 0;
 		short btlo = 0;
 		short bthi = 0;
@@ -1013,56 +1391,66 @@ void ScreenCaptureNative::inputKeyboard(const char* type,const char* key, bool c
 		bool wAlt   = false;
 		bool wHankaku   = false;
 		HKL hklCurrent = (HKL)0x04090409;
+		DWORD threadId = 0;
 		try {
 			HWND hwnd = GetForegroundWindow();
 			if (hwnd != 0) {
-				DWORD threadId = GetWindowThreadProcessId(hwnd, 0);
+				threadId = GetWindowThreadProcessId(hwnd, 0);
 				hklCurrent = GetKeyboardLayout(threadId);
 				vkKeyScanResult = VkKeyScanExW(atoi(key), hklCurrent);
-				if (vkKeyScanResult == -1) {
-					sendunicode=true;
-				}else{
+				if (vkKeyScanResult != -1) {
+					sendunicode=false;
 					btlo = vkKeyScanResult & 0xff;
 					bthi = (vkKeyScanResult>>8) & 0xff;
 					wShift = (bthi >> 0 & 1) != 0;
 					wCtrl  = (bthi >> 1 & 1) != 0;
 					wAlt   = (bthi >> 2 & 1) != 0;
 					wHankaku = (bthi >> 3 & 1) != 0;
-					if (wHankaku){ //wHankaku TOHO
+					if ((wCtrl && wAlt) || wHankaku){ //VK_KANA ???
+						sendunicode=true;
+					}else if (strcmp(key,"46")==0){ //??? Putty issue 46=.
 						sendunicode=true;
 					}
 				}
-			}else{
-				sendunicode=true;
+				if (sendunicode){
+					int ltit = GetWindowTextLengthW(hwnd);
+					wchar_t* tit = new wchar_t[ltit + 1];
+					GetWindowTextW(hwnd, tit, (ltit + 1));
+					if ((wcsstr(tit, L"VirtualBox") != 0) || (wcsstr(tit, L"VMware") != 0)){ //??? VirtualBox/VMware don't accept KEYEVENTF_UNICODE*/
+						sendunicode=false;
+					}
+					delete  tit;
+				}
 			}
 		} catch (...) {
-			sendunicode=true;
+
 		}
 
 		if (sendunicode){
 			inputs[p].type= INPUT_KEYBOARD;
 			inputs[p].ki.wVk = 0;
 			inputs[p].ki.wScan = atoi(key);
-			inputs[p].ki.time = 0;
-			inputs[p].ki.dwExtraInfo = 0;
+			inputs[p].ki.time = 5;
 			inputs[p].ki.dwFlags = KEYEVENTF_UNICODE;
+			inputs[p].ki.dwExtraInfo = 0;
 			p++;
 
 			inputs[p].type= INPUT_KEYBOARD;
 			inputs[p].ki.wVk = 0;
 			inputs[p].ki.wScan = atoi(key);
 			inputs[p].ki.time = 0;
-			inputs[p].ki.dwExtraInfo = 0;
 			inputs[p].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+			inputs[p].ki.dwExtraInfo = 0;
 			p++;
 
-		}else{			
+		}else{
+
 			addCtrlAltShift(inputs,p,wCtrl,wAlt,wShift);
-			
+
 			inputs[p].type= INPUT_KEYBOARD;
 			inputs[p].ki.wVk = btlo;
 			inputs[p].ki.wScan = MapVirtualKey(btlo, MAPVK_VK_TO_VSC);
-			inputs[p].ki.time = 0;
+			inputs[p].ki.time = 5;
 			inputs[p].ki.dwExtraInfo = 0;
 			inputs[p].ki.dwFlags = 0;
 			p++;
@@ -1074,7 +1462,7 @@ void ScreenCaptureNative::inputKeyboard(const char* type,const char* key, bool c
 			inputs[p].ki.dwExtraInfo = 0;
 			inputs[p].ki.dwFlags = KEYEVENTF_KEYUP;
 			p++;
-			
+
 			addCtrlAltShift(inputs,p,false,false,false);
 		}
 		
@@ -1123,17 +1511,15 @@ void ScreenCaptureNative::inputKeyboard(const char* type,const char* key, bool c
 		}
 	}
 
-	if (p>0){
-		SendInput(p, inputs, sizeof(INPUT));
-	}
+	sendInputs(inputs,p);
 }
 
-void ScreenCaptureNative::addInputMouse(INPUT (&inputs)[20],int &p,int x, int y,DWORD dwFlags,int mouseData){
+void ScreenCaptureNative::addInputMouse(INPUT (&inputs)[20],int &p,int x, int y,DWORD dwFlags,int mouseData,int tm){
 	inputs[p].type= INPUT_MOUSE;
 	inputs[p].mi.dx = x;
 	inputs[p].mi.dy = y;
 	inputs[p].mi.dwFlags = dwFlags;
-	inputs[p].mi.time = 0;
+	inputs[p].mi.time = tm;
 	inputs[p].mi.dwExtraInfo = 0;
 	inputs[p].mi.mouseData = mouseData;
 	p++;
@@ -1166,16 +1552,13 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 		appy = (int)((my - desktopOffsetY) * 65535 / (desktopHeight));
     }
 	if (button==64) { //CLICK
-		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTDOWN,mouseData);
-		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTUP,mouseData);
+		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTDOWN,mouseData,5);
+		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTUP,mouseData,0);
 	}else if (button==128) { //DBLCLICK
-		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTDOWN,mouseData);
-		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTUP,mouseData);
-		SendInput(p, inputs, sizeof(INPUT));
-		Sleep(10);
-		p=0;
-		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTDOWN,mouseData);
-		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTUP,mouseData);
+		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTDOWN,mouseData,5);
+		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTUP,mouseData,100);
+		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTDOWN,mouseData,5);
+		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTUP,mouseData,0);
 	}else{
 		if (button!=-1) {
 			if ((button & 1) && (!mousebtn1Down)){
@@ -1206,24 +1589,21 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 			dwFlags |= MOUSEEVENTF_WHEEL;
 			mouseData = wheel*120;
 		}
-		addInputMouse(inputs,p,appx,appy,dwFlags,mouseData);
+		addInputMouse(inputs,p,appx,appy,dwFlags,mouseData,0);
 	}
-	if (p>0){
-		SendInput(p, inputs, sizeof(INPUT));
-	}
+	sendInputs(inputs,p);
 }
 
 void ScreenCaptureNative::copy(){
 	inputKeyboard("KEY","C",true,false,false);
-	Sleep(10);
 }
 
 void ScreenCaptureNative::paste(){
 	inputKeyboard("KEY","V",true,false,false);
-	Sleep(10);
 }
 
 wchar_t* ScreenCaptureNative::getClipboardText(){
+	Sleep(100);
 	wchar_t* wText=NULL;
 	if (OpenClipboard(NULL)){
 		HANDLE hData = GetClipboardData(CF_UNICODETEXT); 
@@ -1259,7 +1639,7 @@ void ScreenCaptureNative::setClipboardText(wchar_t* wText){
 		}
 		CloseClipboard();
 	}
-	Sleep(10);
+	Sleep(100);
 }
 
 #endif
