@@ -115,47 +115,53 @@ int ScreenCaptureNative::getMonitorCount(){
 	return monitorsInfo.size();*/
 
 	//TODO MULTIMONITOR
+	/*if (firstmonitorscheck){
+		CGDirectDisplayID display[MONITORS_MAX];
+		CGDisplayCount numDisplays;
+		CGDisplayErr err;
+		err = CGGetActiveDisplayList(MONITORS_MAX, display, &numDisplays);
+		if (err != CGDisplayNoErr)
+			return 0;
+		for (CGDisplayCount i = 0; i < numDisplays; ++i) {
+			CGDirectDisplayID dspy = display[i];
+			printf("CGDirectDisplayID %d\n",dspy);
+		}
+	}*/
+
 	int elapsed=monitorsCounter.getCounter();
-	if ((firstmonitorscheck) || (elapsed>=MONITORS_INTERVAL)){
-		int did = CGMainDisplayID();
-		CGDisplayModeRef dmd = CGDisplayCopyDisplayMode(did);
-		int w = CGDisplayModeGetWidth(dmd);
-		int h = CGDisplayModeGetHeight(dmd);
-		//FIX RISOLUZIONI SIMILE A 1366x768
-		/*
-		if (((float)w/(float)8)!=(w/8)){
-			w=(int)((int)((float)w/(float)8)+(float)1) * 8;
+		if ((firstmonitorscheck) || (elapsed>=MONITORS_INTERVAL)){
+			int did = CGMainDisplayID();
+
+			CGDisplayModeRef dmd = CGDisplayCopyDisplayMode(did);
+			int w = CGDisplayModeGetWidth(dmd);
+			int h = CGDisplayModeGetHeight(dmd);
+			if (firstmonitorscheck){
+				MonitorInfo mi;
+				mi.id=did;
+				mi.factx=-1;
+				mi.facty=-1;
+				mi.dispw=w;
+				mi.disph=h;
+				mi.sleep=CGDisplayIsAsleep(did);
+				monitorsInfo.push_back(mi);
+				ScreenShotInfo ii;
+				newScreenShotInfo(&ii, -1, -1);
+				screenShotInfo.push_back(ii);
+			}else{
+				MonitorInfo* mi=&monitorsInfo[0];
+				mi->id=did;
+				if ((mi->dispw!=w) || (mi->disph!=h)){
+					mi->factx=-1;
+					mi->facty=-1;
+				}
+				mi->dispw=w;
+				mi->disph=h;
+				mi->sleep=CGDisplayIsAsleep(did);
+			}
+			firstmonitorscheck=false;
+			monitorsCounter.reset();
 		}
-		//if (((float)h/(float)8)!=(mi.h/8)){
-		//   h=(int)((int)((float)h/(float)8)+(float)1) * 8;
-		//}
-		 */
-		if (firstmonitorscheck){
-			MonitorInfo mi;
-			mi.id=did;
-			mi.w=w;
-			mi.h=h;
-			mi.sleep=CGDisplayIsAsleep(did);
-			monitorsInfo.push_back(mi);
-			ScreenShotInfo ii;
-			newScreenShotInfo(&ii, -1, -1);
-			screenShotInfo.push_back(ii);
-		}else{
-			MonitorInfo* mi=&monitorsInfo[0];
-			//ScreenShotInfo* ii=&screenShotInfo[0];
-			mi->id=did;
-			mi->w=w;
-			mi->h=h;
-			mi->sleep=CGDisplayIsAsleep(did);
-			/*if ((mi->w!=ii->w) || (mi->h!=ii->h)){
-				termScreenShotInfo(ii);
-				newScreenShotInfo(ii, mi->w, mi->h);
-			}*/
-		}
-		firstmonitorscheck=false;
-		monitorsCounter.reset();
-	}
-	return 1;
+		return 1;
 }
 
 void ScreenCaptureNative::newScreenShotInfo(ScreenShotInfo* ii, int w, int h) {
@@ -219,6 +225,7 @@ long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTUR
 		//CGDisplayCapture(displayid);
 		CGImageRef image_ref = CGDisplayCreateImage(mi->id);
 		//CGImageRef image_ref = CGWindowListCreateImage(CGRectNull, kCGWindowListOptionOnScreenOnly,0, kCGWindowImageBoundsIgnoreFraming);
+		//CGRect captureRect = CGRectMake(0,0,w,h);
 		//CGImageRef image_ref = CGWindowListCreateImage(captureRect, kCGWindowListOptionOnScreenOnly, kCGNullWindowID, kCGWindowImageBoundsIgnoreFraming);
 		if (image_ref==NULL){
 			return -4; //Identifica CGDisplayCreateImage failed
@@ -227,15 +234,14 @@ long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTUR
 		CFDataRef dataref = CGDataProviderCopyData(provider);
 		w = CGImageGetWidth(image_ref);
 		h = CGImageGetHeight(image_ref);
-		//FIX RISOLUZIONI SIMILE A 1366x768
-		/*
-		if (((float)w/(float)8)!=(w/8)){
-			w=(int)((int)((float)w/(float)8)+(float)1) * 8;
+		if ((mi->w!=w) || (mi->h!=h)){
+			mi->factx=-1;
+			mi->facty=-1;
 		}
-		//if (((float)h/(float)8)!=(mi.h/8)){
-		//   h=(int)((int)((float)h/(float)8)+(float)1) * 8;
-		//}
-		 */
+		if ((mi->factx==-1) || (mi->facty==-1)){
+			mi->factx = (float)w/(float)mi->dispw;
+			mi->facty = (float)h/(float)mi->disph;
+		}
 		mi->w=w;
 		mi->h=h;
 		int bpp = CGImageGetBitsPerPixel(image_ref);
@@ -264,11 +270,15 @@ long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTUR
 }
 
 bool ScreenCaptureNative::captureCursor(int monitor, int* info, long& id, unsigned char** data){
+	MonitorInfo* mi = &monitorsInfo[0];
+	if ((mi==NULL) || (mi->factx==-1) || (mi->facty==-1)){
+		return false;
+	}
 	CGEventRef event = CGEventCreate(NULL);
 	if (event!=NULL){
 		CGPoint cursor = CGEventGetLocation(event);
-		cursorX=cursor.x;
-		cursorY=cursor.y;
+		cursorX=(int)cursor.x*mi->factx;
+		cursorY=(int)cursor.y*mi->facty;
 		CFRelease(event);
 		if (id==-1){
 			getCursorImage(CURSOR_TYPE_ARROW_18_18,&cursorW,&cursorH,&cursoroffsetX,&cursoroffsetY,data);
@@ -475,16 +485,24 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 		mousex=x;
 		mousey=y;
 	}
+
+
+	MonitorInfo* mi = &monitorsInfo[0];
+	if (mi==NULL){
+		return;
+	}
+	CGPoint cmp = CGPointMake((int)((float)mousex/mi->factx), (int)((float)mousey/mi->facty));
+
 	if (button==64) { //CLICK
 
-		CGEventRef theEvent = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseDown, CGPointMake(mousex, mousey), kCGMouseButtonLeft);
+		CGEventRef theEvent = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseDown, cmp, kCGMouseButtonLeft);
 		CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift));
 		CGEventPost(kCGHIDEventTap, theEvent);
 		CGEventSetType(theEvent, kCGEventLeftMouseUp);
 		CGEventPost(kCGHIDEventTap, theEvent);
 		CFRelease(theEvent);
 	}else if (button==128) { //DBLCLICK
-		CGEventRef theEvent = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseDown, CGPointMake(mousex, mousey), kCGMouseButtonLeft);
+		CGEventRef theEvent = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseDown, cmp, kCGMouseButtonLeft);
 		CGEventPost(kCGHIDEventTap, theEvent);
 		CGEventSetType(theEvent, kCGEventLeftMouseUp);
 		CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift));
@@ -512,7 +530,7 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 			}
 			if (appbtn!=-1){
 				moveonly=false;
-				CGEventRef theEvent = CGEventCreateMouseEvent(NULL,appbtn,CGPointMake(mousex, mousey),kCGMouseButtonLeft);
+				CGEventRef theEvent = CGEventCreateMouseEvent(NULL,appbtn,cmp,kCGMouseButtonLeft);
 				CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift));
 				CGEventPost(kCGHIDEventTap, theEvent);
 				CFRelease(theEvent);
@@ -527,7 +545,7 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 			}
 			if (appbtn!=-1){
 				moveonly=false;
-				CGEventRef theEvent = CGEventCreateMouseEvent(NULL,appbtn,CGPointMake(mousex, mousey),kCGMouseButtonRight);
+				CGEventRef theEvent = CGEventCreateMouseEvent(NULL,appbtn,cmp,kCGMouseButtonRight);
 				CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift));
 				CGEventPost(kCGHIDEventTap, theEvent);
 				CFRelease(theEvent);
@@ -547,9 +565,9 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 		if (moveonly){
 			CGEventRef theEvent = NULL;
 			if (mousebtn1Down){
-				theEvent = CGEventCreateMouseEvent(NULL,kCGEventLeftMouseDragged,CGPointMake(mousex, mousey),kCGMouseButtonLeft);
+				theEvent = CGEventCreateMouseEvent(NULL,kCGEventLeftMouseDragged,cmp,kCGMouseButtonLeft);
 			}else{
-				theEvent = CGEventCreateMouseEvent(NULL,kCGEventMouseMoved,CGPointMake(mousex, mousey),kCGMouseButtonLeft);
+				theEvent = CGEventCreateMouseEvent(NULL,kCGEventMouseMoved,cmp,kCGMouseButtonLeft);
 			}
 			CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift));
 			CGEventPost(kCGHIDEventTap, theEvent);
@@ -562,6 +580,7 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 		CGEventPost(kCGHIDEventTap, scroll);
 		CFRelease(scroll);
 	}
+
 
 }
 

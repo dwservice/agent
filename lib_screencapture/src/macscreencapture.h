@@ -57,6 +57,10 @@ private:
 		int y;
 		int w;
 		int h;
+		int dispw;
+		int disph;
+		float factx;
+		float facty;
 		bool sleep;
 	};
 
