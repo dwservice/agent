@@ -147,7 +147,7 @@ void fireCallBackRepaint(int id, int x,int y,int w, int h){
 
 void fireCallBackKeyboard(int id, wchar_t* type, wchar_t* c){
 	if(g_callbackKeyboard)
-		g_callbackKeyboard(id, type, c, (BOOL)(GetKeyState(VK_SHIFT) & 0x8000),(BOOL)(GetKeyState(VK_CONTROL) & 0x8000),FALSE,FALSE);
+		g_callbackKeyboard(id, type, c, (BOOL)(GetKeyState(VK_SHIFT) & 0x8000),(BOOL)(GetKeyState(VK_CONTROL) & 0x8000),(BOOL)(GetKeyState(VK_MENU) & 0x8000),FALSE);
 }
 
 void fireCallBackMouse(int id, wchar_t* type, int x, int y, int button){

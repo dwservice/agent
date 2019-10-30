@@ -1217,7 +1217,10 @@ class Component:
         return self._focusable
     
     def has_focus(self):
-        return self._window.get_focus_component()==self
+        if self._window:            
+            return self._window.get_focus_component()==self
+        else:
+            return False
     
     def on_focus_get(self,e):
         None

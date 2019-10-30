@@ -14,7 +14,6 @@ import sys
 import threading
 import gdi
 import traceback
-from gdi import DIALOGMESSAGE_LEVEL_ERROR
 #from Queue import Queue
 
 _WIDTH=760
@@ -202,8 +201,15 @@ class Chooser(BaseUI):
         self.get_variable().set(e["source"].get_name())
         self._disble_next_button()
     
+    def is_next_enabled(self):
+        if self._main is not None and self.get_accept_key() is not None:
+            if self.is_accept_key(self.get_variable().get()):
+                return self._next_step is not None
+            else:
+                return False
+        return self._next_step is not None
+    
     def _disble_next_button(self):
-        None
         if self._main is not None and self.get_accept_key() is not None:
             if self.is_accept_key(self.get_variable().get()):
                 self._main._enable_next_button()
@@ -242,6 +248,66 @@ class AsyncInvoke(threading.Thread):
         if self._callback is not None:
             self._callback(ret)
 
+'''
+class DialogMessage(gdi.DialogMessage):
+    def on_keyboard(self,tp,c,shift,ctrl,alt,meta):
+        if alt==1 and tp==u"CHAR" and c==u"o":
+            self._ok_action(None)
+        if alt==1 and tp==u"CHAR" and c==u"y":
+            self._yes_action(None)
+        if alt==1 and tp==u"CHAR" and c==u"n":
+            self._no_action(None)
+        #print tp + " " + c + " " + str(alt)
+        gdi.Window.on_keyboard(self, tp, c, shift, ctrl, alt, meta)
+
+class Window(gdi.Window):
+    def setUI(self,v):
+        self._ui=v
+    
+    def on_keyboard(self,tp,c,shift,ctrl,alt,meta):
+        if alt==1 and tp==u"CHAR" and c==u"c" and self._ui._cur_step_ui is not None:
+            self._ui.close()
+            return
+        if alt==1 and tp==u"CHAR" and c==u"b" and self._ui._cur_step_ui is not None:
+            if self._ui._cur_step_ui.is_back_enabled():
+                self._ui.back()
+            return
+        if alt==1 and tp==u"CHAR" and c==u"n" and self._ui._cur_step_ui is not None:
+            if self._ui._cur_step_ui.is_next_enabled():
+                if hasattr(self._ui._cur_step_ui,"on_validate"):
+                    fc = self.get_focus_component()
+                    if fc is not None:
+                        self._ui._cur_step_ui.on_validate({"source":fc})
+                self._ui.next()
+            return
+        if alt==1 and tp==u"CHAR" and c==u"u" and self._ui._cur_step_ui is not None:
+            if self._ui._cur_step_ui.on_selected:
+                cmps = self._ui._pnlmain.get_components();
+                for i in range(len(cmps)):
+                    if i>=1:
+                        rb = cmps[i]
+                        if rb.get_selected():
+                            if i>1:
+                                rb.set_selected(False)
+                                cmps[i-1].set_selected(True)
+                                self._ui._cur_step_ui.on_selected({"source":cmps[i-1]})
+                            break;
+        if alt==1 and tp==u"CHAR" and  c==u"d" and self._ui._cur_step_ui is not None:
+            if self._ui._cur_step_ui.on_selected:
+                cmps = self._ui._pnlmain.get_components();
+                for i in range(len(cmps)):
+                    if i>=1:
+                        rb = cmps[i]
+                        if rb.get_selected():
+                            if i<len(cmps)-1:
+                                rb.set_selected(False)
+                                cmps[i+1].set_selected(True)
+                                self._ui._cur_step_ui.on_selected({"source":cmps[i+1]})
+                            break;
+        #print tp + " " + c + " " + str(alt)
+        gdi.Window.on_keyboard(self, tp, c, shift, ctrl, alt, meta)
+'''
+            
 class UI():
     def __init__(self, params, step_init):
         self._title = "DWAgent"
@@ -300,14 +366,14 @@ class UI():
             func(stp)
     
     def next(self):
-        if self._gui_enable==True:
-            self._guimode_next()
+        if self._gui_enable==True:            
+            self._guimode_next(None)
         else:
             self._clmode_next()
             
     def back(self):
         if self._gui_enable==True:
-            self._guimode_back()
+            self._guimode_back(None)
         else:
             self._clmode_back()
     
@@ -432,6 +498,7 @@ class UI():
     def _guimode_close(self, e):
         if self._cur_step_ui is None or (self._cur_step_ui.is_next_enabled() or self._cur_step_ui.is_back_enabled()) :
             dlgerr = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_YESNO,gdi.DIALOGMESSAGE_LEVEL_INFO,self._app)
+            #dlgerr = DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_YESNO,gdi.DIALOGMESSAGE_LEVEL_INFO,self._app)
             dlgerr.set_title(self._title)
             dlgerr.set_message(messages.get_message('confirmExit'))
             dlgerr.set_action(self._guimode_close_action)
@@ -462,6 +529,7 @@ class UI():
         self._cur_step_ui=curui
         self._prepare_step(self._cur_step_ui)
     
+    
     def _guimode_start(self):
         
         gdi.gdw_lib() #Se non è presente la libreria va in errore quindi in modalita console
@@ -472,7 +540,10 @@ class UI():
         elif self._topinfo is not None:
             self._top_height=(22*len(self._topinfo.split("\n"))) + 10
         
-        self._app = gdi.Window(gdi.WINDOW_TYPE_NORMAL_NOT_RESIZABLE, logopath=self._logo);
+        self._app = gdi.Window(gdi.WINDOW_TYPE_NORMAL_NOT_RESIZABLE, logopath=self._logo)
+        #self._app = Window(gdi.WINDOW_TYPE_NORMAL_NOT_RESIZABLE, logopath=self._logo)
+        #self._app.setUI(self)
+        
         self._app.set_title(self._title)
         self._app.set_size(_WIDTH, _HEIGHT+self._top_height)
         self._app.set_show_position(gdi.WINDOW_POSITION_CENTER_SCREEN)
@@ -591,6 +662,7 @@ class UI():
     def _show_error(self,  msg):
         if self._gui_enable is True:
             dlgerr = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_OK,gdi.DIALOGMESSAGE_LEVEL_ERROR,self._app)
+            #dlgerr = DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_OK,gdi.DIALOGMESSAGE_LEVEL_ERROR,self._app)
             dlgerr.set_title(self._title)
             dlgerr.set_message(msg)
             dlgerr.set_action(self._show_error_gui_ok)
