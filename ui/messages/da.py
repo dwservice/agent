@@ -115,7 +115,7 @@ data={
     'monitorUninstall':u'Afinstaller',
     'monitorUninstallNotRun':u'Du kan ikke afinstallere uden adminstrator-rettigheder.\nKør kommandoen dwguninstall i et terminal/kommandovindue.',
     'mustAccept':u'For at kunne fortsætte, skal du vælge mulighed {0}',
-    'mustSelectOptions':u'du skal vælge en valgmulighed.',
+    'mustSelectOptions':u'Du skal vælge en valgmulighed.',
     'next':u'Næste',
     'no':u'Nej',
     'noTryAgain':u'Nej, prøv igen',

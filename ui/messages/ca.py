@@ -149,7 +149,7 @@ data={
     'runWithoutInstallationConnecting':u'Obrint la sessió...',
     'runWithoutInstallationEnd':u'Sessió acabada.',
     'runWithoutInstallationOnlineBottom':u'COMPTE!!!\nNo donis pas aquesta informació a desconeguts, doncs tindrien accés a aquest agent. Si no tens clar el que ets fent, millor que tanquis aquesta aplicació.',
-    'runWithoutInstallationOnlineBottomPutCode':u'COMPTE! Ara l\'agent és a punt per acceptar connexions.',
+    'runWithoutInstallationOnlineBottomPutCode':u'COMPTE!\nAra l\'agent és a punt per acceptar connexions.',
     'runWithoutInstallationOnlinePassword':u'Paraula de pas: {0}',
     'runWithoutInstallationOnlineTop':u'La sessió és activa.\nPer connectar amb aquest agent, vés a https://www.dwservice.net',
     'runWithoutInstallationOnlineTopPutCode':u'La sessió és activa.',
