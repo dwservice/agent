@@ -891,11 +891,12 @@ bool ScreenCaptureNative::captureCursor(int monitor, int* info, long& id, unsign
 	CURSORINFO appCursorInfo;
 	appCursorInfo.cbSize = sizeof(CURSORINFO);
 	if (GetCursorInfo(&appCursorInfo)){
+		cursorX=appCursorInfo.ptScreenPos.x;
+		cursorY=appCursorInfo.ptScreenPos.y;
 		if (appCursorInfo.flags!=0){
 			cursorVis=1;
-			cursorX=appCursorInfo.ptScreenPos.x;
-			cursorY=appCursorInfo.ptScreenPos.y;
 			if ((appCursorInfo.hCursor!=cursorHandle) || (id==-1)){
+				bool bok = false;
 				cursorHandle=appCursorInfo.hCursor;
 				ICONINFO info;
 				if (GetIconInfo(cursorHandle, &info)){
@@ -904,7 +905,6 @@ bool ScreenCaptureNative::captureCursor(int monitor, int* info, long& id, unsign
 					if (bmMask.bmPlanes != 1 || bmMask.bmBitsPixel != 1) {
 						DeleteObject(info.hbmMask);
 					}else{
-						bool bok = false;
 						//unsigned char* dataNorm = NULL;
 						//unsigned char* dataMask = NULL;
 						bool isColorShape = (info.hbmColor != NULL);
@@ -1033,24 +1033,39 @@ bool ScreenCaptureNative::captureCursor(int monitor, int* info, long& id, unsign
 						SelectObject(hdstMask, hbmDIBOLDMask);
 						DeleteObject(hbmDIBMask);
 						DeleteDC(hdstMask);
-						
 					}
 				}
+				if (!bok){
+					getCursorImage(CURSOR_TYPE_ARROW_18_18,&cursorW,&cursorH,&cursoroffsetX,&cursoroffsetY,rgbdata);
+					cursorID++;
+				}
 			}
-		}else{
-			//Cursore nascosto
-			cursorVis=0;
+		}else{ //Cursore nascosto
+			cursorVis=1;
 			cursorW=0;
 			cursorH=0;
 			cursoroffsetX=0;
 			cursoroffsetY=0;
-			if (cursorHandle!=NULL){
+			if ((cursorHandle!=NULL) || (id==-1)){
 				cursorHandle=NULL;
+				getCursorImage(CURSOR_TYPE_ARROW_18_18,&cursorW,&cursorH,&cursoroffsetX,&cursoroffsetY,rgbdata);
 				cursorID++;
 			}
 		}
 	}else{
-		return false;
+		POINT point;
+		if (GetCursorPos(&point)) {
+			cursorVis=1;
+			cursorX=point.x;
+			cursorY=point.y;
+			if (id==-1){
+				cursorHandle=NULL;
+				getCursorImage(CURSOR_TYPE_ARROW_18_18,&cursorW,&cursorH,&cursoroffsetX,&cursoroffsetY,rgbdata);
+				cursorID++;
+			}
+		}else{
+			return false;
+		}
 	}
 	info[0]=cursorVis;
 	MonitorInfo* mi = getMonitorInfo(monitor);
