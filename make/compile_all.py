@@ -17,8 +17,18 @@ import compile_os_win_updater
 
 class CompileAll():
     
+    def __init__(self):
+        self._cpp_compiler_flags=None
+        self._linker_flags=None
+    
+    def set_cpp_compiler_flags(self, flgs):
+        self._cpp_compiler_flags=flgs
+    
+    def set_linker_flags(self, flgs):
+        self._linker_flags=flgs
+    
     def run(self):
-        bok=True
+        bok=True        
         arstatus=[]
         utils.info("BEGIN COMPILE ALL")
         try:
@@ -52,6 +62,24 @@ class CompileAll():
         mcp = md.Compile()
         smsg=mcp.get_name()
         try:
+            cflgs=self._cpp_compiler_flags
+            if cflgs is not None:
+                if utils.is_windows():        
+                    mcp.set_cpp_compiler_flags("windows",cflgs)                
+                elif utils.is_linux():
+                    mcp.set_cpp_compiler_flags("linux",cflgs)                
+                elif utils.is_mac():
+                    mcp.set_cpp_compiler_flags("mac",cflgs)
+                    
+            lflgs=self._linker_flags
+            if lflgs is not None:
+                if utils.is_windows():        
+                    mcp.set_linker_flags("windows",lflgs)                
+                elif utils.is_linux():
+                    mcp.set_linker_flags("linux",lflgs)                
+                elif utils.is_mac():
+                    mcp.set_linker_flags("mac",lflgs)
+                    
             mcp.run()
             smsg+=" - OK!"
             ars.append(smsg)
@@ -64,6 +92,8 @@ class CompileAll():
         
 if __name__ == "__main__":
     m = CompileAll()
+    #m.set_cpp_compiler_flags("-m32")
+    #m.set_linker_flags("-m32")
     m.run()
     
     

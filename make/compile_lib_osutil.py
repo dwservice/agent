@@ -42,6 +42,14 @@ class Compile():
     def get_name(self):
         return PRJNAME;
     
+    def set_cpp_compiler_flags(self, osn, flgs):
+        if osn in CONF:
+            CONF[osn]["cpp_compiler_flags"]=flgs
+    
+    def set_linker_flags(self, osn, flgs):
+        if osn in CONF:
+            CONF[osn]["linker_flags"]=flgs
+    
     def run(self):
         utils.info("BEGIN " + self.get_name())
         utils.make_tmppath()

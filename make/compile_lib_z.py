@@ -38,6 +38,14 @@ class Compile():
     def get_name(self):
         return CONF["name"];
     
+    def set_cpp_compiler_flags(self, osn, flgs):
+        if osn in CONF:
+            CONF[osn]["cpp_compiler_flags"]=flgs
+    
+    def set_linker_flags(self, osn, flgs):
+        if osn in CONF:
+            CONF[osn]["linker_flags"]=flgs
+    
     def run(self):
         utils.info("BEGIN " + self.get_name())
         utils.make_tmppath()
@@ -59,8 +67,17 @@ class Compile():
             apppth=CONF["pathdst"] + os.sep + "configure"
             f = codecs.open(apppth, encoding='utf-8')
             appdata = f.read()
-            f.close()
-            appdata=appdata.replace('.dylib','.so').replace("-dynamiclib","-shared")
+            f.close()            
+            
+            if "cpp_compiler_flags" in CONF["mac"]:
+                cflgs=CONF["mac"]["cpp_compiler_flags"] + " "
+                appdata=appdata.replace('CFLAGS="${CFLAGS--O3}"','CFLAGS="' + cflgs + '${CFLAGS--O3}"')
+                appdata=appdata.replace('SFLAGS="${CFLAGS--O3} -fPIC"','SFLAGS="' + cflgs + '${CFLAGS--O3} -fPIC"')  
+            
+            lflgs=""
+            if "linker_flags" in CONF["mac"]:
+                lflgs=CONF["mac"]["linker_flags"] + " "            
+            appdata=appdata.replace('.dylib','.so').replace("-dynamiclib",lflgs + "-shared")
             os.remove(apppth)
             f = codecs.open(apppth, encoding='utf-8', mode='w+')
             f.write(appdata)

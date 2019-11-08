@@ -176,28 +176,41 @@ def copy_to_native(mainconf):
 def compile_lib(mainconf):
     
     init_path(mainconf["pathdst"])
-    
+    cflgs=""    
+    lflgs=""
     if is_windows():        
         if not "windows" in mainconf:
             print "NO CONFIGURATION."
             return None
-        cconf = mainconf["windows"]
-        cconf["cpp_compiler"]="g++ -DOS_WINDOWS %INCLUDE_PATH% -O3 -g3 -Wall -c -fmessage-length=0 -o \"%NAMEO%\" \"%NAMECPP%\""
-        cconf["linker"]="g++ %LIBRARY_PATH% -s -static-libgcc -static-libstdc++ -municode -shared -o %OUTNAME% %SRCFILES% %LIBRARIES%"
+        cconf = mainconf["windows"]        
+        if "cpp_compiler_flags" in cconf:
+            cflgs=cconf["cpp_compiler_flags"]
+        if "linker_flags" in cconf:
+            lflgs=cconf["linker_flags"]
+        cconf["cpp_compiler"]="g++ " + cflgs + " -DOS_WINDOWS %INCLUDE_PATH% -O3 -g3 -Wall -c -fmessage-length=0 -o \"%NAMEO%\" \"%NAMECPP%\""
+        cconf["linker"]="g++ " + lflgs + " %LIBRARY_PATH% -s -static-libgcc -static-libstdc++ -municode -shared -o %OUTNAME% %SRCFILES% %LIBRARIES%"
     elif is_linux():
         if not "linux" in mainconf:
             print "NO CONFIGURATION."
             return None
         cconf = mainconf["linux"]
-        cconf["cpp_compiler"]="g++ -DOS_LINUX %INCLUDE_PATH% -O3 -Wall -c -fmessage-length=0 -fPIC -MMD -MP -MF\"%NAMED%\" -MT\"%NAMEO%\" -o \"%NAMEO%\" \"%NAMECPP%\""
-        cconf["linker"]="g++ %LIBRARY_PATH% -s -shared -o %OUTNAME% %SRCFILES% %LIBRARIES%"
+        if "cpp_compiler_flags" in cconf:
+            cflgs=cconf["cpp_compiler_flags"]
+        if "linker_flags" in cconf:
+            lflgs=cconf["linker_flags"]
+        cconf["cpp_compiler"]="g++ " + cflgs + " -DOS_LINUX %INCLUDE_PATH% -O3 -Wall -c -fmessage-length=0 -fPIC -MMD -MP -MF\"%NAMED%\" -MT\"%NAMEO%\" -o \"%NAMEO%\" \"%NAMECPP%\""
+        cconf["linker"]="g++ " + lflgs + " %LIBRARY_PATH% -s -shared -o %OUTNAME% %SRCFILES% %LIBRARIES%"
     elif is_mac():    
         if not "mac" in mainconf:
             print "NO CONFIGURATION."
             return None
         cconf = mainconf["mac"]
-        cconf ["cpp_compiler"]="g++ -DOS_MAC %INCLUDE_PATH% -O3 -Wall -c -fmessage-length=0 -o \"%NAMEO%\" \"%NAMECPP%\""
-        cconf ["linker"]="g++ %LIBRARY_PATH% -s -shared -o %OUTNAME% %SRCFILES% %LIBRARIES% %FRAMEWORKS%"
+        if "cpp_compiler_flags" in cconf:
+            cflgs=cconf["cpp_compiler_flags"]
+        if "linker_flags" in cconf:
+            lflgs=cconf["linker_flags"]
+        cconf["cpp_compiler"]="g++ " + cflgs + " -DOS_MAC %INCLUDE_PATH% -O3 -Wall -c -fmessage-length=0 -o \"%NAMEO%\" \"%NAMECPP%\""
+        cconf["linker"]="g++ " + lflgs + " %LIBRARY_PATH% -s -shared -o %OUTNAME% %SRCFILES% %LIBRARIES% %FRAMEWORKS%"
     
     if not "libraries" in cconf or len(cconf["libraries"])==0:
         cconf ["linker"]=cconf ["linker"].replace("%LIBRARIES%", "")
@@ -205,15 +218,15 @@ def compile_lib(mainconf):
         libsar=[]
         for i in range(len(cconf["libraries"])):
             libsar.append("-l" + cconf["libraries"][i])
-        cconf ["linker"]=cconf ["linker"].replace("%LIBRARIES%", " ".join(libsar))
+        cconf["linker"]=cconf ["linker"].replace("%LIBRARIES%", " ".join(libsar))
         
     if not "frameworks" in cconf or len(cconf["frameworks"])==0:
-        cconf ["linker"]=cconf ["linker"].replace("%FRAMEWORKS%", "")
+        cconf["linker"]=cconf ["linker"].replace("%FRAMEWORKS%", "")
     else:
         fwksar=[]
         for i in range(len(cconf["frameworks"])):
             fwksar.append("-framework " + cconf["frameworks"][i])
-        cconf ["linker"]=cconf ["linker"].replace("%FRAMEWORKS%", " ".join(fwksar))
+        cconf["linker"]=cconf ["linker"].replace("%FRAMEWORKS%", " ".join(fwksar))
     
     srcfiles=""
     dsrc = os.listdir(mainconf["pathsrc"])
