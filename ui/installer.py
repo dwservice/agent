@@ -443,7 +443,6 @@ class NativeMac:
         
         #GUI Launcher
         fapp=pth + utils.path_sep + "dwagguilnc"
-        self.replace_key_file(fapp, "utf-8", "@PATH_DWA@",  self._install_path)
         utils.path_change_permissions(fapp,  stat.S_IRWXU + stat.S_IRGRP + stat.S_IXGRP + stat.S_IROTH + stat.S_IXOTH)
         
         fapp=pth + utils.path_sep + "dwagguilnc.plist"
@@ -475,7 +474,6 @@ class NativeMac:
     
     def prepare_file_monitor(self, pth):
         fapp=pth + utils.path_sep + "dwagsystray"
-        self.replace_key_file(fapp, "utf-8", "@PATH_DWA@",  self._install_path)
         utils.path_change_permissions(fapp,  stat.S_IRWXU + stat.S_IRGRP + stat.S_IXGRP + stat.S_IROTH + stat.S_IXOTH)
         
         fapp=pth + utils.path_sep + "dwagsystray.plist"

@@ -5,7 +5,8 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 */
 
 #include "main.h"
-
+#if defined OS_MAC
+#else
 void callbackTypeRepaintTest(int id, int x,int y,int w, int h){
 	penColor(id,0,0,0);
 	drawText(id, (wchar_t*)L"Test", 100, 50);
@@ -26,3 +27,4 @@ int wmain(int argc, wchar_t **argv) {
 	loop();
 	return 1;
 }
+#endif

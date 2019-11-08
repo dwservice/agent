@@ -5,8 +5,6 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 */
 #if defined OS_MAC
 
-#import "main.h"
-
 #import <Cocoa/Cocoa.h>
 #import <AppKit/AppKit.h>
 
@@ -15,6 +13,19 @@ NSApplication *app=NULL;
 NSTimer *timer=NULL;
 NSMutableArray *windowList=NULL;
 int windowListCnt=0;
+
+
+const int WINDOW_TYPE_NORMAL=0;
+const int WINDOW_TYPE_NORMAL_NOT_RESIZABLE=1;
+const int WINDOW_TYPE_DIALOG=100;
+const int WINDOW_TYPE_POPUP=200;
+const int WINDOW_TYPE_TOOL=300;
+
+typedef void (*CallbackTypeRepaint)(int id, int x,int y,int w, int h);
+typedef void (*CallbackTypeKeyboard)(int id, wchar_t* type,wchar_t* c,bool shift,bool ctrl,bool alt,bool meta);
+typedef void (*CallbackTypeMouse)(int id, wchar_t* type, int x, int y, int button);
+typedef bool (*CallbackTypeWindow)(int id, wchar_t* type);
+typedef void (*CallbackTypeTimer)();
 
 
 CallbackTypeRepaint g_callbackRepaint;
