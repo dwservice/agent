@@ -7,15 +7,18 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #include <stdlib.h>
 #include <math.h>
 #include <map>
+#include <vector>
 #include <iostream>
 #include "timecounter.h"
 #include "util.h"
 #include <string>
 
 #include "zutil.h"
+#include "turbojpeg.h"
 #include "linuxscreencapture.h"
 #include "macscreencapture.h"
 #include "windowsscreencapture.h"
+
 
 typedef void (*CallbackDifference)(int, unsigned char*);
 
@@ -28,7 +31,7 @@ public:
 	void  initialize(int id);
 	void terminate(int id);
 	void monitor(int id, int index);
-	void difference(int id, int quality, CallbackDifference cbdiff);
+	void difference(int id, int typeFrame, int quality, CallbackDifference cbdiff);
 
 	void inputKeyboard(int id, const char* type, const char* key, bool ctrl, bool alt, bool shift);
 	void inputMouse(int id, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift);
@@ -42,12 +45,24 @@ public:
 
 
 private:
+	#define TYPE_FRAME_PALETTE_V1 0
+	#define TYPE_FRAME_TJPEG_V1 100
+
+	#define TJPEG_SPLIT_SIZE 1*1024*1024
 	#define BUFFER_DIFF_SIZE 56*1024
 	#define MOUSE_INTERVAL 50
 
 
 	int diffBufferSize;
 	unsigned char* diffBuffer;
+	tjhandle tjInstance;
+
+	typedef struct{
+		int x1;
+		int y1;
+		int x2;
+		int y2;
+	} DIFFRECT;
 
 	typedef struct{
 		//short* data;
@@ -57,6 +72,7 @@ private:
 		short shoth;
 		bool screenLocked;
 		PALETTE palette;
+		int jpegQuality;
 		
 		long cursorID;
 		bool cursorVisible;
@@ -77,6 +93,7 @@ private:
 		int monitorCount;
 		int monitor;
 		int quality;
+		int typeFrame;
 
 	} SESSION;
 
@@ -89,11 +106,12 @@ private:
 	DistanceFrameMsCalculator distanceFrameMsCalculator;
 
 	void initSession(int id);
-	void loadPalette(PALETTE* pal, int quality);
+	void loadQuality(SESSION* ses);
 
 	void resizeDiffBufferIfNeed(int needsz);
 	//int prepareCopyArea(unsigned char* &bf,int p,int* cursz,SESSION &ses);
-	void differenceFrame(SESSION &ses, CAPTURE_IMAGE &capimage, CallbackDifference cbdiff);
+	void differenceFrameTJPEG(SESSION &ses, CAPTURE_IMAGE &capimage, CallbackDifference cbdiff);
+	void differenceFrameTPALETTE(SESSION &ses, CAPTURE_IMAGE &capimage, CallbackDifference cbdiff);
 	void differenceCursor(SESSION &ses, CAPTURE_IMAGE &capimage, CallbackDifference cbdiff);
 	void inputsEvent();
 	//char convertCharBase64(char c);

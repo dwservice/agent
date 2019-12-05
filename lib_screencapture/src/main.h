@@ -23,7 +23,7 @@ extern "C" {
 void freeMemory(void* pnt);
 void init(int id);
 void monitor(int id, int index);
-void difference(int id, int quality, CallbackDifference cbdiff);
+void difference(int id, int typeFrame, int quality, CallbackDifference cbdiff);
 void term(int id);
 void inputMouse(int id, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift);
 void inputKeyboard(int id, const char* type, const char* key, bool ctrl, bool alt, bool shift);

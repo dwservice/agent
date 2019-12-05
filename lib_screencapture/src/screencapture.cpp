@@ -12,6 +12,7 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //		V=Visible -> 1:YES 0:NO
 // TYPE=4 DATA=SX-SY-SW-SH-DX-DY -> COPY AREA
 // TYPE=10 DATA=SZ -> MONITOR COUNT
+// TYPE=11 DATA=CNT-S1-S2-... -> SUPPORTED FRAME
 // TYPE=701 -> CAPTURE LOCKED
 // TYPE=702 -> CAPTURE UNLOCKED
 
@@ -26,10 +27,15 @@ ScreenCapture::ScreenCapture(DWDebugger* dbg)
 	lastSessionID=0;
 	diffBufferSize = BUFFER_DIFF_SIZE;
 	diffBuffer = (unsigned char*)calloc(diffBufferSize,sizeof(unsigned char));
+	tjInstance = tjInitCompress();
 }
 
 
 ScreenCapture::~ScreenCapture(){
+	if (tjInstance != NULL){
+		tjDestroy(tjInstance);
+	}
+	tjInstance=NULL;
 	free(diffBuffer);
 	captureNative.terminate();
 }
@@ -42,7 +48,8 @@ void ScreenCapture::inputsEvent(){
 	distanceFrameMsCalculator.fast();
 }
 
-void ScreenCapture::loadPalette(PALETTE* pal, int quality) {
+void ScreenCapture::loadQuality(SESSION* ses) {
+	int quality=ses->quality;
 	short rsz=0;
 	short gsz=0;
 	short bsz=0;
@@ -54,65 +61,75 @@ void ScreenCapture::loadPalette(PALETTE* pal, int quality) {
 			rsz=4;
 			gsz=4;
 			bsz=4;
+			ses->jpegQuality=30;
 		break;
 		case 1:
 			rsz=8;
 			gsz=4;
 			bsz=4;
+			ses->jpegQuality=40;
 		break;
 		case 2:
 			rsz=8;
 			gsz=8;
 			bsz=4;
+			ses->jpegQuality=45;
 		break;
 		case 3:
 			rsz=8;
 			gsz=8;
 			bsz=8;
+			ses->jpegQuality=50;
 		break;
 		case 4:
 			rsz=16;
 			gsz=8;
 			bsz=8;
+			ses->jpegQuality=55;
 		break;
 		case 5:
 			rsz=16;
 			gsz=16;
 			bsz=8;
+			ses->jpegQuality=60;
 		break;
 		case 6:
 			rsz=16;
 			gsz=16;
 			bsz=16;
+			ses->jpegQuality=65;
 		break;
 		case 7:
 			rsz=32;
 			gsz=16;
 			bsz=16;
+			ses->jpegQuality=75;
 		break;
 		case 8:
 			rsz=32;
 			gsz=32;
 			bsz=16;
+			ses->jpegQuality=80;
 		break;
 		case 9:
 			rsz=32;
 			gsz=32;
 			bsz=32;
+			ses->jpegQuality=90;
 		break;
 	}
 	//PALETTE
-	pal->redsize=rsz;
-	pal->greensize=gsz;
-	pal->bluesize=bsz;
+	ses->palette.redsize=rsz;
+	ses->palette.greensize=gsz;
+	ses->palette.bluesize=bsz;
 
-	pal->redcnt=countSetBits(rsz-1);
-	pal->greencnt=countSetBits(gsz-1);
-	pal->bluecnt=countSetBits(bsz-1);
+	ses->palette.redcnt=countSetBits(rsz-1);
+	ses->palette.greencnt=countSetBits(gsz-1);
+	ses->palette.bluecnt=countSetBits(bsz-1);
 
-	pal->redsf=countSetBits((int)(255-(rsz-1)));
-	pal->greensf=countSetBits((int)(255-(gsz-1)));
-	pal->bluesf=countSetBits((int)(255-(bsz-1)));
+	ses->palette.redsf=countSetBits((int)(255-(rsz-1)));
+	ses->palette.greensf=countSetBits((int)(255-(gsz-1)));
+	ses->palette.bluesf=countSetBits((int)(255-(bsz-1)));
 
 }
 
@@ -370,9 +387,114 @@ void ScreenCapture::areaMoved(CAPTURE_MOVE_AREA* area) {
 
 }
 
-void ScreenCapture::differenceFrame(SESSION &ses, CAPTURE_IMAGE &capimage,CallbackDifference cbdiff){
+void ScreenCapture::differenceFrameTJPEG(SESSION &ses, CAPTURE_IMAGE &capimage,CallbackDifference cbdiff){
+	int gapmin=50;
+	unsigned long sz = (ses.shotw*ses.shoth);
 	bool firstdata = false;
-	int sz = (ses.shotw*ses.shoth);
+	CAPTURE_RGB rgb;
+	if (ses.data == NULL) {
+		ses.data = (unsigned char*)malloc((sz*3) * sizeof(unsigned char));
+		firstdata = true;
+	}
+	//detect changes and make blocks
+	vector<DIFFRECT>ardiff;
+	//vector<DIFFRECT>arhorizgap;
+	DIFFRECT drcur = DIFFRECT();
+	drcur.x1=-1;
+	drcur.y1=-1;
+	drcur.x2=-1;
+	drcur.y2=-1;
+	unsigned long inew=0;
+	unsigned long ip=0;
+	unsigned long cntsz=0;
+	for (int y=0;y<ses.shoth;y++){
+		if ((drcur.y2!=-1) && ((y-drcur.y2>=gapmin) || (cntsz>=TJPEG_SPLIT_SIZE))){
+			ardiff.push_back(drcur);
+			drcur = DIFFRECT();
+			drcur.x1=-1;
+			drcur.y1=-1;
+			drcur.x2=-1;
+			drcur.y2=-1;
+		}
+		for (int x=0;x<ses.shotw;x++){
+			getRGB(capimage, inew, rgb);
+			if ((firstdata==true) || (rgb.red!=ses.data[ip]) || (rgb.green!=ses.data[ip+1]) || (rgb.blue!=ses.data[ip+2])){
+				ses.data[ip]=rgb.red;
+				ses.data[ip+1]=rgb.green;
+				ses.data[ip+2]=rgb.blue;
+				if (drcur.x1==-1){
+					drcur.x1=drcur.x2=x;
+					drcur.y1=drcur.y2=y;
+					cntsz=0;
+				}else{
+					if (x<drcur.x1){
+						drcur.x1=x;
+					}
+					if (x>drcur.x2){
+						drcur.x2=x;
+					}
+					if (y<drcur.y1){
+						drcur.y1=y;
+					}
+					if (y>drcur.y2){
+						drcur.y2=y;
+					}
+					cntsz+=3;
+				}
+			}
+			inew+=capimage.bpc;
+			ip+=3;
+		}
+	}
+	//Close block
+	if (drcur.y2!=-1){
+		ardiff.push_back(drcur);
+	}
+	//drcurhorizgap=NULL;
+	if (ardiff.size()>0){
+		while (!ardiff.empty()){
+			drcur = ardiff[0];
+			int cw=(drcur.x2-drcur.x1)+1;
+			int ch=(drcur.y2-drcur.y1)+1;
+			int tot=2+1;
+			unsigned long jpegSize = 0;
+			unsigned char* jpegBuf = NULL;
+			int tjcret = tjCompress2(tjInstance, ses.data+((ses.shotw*(drcur.y1*3))+(drcur.x1*3)), cw, ses.shotw*3, ch, TJPF_RGB,&jpegBuf, &jpegSize, TJSAMP_444, ses.jpegQuality, TJFLAG_FASTDCT);
+			if (tjcret==0){
+				tot+=2+2+jpegSize;
+				resizeDiffBufferIfNeed(tot);
+				//ADD TYPE TOKEN
+				shortToArray(diffBuffer,0,2); //2=TOKEN frame
+				//ADD LAST TOKEN
+				if (ardiff.size()==1){
+					diffBuffer[2]=1;
+				}else{
+					diffBuffer[2]=0;
+				}
+				//ADD X Y
+				shortToArray(diffBuffer,3,drcur.x1);
+				shortToArray(diffBuffer,5,drcur.y1);
+				memcpy(diffBuffer+7,jpegBuf,jpegSize);
+				tjFree(jpegBuf);
+				jpegBuf = NULL;
+				cbdiff(tot,diffBuffer);
+			}
+			ardiff.erase(ardiff.begin());
+		}
+	}else{
+		resizeDiffBufferIfNeed(3);
+		//ADD TYPE TOKEN
+		shortToArray(diffBuffer,0,2); //2=TOKEN frame
+		//ADD LAST TOKEN
+		diffBuffer[2]=1;
+		cbdiff(3,diffBuffer);
+	}
+}
+
+
+void ScreenCapture::differenceFrameTPALETTE(SESSION &ses, CAPTURE_IMAGE &capimage,CallbackDifference cbdiff){
+	bool firstdata = false;
+	unsigned long sz = (ses.shotw*ses.shoth);
 	CAPTURE_RGB rgb;
 	if (ses.data == NULL) {
 		ses.data = (unsigned char*)malloc((sz*3) * sizeof(unsigned char));
@@ -383,13 +505,13 @@ void ScreenCapture::differenceFrame(SESSION &ses, CAPTURE_IMAGE &capimage,Callba
 	unsigned char indata[indataSize];
 	int CHUNK=16384;
 	unsigned char outdata[CHUNK];
-	int minRemaing=((float)sz*5.0)/100.0;
+	unsigned long minRemaing=((float)sz*5.0)/100.0;
 	int splitSize=20480;
 	int fy=0;
 	int fh=0;
-	int ip=0;
-	int inew=0;
-	int idata=0;
+	unsigned long ip=0;
+	unsigned long inew=0;
+	unsigned long idata=0;
 	int cntFrameSend=0;
 	int szb=indataSize;
 	while(true){
@@ -444,7 +566,7 @@ void ScreenCapture::differenceFrame(SESSION &ses, CAPTURE_IMAGE &capimage,Callba
 				fh++;
 			}
 
-			int remaing = sz-ip;
+			unsigned long remaing = sz-ip;
 			if ((pbf>=splitSize) && (remaing>minRemaing)){
 				bsplit=true;
 			}
@@ -528,7 +650,7 @@ void ScreenCapture::monitor(int id, int index){
 	ses.monitor=index;
 }
 
-void ScreenCapture::difference(int id, int quality, CallbackDifference cbdiff){
+void ScreenCapture::difference(int id, int typeFrame, int quality, CallbackDifference cbdiff){
 	dwdbg->print("ScreenCapture::difference#Start");
 	map<int,SESSION>::iterator itmap = hmSession.find(id);
 	if (itmap==hmSession.end()){
@@ -537,13 +659,34 @@ void ScreenCapture::difference(int id, int quality, CallbackDifference cbdiff){
 	}
 	SESSION &ses = itmap->second;
 
+	//SUPPORTED FRAME
+	if (ses.monitorCount==-1){
+		//TYPE=11 SUPPORTED FRAME -> CNT-S1-S2
+		int sz=2+2;
+		short cnt=0;
+		int p=0;
+		p+=shortToArray(diffBuffer,p,11);
+		p+=2;
+		if(tjInstance != NULL){
+			p+=shortToArray(diffBuffer,p,TYPE_FRAME_TJPEG_V1);
+			sz+=2;
+			cnt++;
+		}
+		p+=shortToArray(diffBuffer,p,TYPE_FRAME_PALETTE_V1);
+		sz+=2;
+		cnt++;
+		shortToArray(diffBuffer,2,cnt);
+		dwdbg->print("ScreenCapture::tokenSupportedFrame");
+		cbdiff(sz,diffBuffer);
+	}
+
 	//MONITOR
 	dwdbg->print("ScreenCapture::getMonitorCount#Start");
 	int mc = captureNative.getMonitorCount();
 	dwdbg->print("ScreenCapture::getMonitorCount#End");
 	if (ses.monitorCount!=mc){
 		ses.monitorCount=mc;
-		//TYPE=10 MONITOR COUNT -> 10-SZ
+		//TYPE=10 MONITOR COUNT -> SZ
 		int sz=2+2;
 		int p=0;
 		p+=shortToArray(diffBuffer,p,10);
@@ -605,15 +748,28 @@ void ScreenCapture::difference(int id, int quality, CallbackDifference cbdiff){
 
 				if (ses.shotID != shotID) {
 					ses.shotID = shotID;
+					if (ses.typeFrame!=typeFrame){
+						ses.typeFrame=typeFrame;
+						if (ses.data != NULL) {
+							free(ses.data);
+							ses.data=NULL;
+						}
+					}
 					if (ses.quality!=quality){
 						ses.quality=quality;
 						if (ses.data != NULL) {
 							free(ses.data);
 							ses.data=NULL;
 						}
-						loadPalette(&ses.palette,ses.quality);
+						loadQuality(&ses);
 					}
-					differenceFrame(ses, capimg, cbdiff);
+					if (ses.typeFrame==TYPE_FRAME_PALETTE_V1){
+						differenceFrameTPALETTE(ses, capimg, cbdiff);
+					}else if (ses.typeFrame==TYPE_FRAME_TJPEG_V1){
+						if(tjInstance != NULL){
+							differenceFrameTJPEG(ses, capimg, cbdiff);
+						}
+					}
 					dwdbg->print("ScreenCapture::prepareTokens");
 				}
 				//PREPARA CURSORE
@@ -638,6 +794,7 @@ void ScreenCapture::initSession(int id){
 	hmSession[id].cursorCounter.reset();
 	hmSession[id].screenLocked=false;
 	hmSession[id].quality=-1;
+	hmSession[id].typeFrame=-1;
 
 	/*hmSession[id].activeWinID=-1;
 	hmSession[id].activeWinX=-1;

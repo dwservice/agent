@@ -401,8 +401,8 @@ void monitor(int id, int index){
 	screenCapture.monitor(id, index);
 }
 
-void difference(int id, int quality, CallbackDifference cbdiff) {
-	screenCapture.difference(id, quality, cbdiff);
+void difference(int id, int typeFrame, int quality, CallbackDifference cbdiff) {
+	screenCapture.difference(id, typeFrame, quality, cbdiff);
 }
 
 void term(int id) {
@@ -481,7 +481,7 @@ int wmain(int argc, wchar_t **argv) {
 	while (true){
 		tc.reset();
 		unsigned char* bf = NULL;
-		difference(id,0,*callbackDifference);
+		difference(id,0,100,*callbackDifference);
 		printf("DIFF %d TM:%lu\n",i,tc.getCounter());
 		i++;
 		if (i>=1){
@@ -529,6 +529,7 @@ int MACTest1main(int argc, char **argv){
 
 		free(pixels);
 	}
+	return 0;
 }
 
 #endif

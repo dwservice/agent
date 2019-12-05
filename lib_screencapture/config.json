@@ -1,6 +1,6 @@
 {
 	"filename_win": "dwagscreencapture.dll",
 	"filename_linux": "dwagscreencapture.so",
-	"filename_mac": "dwagscreencapture.so",
-	"lib_dependencies": ["z"]
+	"filename_mac": "dwagscreencapture.dylib",
+	"lib_dependencies": ["z","turbojpeg"]
 }

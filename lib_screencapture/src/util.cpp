@@ -42,7 +42,7 @@ int countSetBits(unsigned int num) {
 	return count;
 }
 
-void getRGB(CAPTURE_IMAGE &capimage, int &i, CAPTURE_RGB &rgb){
+void getRGB(CAPTURE_IMAGE &capimage, unsigned long &i, CAPTURE_RGB &rgb){
 	if (capimage.bpp>24){
 		rgb.red = capimage.data[i+2];
 		rgb.green = capimage.data[i+1];

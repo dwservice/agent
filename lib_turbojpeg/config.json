@@ -1,0 +1,6 @@
+{
+	"version": "2.0.3",
+	"filename_win": "libturbojpeg.dll",
+	"filename_linux": "libturbojpeg.so",
+	"filename_mac": "libturbojpeg.dylib"
+}

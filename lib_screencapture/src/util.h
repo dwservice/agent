@@ -68,7 +68,7 @@ typedef struct{
 
 int countSetBits(unsigned int num);
 short getPaletteColorIndexfromRGB(CAPTURE_RGB &rgb, PALETTE& palinfo);
-void getRGB(CAPTURE_IMAGE &capimage, int &i, CAPTURE_RGB &rgb);
+void getRGB(CAPTURE_IMAGE &capimage, unsigned long &i, CAPTURE_RGB &rgb);
 void getCursorImage(int tp,int* w,int* h,int* offx,int* offy,unsigned char** rgbdata);
 extern int CURSOR_TYPE_ARROW_18_18;
 
