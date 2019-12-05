@@ -190,7 +190,6 @@ def gdw_lib():
             elif utils.path_exists("native" + utils.path_sep + namelib):
                 gdwlib = ctypes.CDLL("native" + utils.path_sep + namelib)
         else:
-            import detectinfo
             gdwlib = ctypes.CDLL(".." + utils.path_sep + "make" + utils.path_sep + "native" + utils.path_sep + namelib)
         if gdwlib==None:
             raise Exception("Missing gdi library.")

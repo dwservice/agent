@@ -863,7 +863,7 @@ class BandwidthCalculator:
         finally:
             self._semaphore.release()
 
-
+'''
 class BandwidthLimiter:
     
     def __init__(self,sync=True):
@@ -938,7 +938,7 @@ class BandwidthLimiter:
         finally:
             self._semaphore_release()
             
-
+'''
             
 class ConnectionCheckAlive(threading.Thread):
     _KEEPALIVE_INTERVALL = 30
