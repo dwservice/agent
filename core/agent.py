@@ -702,6 +702,8 @@ class Agent():
                 npath+=appnm
                 if utils.path_exists(npath):
                     utils.path_remove(npath)
+                    if utils.path_exists(npath):
+                        raise Exception("Cannot remove file " + npath + ".")
                 fd = utils.file_open(npath,"wb")
                 fd.write(zfile.read(nm))
                 fd.close()
@@ -1457,7 +1459,7 @@ class Agent():
                 elif tp=="lib":
                     self.write_info("Lib " + name + " not found (maybe it is not necessary for this OS).")
         except Exception as e:
-            raise Exception("Error update " + tp + " " + name + ": " + utils.exception_to_string(e))
+            raise Exception("Error update " + tp + " " + name + ": " + utils.exception_to_string(e) + " Please reboot the agent or OS.")
     
     def _update_lib_dependencies(self,name):
         appcnf=native.get_library_config(name)
