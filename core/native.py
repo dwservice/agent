@@ -283,7 +283,13 @@ class Mac():
     def load_library(self):
         try:
             if self._dwaglib is None:
-                self._dwaglib = _load_lib_obj("dwaglib.so")
+                lbn="dwaglib.dylib"
+                #COMPATIBILITY BEFORE 14/11/2019
+                if not utils.path_exists(".srcmode"):
+                    if not utils.path_exists("native/"+lbn):
+                        lbn="dwaglib.so"
+                #COMPATIBILITY BEFORE 14/11/2019
+                self._dwaglib = _load_lib_obj(lbn)
         except:
             None
     
