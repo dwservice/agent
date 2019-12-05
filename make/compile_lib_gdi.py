@@ -30,7 +30,7 @@ CONF["linux"]=CONF_LINUX
 
 '''
 CONF_MAC={}
-CONF_MAC["outname"]="dwaggdi.so" 
+CONF_MAC["outname"]="dwaggdi.dylib" 
 CONF_MAC["cpp_include_paths"]=[] 
 CONF_MAC["cpp_library_paths"]=CONF_MAC["cpp_include_paths"]
 CONF_MAC["libraries"]=[] 

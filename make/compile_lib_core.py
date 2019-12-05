@@ -29,7 +29,7 @@ CONF_LINUX["libraries"]=["pthread"]
 CONF["linux"]=CONF_LINUX
 
 CONF_MAC={}
-CONF_MAC["outname"]="dwaglib.so" 
+CONF_MAC["outname"]="dwaglib.dylib" 
 CONF_MAC["cpp_include_paths"]=[] 
 CONF_MAC["cpp_library_paths"]=CONF_MAC["cpp_include_paths"]
 CONF_MAC["libraries"]=[]

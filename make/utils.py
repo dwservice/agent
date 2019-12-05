@@ -14,12 +14,18 @@ import zipfile
 import tarfile
 import codecs
 import subprocess
+import json
+import xml.etree.ElementTree
+
+#MAIN_URL = "https://www.dwservice.net/"
+MAIN_URL = "https://svil.dwservice.net:7732/dws_site/"
 
 PATHDEP=".." + os.sep + "make" + os.sep + "dependencies"
 PATHCORE=".." + os.sep + "core"
 PATHUI=".." + os.sep + "ui"
 PATHNATIVE="native"
 PATHTMP="tmp"
+
 
 _biswindows=(platform.system().lower().find("window") > -1)
 _bislinux=(platform.system().lower().find("linux") > -1)
@@ -79,26 +85,34 @@ def untar_file(src, dst):
     tar.extractall(path=dst)
     tar.close()
 
-def unzip_file(src, dst):
+def unzip_file(src, dst, sdir=None):
     info("unzip file " + src)
     zfile = zipfile.ZipFile(src)
     try:
         for nm in zfile.namelist():
-            npath=dst
-            appnm = nm
-            appar = nm.split("/")
-            if (len(appar)>1):
-                appnm = appar[len(appar)-1]
-                npath+= nm[0:len(nm)-len(appnm)].replace("/",os.sep)
-            if not os.path.exists(npath):
-                os.makedirs(npath)
-            if not appnm == "":
-                npath+=appnm
-                if os.path.exists(npath):
-                    os.remove(npath)
-                fd = codecs.open(npath,"wb")
-                fd.write(zfile.read(nm))
-                fd.close()
+            
+            bok=True
+            if sdir is not None:                    
+                bok=nm.startswith(sdir)
+            if bok:
+                npath = dst            
+                appnm = nm
+                appar = nm.split("/")
+                if (len(appar)>1):
+                    appnm=appar[len(appar)-1]
+                    appoth=nm[0:len(nm)-len(appnm)]
+                    if sdir is not None:
+                        appoth=appoth[len(sdir):]
+                    npath+=appoth.replace("/",os.sep)
+                if not os.path.exists(npath):
+                    os.makedirs(npath)
+                if not appnm == "":
+                    npath+=appnm
+                    if os.path.exists(npath):
+                        os.remove(npath)
+                    fd = codecs.open(npath,"wb")
+                    fd.write(zfile.read(nm))
+                    fd.close()
     finally:
         zfile.close()
 
@@ -210,7 +224,7 @@ def compile_lib(mainconf):
         if "linker_flags" in cconf:
             lflgs=cconf["linker_flags"]
         cconf["cpp_compiler"]="g++ " + cflgs + " -DOS_MAC %INCLUDE_PATH% -O3 -Wall -c -fmessage-length=0 -o \"%NAMEO%\" \"%NAMECPP%\""
-        cconf["linker"]="g++ " + lflgs + " %LIBRARY_PATH% -s -shared -o %OUTNAME% %SRCFILES% %LIBRARIES% %FRAMEWORKS%"
+        cconf["linker"]="g++ " + lflgs + " %LIBRARY_PATH% -s -dynamiclib -o %OUTNAME% %SRCFILES% %LIBRARIES% %FRAMEWORKS%"
     
     if not "libraries" in cconf or len(cconf["libraries"])==0:
         cconf ["linker"]=cconf ["linker"].replace("%LIBRARIES%", "")
@@ -234,10 +248,13 @@ def compile_lib(mainconf):
         if f.endswith(".cpp"):
             srcname=f
             scmd=cconf["cpp_compiler"]
-            if not "cpp_include_paths" in cconf or len(cconf["cpp_include_paths"])==0:
-                scmd=scmd.replace("%INCLUDE_PATH%", "")
-            else:
-                scmd=scmd.replace("%INCLUDE_PATH%", "-I\"" + os.path.abspath(cconf["cpp_include_paths"][0]) + "\"")
+            apprs=""
+            if "cpp_include_paths" in cconf:
+                for i in range(len(cconf["cpp_include_paths"])):
+                    if i>0:
+                        apprs+=" "
+                    apprs+="-I\"" + os.path.abspath(cconf["cpp_include_paths"][i]) + "\""
+            scmd=scmd.replace("%INCLUDE_PATH%", apprs)
             scmd=scmd.replace("%NAMED%", srcname.split(".")[0] + ".d")
             scmd=scmd.replace("%NAMEO%", srcname.split(".")[0] + ".o")
             scmd=scmd.replace("%NAMECPP%", os.path.abspath(mainconf["pathsrc"]) + os.sep + srcname)        
@@ -246,15 +263,60 @@ def compile_lib(mainconf):
             srcfiles+=srcname.split(".")[0] + ".o "    
             
     scmd=cconf["linker"]
-    if not "cpp_library_paths" in cconf or len(cconf["cpp_library_paths"])==0:
-        scmd=scmd.replace("%LIBRARY_PATH%", "")
-    else:
-        scmd=scmd.replace("%LIBRARY_PATH%", "-L\"" + os.path.abspath(cconf["cpp_library_paths"][0]) + "\"")
+    apprs=""
+    if "cpp_library_paths" in cconf:
+        for i in range(len(cconf["cpp_include_paths"])):
+            if i>0:
+                apprs+=" "
+            apprs+="-L\"" + os.path.abspath(cconf["cpp_library_paths"][i]) + "\""
+    scmd=scmd.replace("%LIBRARY_PATH%", apprs)
     scmd=scmd.replace("%OUTNAME%", cconf["outname"])
     scmd=scmd.replace("%SRCFILES%", srcfiles)
     if not system_exec(scmd,mainconf["pathdst"]):
         raise Exception("Linker error.")
     return cconf
  
+def xml_to_prop(s):
+    prp = {}
+    root = xml.etree.ElementTree.fromstring(s)
+    for child in root:
+        prp[child.attrib['key']] = child.text
+    return prp
+
+def get_node_url():
+    contents = urllib2.urlopen(MAIN_URL + "getAgentFile.dw?name=files.xml").read();
+    prp = xml_to_prop(contents)
+    return prp["nodeUrl"]
     
+    
+
+def read_json_file(fn):
+    appjs=None
+    if os.path.exists(fn):
+        f=None
+        try:
+            f = codecs.open(fn, 'rb', None, 'strict', 1)
+            appjs = json.loads(f.read())
+        except:
+            None
+        finally:
+            if f is not None:
+                f.close()
+        None
+    return appjs
+
+def write_json_file(conf,fn):
+    s = json.dumps(conf,fn, sort_keys=True, indent=1)
+    f = codecs.open(fn, 'wb', None, 'strict', 1)
+    f.write(s)
+    f.close()
+    
+# UTILIZZATI DA DETECTINFO
+def path_exists(pth):
+    return os.path.exists(pth)
+
+def file_open(filename, mode='rb', encoding=None, errors='strict', buffering=1):
+    return codecs.open(filename, mode, encoding, errors, buffering)
+# UTILIZZATI DA DETECTINFO
+
     

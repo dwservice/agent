@@ -30,7 +30,7 @@ CONF_LINUX["libraries"]=["X11", "Xpm"]
 CONF["linux"]=CONF_LINUX
 
 CONF_MAC={}
-CONF_MAC["outname"]="dwagosutil.so" 
+CONF_MAC["outname"]="dwagosutil.dylib" 
 CONF_MAC["cpp_include_paths"]=[] 
 CONF_MAC["cpp_library_paths"]=CONF_MAC["cpp_include_paths"]
 CONF_MAC["libraries"]=[] 
