@@ -26,6 +26,16 @@ def is_os_32bit():
 def is_os_64bit():
     return sys.maxsize > 2**32
 
+def check_hw_string(s):
+    if s is not None:
+        if "raspberry" in s.lower():
+            return "RaspberryPi"
+        elif "wandboard" in s.lower():
+            return "Wandboard"
+        elif "pine64" in s.lower() or "rock64" in s.lower():
+            return "Pine64"
+    return None
+
 def get_hw_name():
     sapp = platform.machine()
     if is_linux() and len(sapp)>=3 and (sapp[0:3].lower()=="arm" or sapp[0:7].lower()=="aarch64"):
@@ -35,12 +45,12 @@ def get_hw_name():
                 fin=utils.file_open("/sys/firmware/devicetree/base/model","r")
                 appmdl = fin.read()
                 fin.close()
-                if "raspberry" in appmdl.lower():
-                    return "RaspberryPi"
-                elif "wandboard" in appmdl.lower():
-                    return "Wandboard"
-                elif "pine64" in appmdl.lower() or "rock64" in appmdl.lower():
-                    return "Pine64"
+                appmdl=check_hw_string(appmdl);
+                if appmdl is not None:
+                    return appmdl
+            appmdl=check_hw_string(platform.node());
+            if appmdl is not None:
+                return appmdl
         except:
             None
     return None
@@ -50,9 +60,15 @@ def get_native_suffix():
     try:
         hwnm = get_hw_name()
         if hwnm == "RaspberryPi":
-            return "linux_armhf_v2"        
+            if is_os_64bit():
+                return "linux_arm64_v1"
+            else:
+                return "linux_armhf_v2"        
         elif hwnm == "Wandboard":
-            return "linux_armhf_v1"
+            if is_os_64bit():
+                return "linux_arm64_v1"
+            else:
+                return "linux_armhf_v1"
         elif hwnm == "Pine64":
             return "linux_arm64_v1"
         
