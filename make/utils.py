@@ -17,8 +17,8 @@ import subprocess
 import json
 import xml.etree.ElementTree
 
-#MAIN_URL = "https://www.dwservice.net/"
-MAIN_URL = "https://svil.dwservice.net:7732/dws_site/"
+MAIN_URL = "https://www.dwservice.net/"
+#MAIN_URL = "https://svil.dwservice.net:7732/dws_site/"
 
 PATHDEP=".." + os.sep + "make" + os.sep + "dependencies"
 PATHCORE=".." + os.sep + "core"
