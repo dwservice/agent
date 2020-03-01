@@ -76,15 +76,24 @@ class ResText:
                 if self._lang_current is None:
                     applng=None
                     try:
-                        l = locale.getdefaultlocale()
-                        if l is None or l[0] is None:
-                            if utils.is_mac():
-                                p = subprocess.Popen(['defaults', 'read', '-g', 'AppleLocale'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                                sout, serr = p.communicate()
-                                if sout is not None:
-                                    applng = sout.replace("\n","").replace(" ","_")[:10]
-                        else:
-                            applng=l[0]
+                        if utils.is_windows():
+                            import ctypes
+                            windll = ctypes.windll.kernel32
+                            windll.GetUserDefaultUILanguage()
+                            wl = locale.windows_locale[windll.GetUserDefaultUILanguage()]
+                            applng=wl.split("_")[0]
+                        elif utils.is_mac():
+                            p = subprocess.Popen(['defaults', 'read', '-g', 'AppleLocale'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                            sout, serr = p.communicate()
+                            if sout is not None:
+                                applng = sout.replace("\n","").replace(" ","_")[:10]
+                    except:
+                        None                    
+                    try:
+                        if applng is None:
+                            l = locale.getdefaultlocale()
+                            if l is not None:
+                                applng=l[0]
                     except:
                         None
                     
