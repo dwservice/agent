@@ -158,7 +158,7 @@ data={
     'runWithoutInstallationOnlineTop':u'The session is active.\nTo connect to this agent go to https://www.dwservice.net',
     'runWithoutInstallationOnlineUser':u'User: {0}',
     'runWithoutInstallationOnlinePassword':u'Password: {0}',
-    'runWithoutInstallationOnlineBottom':u'WARNING:\nNot to disclose this information to people who are not trusted otherwise allow them to access this agent. So if you are not sure what are you doing, please close this application.',
+    'runWithoutInstallationOnlineBottom':u'WARNING:\nDo not disclose this information to people you do not trust, otherwise you will allow them access to this agent. So if you are not sure what you are doing, close this application.',
     'runWithoutInstallationWait':u'Wait for the new connection in progress (attempt {0})...',
     'runWithoutInstallationClosing':u'Closing session...',
     'runWithoutInstallationEnd':u'Session ended.',
