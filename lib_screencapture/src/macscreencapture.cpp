@@ -14,6 +14,7 @@ ScreenCaptureNative::ScreenCaptureNative(DWDebugger* dbg) {
 	mousebtn3Down=false;
 	mousex=0;
 	mousey=0;
+	commandDown=false;
 	ctrlDown=false;
 	altDown=false;
 	shiftDown=false;
@@ -130,38 +131,45 @@ int ScreenCaptureNative::getMonitorCount(){
 
 	int elapsed=monitorsCounter.getCounter();
 		if ((firstmonitorscheck) || (elapsed>=MONITORS_INTERVAL)){
-			int did = CGMainDisplayID();
+		int did = CGMainDisplayID();
 
-			CGDisplayModeRef dmd = CGDisplayCopyDisplayMode(did);
-			int w = CGDisplayModeGetWidth(dmd);
-			int h = CGDisplayModeGetHeight(dmd);
-			if (firstmonitorscheck){
-				MonitorInfo mi;
-				mi.id=did;
-				mi.factx=-1;
-				mi.facty=-1;
-				mi.dispw=w;
-				mi.disph=h;
-				mi.sleep=CGDisplayIsAsleep(did);
-				monitorsInfo.push_back(mi);
-				ScreenShotInfo ii;
-				newScreenShotInfo(&ii, -1, -1);
-				screenShotInfo.push_back(ii);
-			}else{
-				MonitorInfo* mi=&monitorsInfo[0];
-				mi->id=did;
-				if ((mi->dispw!=w) || (mi->disph!=h)){
-					mi->factx=-1;
-					mi->facty=-1;
-				}
-				mi->dispw=w;
-				mi->disph=h;
-				mi->sleep=CGDisplayIsAsleep(did);
-			}
-			firstmonitorscheck=false;
-			monitorsCounter.reset();
+		CGDisplayModeRef dmd = CGDisplayCopyDisplayMode(did);
+		int w = CGDisplayModeGetWidth(dmd);
+		int h = CGDisplayModeGetHeight(dmd);
+		//FIX RISOLUZIONI SIMILE A 1366x768
+		if (((float)w/(float)8)!=(w/8)){
+			w=(int)((int)((float)w/(float)8)+(float)1) * 8;
 		}
-		return 1;
+		//if (((float)h/(float)8)!=(h/8)){
+		//  h=(int)((int)((float)h/(float)8)+(float)1) * 8;
+		//}
+		if (firstmonitorscheck){
+			MonitorInfo mi;
+			mi.id=did;
+			mi.factx=-1;
+			mi.facty=-1;
+			mi.dispw=w;
+			mi.disph=h;
+			mi.sleep=CGDisplayIsAsleep(did);
+			monitorsInfo.push_back(mi);
+			ScreenShotInfo ii;
+			newScreenShotInfo(&ii, -1, -1);
+			screenShotInfo.push_back(ii);
+		}else{
+			MonitorInfo* mi=&monitorsInfo[0];
+			mi->id=did;
+			if ((mi->dispw!=w) || (mi->disph!=h)){
+				mi->factx=-1;
+				mi->facty=-1;
+			}
+			mi->dispw=w;
+			mi->disph=h;
+			mi->sleep=CGDisplayIsAsleep(did);
+		}
+		firstmonitorscheck=false;
+		monitorsCounter.reset();
+	}
+	return 1;
 }
 
 void ScreenCaptureNative::newScreenShotInfo(ScreenShotInfo* ii, int w, int h) {
@@ -301,6 +309,76 @@ bool ScreenCaptureNative::getActiveWinPos(long* id, int* info){
 	return false;
 }
 
+CGKeyCode ScreenCaptureNative::keyCodeForChar(const char c){
+    CFDataRef currentLayoutData;
+    TISInputSourceRef currentKeyboard = TISCopyCurrentKeyboardInputSource();
+
+    if (currentKeyboard == NULL) {
+        return UINT16_MAX;
+    }
+
+    currentLayoutData = (CFDataRef)TISGetInputSourceProperty(currentKeyboard, kTISPropertyUnicodeKeyLayoutData);
+    CFRelease(currentKeyboard);
+    if (currentLayoutData == NULL) {
+        return UINT16_MAX;
+    }
+
+    return keyCodeForCharWithLayout(c, (const UCKeyboardLayout *)CFDataGetBytePtr(currentLayoutData));
+}
+
+CGKeyCode ScreenCaptureNative::keyCodeForCharWithLayout(const char c, const UCKeyboardLayout *uchrHeader){
+    uint8_t *uchrData = (uint8_t *)uchrHeader;
+    const UCKeyboardTypeHeader *uchrKeyboardList = uchrHeader->keyboardTypeList;
+    ItemCount i, j;
+    for (i = 0; i < uchrHeader->keyboardTypeCount; ++i) {
+        UCKeyToCharTableIndex *uchrKeyIX = (UCKeyToCharTableIndex *)
+        (uchrData + (uchrKeyboardList[i].keyToCharTableIndexOffset));
+
+        UCKeyStateRecordsIndex *stateRecordsIndex;
+        if (uchrKeyboardList[i].keyStateRecordsIndexOffset != 0) {
+            stateRecordsIndex = (UCKeyStateRecordsIndex *)
+                (uchrData + (uchrKeyboardList[i].keyStateRecordsIndexOffset));
+
+            if ((stateRecordsIndex->keyStateRecordsIndexFormat) != kUCKeyStateRecordsIndexFormat) {
+                stateRecordsIndex = NULL;
+            }
+        } else {
+            stateRecordsIndex = NULL;
+        }
+        if ((uchrKeyIX->keyToCharTableIndexFormat) != kUCKeyToCharTableIndexFormat) {
+            continue;
+        }
+        for (j = 0; j < uchrKeyIX->keyToCharTableCount; ++j) {
+            UCKeyOutput *keyToCharData =
+                (UCKeyOutput *)(uchrData + (uchrKeyIX->keyToCharTableOffsets[j]));
+
+            UInt16 k;
+            for (k = 0; k < uchrKeyIX->keyToCharTableSize; ++k) {
+                if ((keyToCharData[k] & kUCKeyOutputTestForIndexMask) ==
+                    kUCKeyOutputStateIndexMask) {
+                    long keyIndex = (keyToCharData[k] & kUCKeyOutputGetIndexMask);
+                    if (stateRecordsIndex != NULL &&
+                        keyIndex <= (stateRecordsIndex->keyStateRecordCount)) {
+                        UCKeyStateRecord *stateRecord = (UCKeyStateRecord *)(uchrData + (stateRecordsIndex->keyStateRecordOffsets[keyIndex]));
+                        if ((stateRecord->stateZeroCharData) == c) {
+                            return (CGKeyCode)k;
+                        }
+                    } else if (keyToCharData[k] == c) {
+                        return (CGKeyCode)k;
+                    }
+                } else if (((keyToCharData[k] & kUCKeyOutputTestForIndexMask)
+                            != kUCKeyOutputSequenceIndexMask) &&
+                           keyToCharData[k] != 0xFFFE &&
+                           keyToCharData[k] != 0xFFFF &&
+                           keyToCharData[k] == c) {
+                    return (CGKeyCode)k;
+                }
+            }
+        }
+    }
+    return UINT16_MAX;
+}
+
 CGKeyCode ScreenCaptureNative::getCGKeyCode(const char* key){
 	if (strcmp(key,"CONTROL")==0){
 		return 0x3B;
@@ -314,26 +392,26 @@ CGKeyCode ScreenCaptureNative::getCGKeyCode(const char* key){
 		return 0x24;
 	}else if (strcmp(key,"BACKSPACE")==0){
 		return 0x33;
-	/*}else if (strcmp(key,"CLEAR")==0){
-		return XK_Clear;
+	}else if (strcmp(key,"CLEAR")==0){
+
 	}else if (strcmp(key,"PAUSE")==0){
-		return XK_Pause;*/
+
 	}else if (strcmp(key,"ESCAPE")==0){
 		return 0x35;
 	}else if (strcmp(key,"SPACE")==0){
 		return 0x31;
 	}else if (strcmp(key,"DELETE")==0){
 		return 0x75;
-	/*}else if (strcmp(key,"INSERT")==0){
-		return XK_Insert;*/
+	}else if (strcmp(key,"INSERT")==0){
+
 	}else if (strcmp(key,"HELP")==0){
 		return 0x72;
 	}else if (strcmp(key,"LEFT_WINDOW")==0){
 		return 0x37;
 	}else if (strcmp(key,"RIGHT_WINDOW")==0){
 		return 0x37;
-	/*}else if (strcmp(key,"SELECT")==0){
-	*/
+	}else if (strcmp(key,"SELECT")==0){
+
 	}else if (strcmp(key,"PAGE_UP")==0){
 		return 0x74;
 	}else if (strcmp(key,"PAGE_DOWN")==0){
@@ -374,19 +452,33 @@ CGKeyCode ScreenCaptureNative::getCGKeyCode(const char* key){
 		return 0x67;
 	}else if (strcmp(key,"F12")==0){
 		return 0x6F;
+	}else{
+		return keyCodeForChar(key[0]);
 	}
-	return 0;
+	return UINT16_MAX;
 }
 
-void ScreenCaptureNative::ctrlaltshift(bool ctrl, bool alt, bool shift){
+void ScreenCaptureNative::ctrlaltshift(bool ctrl, bool alt, bool shift, bool command){
+	if ((ctrl) && (!commandDown)){
+		commandDown=true;
+		CGEventRef kdown = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)0x37, true); //(CGKeyCode)0x37 = COMMAND
+		CGEventPost(kCGHIDEventTap, kdown);
+		CFRelease(kdown);
+	}else if ((!ctrl) && (commandDown)){
+		commandDown=false;
+		CGEventRef kup = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)0x37, false); //(CGKeyCode)0x37 = COMMAND
+		CGEventPost(kCGHIDEventTap, kup);
+		CFRelease(kup);
+	}
+
 	if ((ctrl) && (!ctrlDown)){
 		ctrlDown=true;
-		CGEventRef kdown = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)0x37, true); //(CGKeyCode)0x3B = CTRL    (CGKeyCode)0x37 = COMMAND
+		CGEventRef kdown = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)0x3B, true); //(CGKeyCode)0x3B = CTRL
 		CGEventPost(kCGHIDEventTap, kdown);
 		CFRelease(kdown);
 	}else if ((!ctrl) && (ctrlDown)){
 		ctrlDown=false;
-		CGEventRef kup = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)0x37, false); //(CGKeyCode)0x3B = CTRL    (CGKeyCode)0x37 = COMMAND
+		CGEventRef kup = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)0x3B, false); //(CGKeyCode)0x3B = CTRL
 		CGEventPost(kCGHIDEventTap, kup);
 		CFRelease(kup);
 	}
@@ -428,8 +520,11 @@ void ScreenCaptureNative::wakeupMonitor(){
 	}
 }
 
-int ScreenCaptureNative::getModifiers(bool ctrl, bool alt, bool shift){
+int ScreenCaptureNative::getModifiers(bool ctrl, bool alt, bool shift, bool command){
 	int modifiers=0;
+	if (command){
+		 modifiers = modifiers | kCGEventFlagMaskCommand;
+	}
 	if (ctrl){
 		 modifiers = modifiers | kCGEventFlagMaskControl;
 	}
@@ -439,13 +534,10 @@ int ScreenCaptureNative::getModifiers(bool ctrl, bool alt, bool shift){
 	if (shift){
 		 modifiers = modifiers | kCGEventFlagMaskShift;
 	}
-	/*if (command){
-		 modifiers = modifiers | kCGEventFlagMaskCommand;
-	}*/
 	return modifiers;
 }
 
-void ScreenCaptureNative::inputKeyboard(const char* type, const char* key, bool ctrl, bool alt, bool shift){
+void ScreenCaptureNative::inputKeyboard(const char* type, const char* key, bool ctrl, bool alt, bool shift, bool command){
 	wakeupMonitor();
 
 	if (strcmp(type,"CHAR")==0){
@@ -461,26 +553,26 @@ void ScreenCaptureNative::inputKeyboard(const char* type, const char* key, bool 
 		CFRelease(kup);
 	}else if (strcmp(type,"KEY")==0){
 		CGKeyCode c = getCGKeyCode(key);
-		if (c!=0){
-			//ctrlaltshift(ctrl,alt,shift);
+		if (c!=UINT16_MAX){
+			//ctrlaltshift(ctrl,alt,shift,command);
 			CGEventRef kdown = CGEventCreateKeyboardEvent(NULL, c, true);
-			CGEventSetFlags(kdown, (CGEventFlags)getModifiers(ctrl,alt,shift));
+			CGEventSetFlags(kdown, (CGEventFlags)getModifiers(ctrl,alt,shift,command));
 			CGEventPost(kCGHIDEventTap, kdown);
 			CFRelease(kdown);
 			CGEventRef kup = CGEventCreateKeyboardEvent(NULL, c, false);
-			CGEventSetFlags(kup, (CGEventFlags)getModifiers(ctrl,alt,shift));
+			CGEventSetFlags(kup, (CGEventFlags)getModifiers(ctrl,alt,shift,command));
 			CGEventPost(kCGHIDEventTap, kup);
 			CFRelease(kup);
-			//ctrlaltshift(false,false,false);
+			//ctrlaltshift(false,false,false,false);
 		}
 	}else if (strcmp(type,"CTRLALTCANC")==0){
 	}
 }
 
-void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift){
+void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command){
 	wakeupMonitor();
 
-	//ctrlaltshift(ctrl,alt,shift);
+	//ctrlaltshift(ctrl,alt,shift,command);
 	if ((x!=-1) && (y!=-1)){
 		mousex=x;
 		mousey=y;
@@ -496,7 +588,7 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 	if (button==64) { //CLICK
 
 		CGEventRef theEvent = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseDown, cmp, kCGMouseButtonLeft);
-		CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift));
+		CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift,command));
 		CGEventPost(kCGHIDEventTap, theEvent);
 		CGEventSetType(theEvent, kCGEventLeftMouseUp);
 		CGEventPost(kCGHIDEventTap, theEvent);
@@ -505,13 +597,13 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 		CGEventRef theEvent = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseDown, cmp, kCGMouseButtonLeft);
 		CGEventPost(kCGHIDEventTap, theEvent);
 		CGEventSetType(theEvent, kCGEventLeftMouseUp);
-		CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift));
+		CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift,command));
 		CGEventPost(kCGHIDEventTap, theEvent);
 
 		CGEventSetIntegerValueField(theEvent, kCGMouseEventClickState, 2);
 
 		CGEventSetType(theEvent, kCGEventLeftMouseDown);
-		CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift));
+		CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift,command));
 		CGEventPost(kCGHIDEventTap, theEvent);
 		CGEventSetType(theEvent, kCGEventLeftMouseUp);
 		CGEventPost(kCGHIDEventTap, theEvent);
@@ -531,7 +623,7 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 			if (appbtn!=-1){
 				moveonly=false;
 				CGEventRef theEvent = CGEventCreateMouseEvent(NULL,appbtn,cmp,kCGMouseButtonLeft);
-				CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift));
+				CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift,command));
 				CGEventPost(kCGHIDEventTap, theEvent);
 				CFRelease(theEvent);
 			}
@@ -546,7 +638,7 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 			if (appbtn!=-1){
 				moveonly=false;
 				CGEventRef theEvent = CGEventCreateMouseEvent(NULL,appbtn,cmp,kCGMouseButtonRight);
-				CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift));
+				CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift,command));
 				CGEventPost(kCGHIDEventTap, theEvent);
 				CFRelease(theEvent);
 			}
@@ -569,14 +661,14 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 			}else{
 				theEvent = CGEventCreateMouseEvent(NULL,kCGEventMouseMoved,cmp,kCGMouseButtonLeft);
 			}
-			CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift));
+			CGEventSetFlags(theEvent, (CGEventFlags)getModifiers(ctrl,alt,shift,command));
 			CGEventPost(kCGHIDEventTap, theEvent);
 			CFRelease(theEvent);
 		}
 	}
 	if (wheel!=0) {
 		CGEventRef scroll = CGEventCreateScrollWheelEvent(NULL, kCGScrollEventUnitLine, 1, wheel);
-		CGEventSetFlags(scroll, (CGEventFlags)getModifiers(ctrl,alt,shift));
+		CGEventSetFlags(scroll, (CGEventFlags)getModifiers(ctrl,alt,shift,command));
 		CGEventPost(kCGHIDEventTap, scroll);
 		CFRelease(scroll);
 	}
@@ -585,21 +677,49 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 }
 
 void ScreenCaptureNative::copy(){
-
+	inputKeyboard("KEY","C",false,false,false,true);
 }
 
 void ScreenCaptureNative::paste(){
-
+	inputKeyboard("KEY","V",false,false,false,true);
 }
 
+//TODO NOT SECURE
+/*wstring ScreenCaptureNative::exec(const char* cmd){
+	FILE* pipe = popen(cmd, "r");
+	if (!pipe) return L"";
+	wchar_t buffer[128];
+	std::wstring result = L"";
+	while (!feof(pipe)){
+		if (fgetws(buffer, 128, pipe) != NULL){
+			result += buffer;
+		}
+	}
+	pclose(pipe);
+	return result;
+}*/
+
 wchar_t* ScreenCaptureNative::getClipboardText(){
+	//TODO NOT SECURE
+	/*wstring str=exec("pbpaste");
+	return (wchar_t*)str.c_str();*/
 	return NULL;
 }
 
 void ScreenCaptureNative::setClipboardText(wchar_t* wText){
-
+	//TODO NOT SECURE
+	/*
+	wstring wapp = L"";
+	wapp.append(L"echo \"");
+	if (wText!=NULL){
+		wapp.append(wText);
+	}
+	wapp.append(L"\" | pbcopy");
+	char app[4096];
+	wcstombs(app, wText, sizeof(app));
+	exec(app);
+	*/
 }
-
 
 
 #endif

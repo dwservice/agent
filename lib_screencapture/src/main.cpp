@@ -389,6 +389,10 @@ int sas(){
 #endif
 
 
+int version(){
+	return 1;
+}
+
 void freeMemory(void* pnt){
 	free(pnt);
 }
@@ -409,12 +413,12 @@ void term(int id) {
 	screenCapture.terminate(id);
 }
 
-void inputMouse(int id, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift){
-	screenCapture.inputMouse(id,x,y,button,wheel,ctrl,alt,shift);
+void inputMouse(int id, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command){
+	screenCapture.inputMouse(id,x,y,button,wheel,ctrl,alt,shift,command);
 }
 
-void inputKeyboard(int id, const char* type, const char* key, bool ctrl, bool alt, bool shift){
-	screenCapture.inputKeyboard(id,type,key,ctrl,alt,shift);
+void inputKeyboard(int id, const char* type, const char* key, bool ctrl, bool alt, bool shift, bool command){
+	screenCapture.inputKeyboard(id,type,key,ctrl,alt,shift,command);
 }
 
 wchar_t* copyText(int id){

@@ -55,8 +55,8 @@ public:
     long captureScreen(int monitor, int distanceFrameMs, CAPTURE_IMAGE* capimage);
     bool captureCursor(int monitor, int* info, long& id, unsigned char** data);
     bool getActiveWinPos(long* id, int* info);
-    void inputKeyboard(const char* type, const char* key, bool ctrl, bool alt, bool shift);
-	void inputMouse(int monitor, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift);
+    void inputKeyboard(const char* type, const char* key, bool ctrl, bool alt, bool shift, bool command);
+	void inputMouse(int monitor, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command);
 	wchar_t* getClipboardText();
 	void setClipboardText(wchar_t* wText);
 	void copy();

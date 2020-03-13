@@ -995,7 +995,7 @@ void ScreenCaptureNative::ctrlaltshift(bool ctrl, bool alt, bool shift){
 }
 
 
-void ScreenCaptureNative::inputKeyboard(const char* type, const char* key, bool ctrl, bool alt, bool shift){
+void ScreenCaptureNative::inputKeyboard(const char* type, const char* key, bool ctrl, bool alt, bool shift, bool command){
 	if (xdpy != NULL) {
 		if (strcmp(type,"CHAR")==0){
 			int uc = atoi(key);
@@ -1135,7 +1135,7 @@ void ScreenCaptureNative::mouseButton(int button,bool press){
 	 */
 }
 
-void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift){
+void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command){
 	if (xdpy != NULL) {
 		ctrlaltshift(ctrl,alt,shift);
 		if ((x!=-1) && (y!=-1)){

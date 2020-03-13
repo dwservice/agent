@@ -608,6 +608,9 @@ class Manager(threading.Thread):
                     sctrl = ar[5]
                     salt = ar[6]
                     sshift = ar[7]
+                    scommand = "false"
+                    if len(ar)==9:
+                        scommand = ar[8]
                     
                     '''
                     #GESTIONE DOPPIO CLICK
@@ -651,7 +654,7 @@ class Manager(threading.Thread):
                     #print("_inputevents " + str(btn) + "  " + str(long(time.time() * 1000) - long(ar[len(ar)-1])))
                     
                     #if bfireev:
-                    self._dskmain._capture_process.mouse(self, x, y, btn, whl, sctrl=="true",salt=="true",sshift=="true")
+                    self._dskmain._capture_process.mouse(self, x, y, btn, whl, sctrl=="true",salt=="true",sshift=="true",scommand=="true")
                        
                      
                 elif ar[0]=='KEYBOARD':
@@ -661,7 +664,10 @@ class Manager(threading.Thread):
                     sctrl = ar[3]
                     salt = ar[4]
                     sshift = ar[5]
-                    self._dskmain._capture_process.keyboard(self, tp, code, sctrl=="true",salt=="true",sshift=="true")
+                    scommand = "false"
+                    if len(ar)==7:
+                        scommand = ar[6]
+                    self._dskmain._capture_process.keyboard(self, tp, code, sctrl=="true",salt=="true",sshift=="true",scommand=="true")
         except Exception as e:
             self._dskmain._agent_main.write_except(e,"AppDesktop:: inputevents error " + self._id + ":")
         return bret
@@ -1038,21 +1044,21 @@ class CaptureProcess():
         return sret
         '''
     
-    def keyboard(self, dm, tp, code, ctrl, alt, shift) :
+    def keyboard(self, dm, tp, code, ctrl, alt, shift, cmdkey) :
         sid=self.get_id(dm)
         bok = True;
         if agent.is_windows() and tp=="CTRLALTCANC":
             if self._get_osmodule().sas():
                 bok = False
         if bok:
-            apps=u"KEYBOARD:"+str(sid)+";"+str(tp)+";"+str(code)+";"+str(ctrl)+";"+str(alt)+";"+str(shift)
+            apps=u"KEYBOARD:"+str(sid)+";"+str(tp)+";"+str(code)+";"+str(ctrl)+";"+str(alt)+";"+str(shift)+";"+str(cmdkey)
             #print(apps)
             self._request_async(apps)
         
     
-    def mouse(self, dm, x, y , btn, whl, ctrl, alt, shift) :
+    def mouse(self, dm, x, y , btn, whl, ctrl, alt, shift, cmdkey) :
         sid=self.get_id(dm)
-        apps=u"MOUSE:"+str(sid)+";"+str(x)+";"+str(y)+";"+str(btn)+";"+str(whl)+";"+str(ctrl)+";"+str(alt)+";"+str(shift)
+        apps=u"MOUSE:"+str(sid)+";"+str(x)+";"+str(y)+";"+str(btn)+";"+str(whl)+";"+str(ctrl)+";"+str(alt)+";"+str(shift)+";"+str(cmdkey)
         #print(apps)
         self._request_async(apps)
     
@@ -1144,6 +1150,11 @@ class CaptureProcess():
             self._debug_print(str(ex) + "\n" + traceback.format_exc());
             return
         
+        libver = 0
+        try:
+            libver = self._get_osmodule().version()
+        except:
+            None            
         self._debug_print("Init capture process. (" + fname + ")")
         listids={}
         try:
@@ -1192,9 +1203,21 @@ class CaptureProcess():
                         elif ar[0]==u"PASTETEXT":
                             self._paste_text(int(prms[0]),base64.b64decode(prms[1]).decode("utf8"))
                         elif ar[0]==u"MOUSE":
-                            self._get_osmodule().inputMouse(int(prms[0]),int(prms[1]), int(prms[2]), int(prms[3]), int(prms[4]), prms[5]=="True", prms[6]=="True",prms[7]=="True")
+                            if libver==0:
+                                self._get_osmodule().inputMouse(int(prms[0]),int(prms[1]), int(prms[2]), int(prms[3]), int(prms[4]), prms[5]=="True", prms[6]=="True",prms[7]=="True")
+                            else:
+                                bcommand=False
+                                if len(prms)==9:
+                                    bcommand=(prms[8]=="True")
+                                self._get_osmodule().inputMouse(int(prms[0]),int(prms[1]), int(prms[2]), int(prms[3]), int(prms[4]), prms[5]=="True", prms[6]=="True",prms[7]=="True",bcommand)
                         elif ar[0]==u"KEYBOARD":
-                            self._get_osmodule().inputKeyboard(int(prms[0]), str(prms[1]), str(prms[2]), prms[3]=="True", prms[4]=="True",prms[5]=="True")
+                            if libver==0:
+                                self._get_osmodule().inputKeyboard(int(prms[0]), str(prms[1]), str(prms[2]), prms[3]=="True", prms[4]=="True",prms[5]=="True")
+                            else:
+                                bcommand=False
+                                if len(prms)==7:
+                                    bcommand=(prms[6]=="True")
+                                self._get_osmodule().inputKeyboard(int(prms[0]), str(prms[1]), str(prms[2]), prms[3]=="True", prms[4]=="True",prms[5]=="True",bcommand)
                         else:
                             bts = utils.Bytes()
                             bts.append_str(u"Request '" + srequest + u"' not found.", "utf8")

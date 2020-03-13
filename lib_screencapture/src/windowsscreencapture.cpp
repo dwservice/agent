@@ -1393,7 +1393,7 @@ void ScreenCaptureNative::addCtrlAltShift(INPUT (&inputs)[20],int &p,bool ctrl, 
 	}
 }
 
-void ScreenCaptureNative::inputKeyboard(const char* type,const char* key, bool ctrl, bool alt, bool shift){
+void ScreenCaptureNative::inputKeyboard(const char* type,const char* key, bool ctrl, bool alt, bool shift, bool command){
 	INPUT inputs[20];
 	int p=0;
 	if (strcmp(type,"CHAR")==0){
@@ -1540,7 +1540,7 @@ void ScreenCaptureNative::addInputMouse(INPUT (&inputs)[20],int &p,int x, int y,
 	p++;
 }
 
-void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift){
+void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command){
 	INPUT inputs[20];
 	int p=0;
 	addCtrlAltShift(inputs,p,ctrl,alt,shift);
@@ -1610,11 +1610,11 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 }
 
 void ScreenCaptureNative::copy(){
-	inputKeyboard("KEY","C",true,false,false);
+	inputKeyboard("KEY","C",true,false,false,false);
 }
 
 void ScreenCaptureNative::paste(){
-	inputKeyboard("KEY","V",true,false,false);
+	inputKeyboard("KEY","V",true,false,false,false);
 }
 
 wchar_t* ScreenCaptureNative::getClipboardText(){

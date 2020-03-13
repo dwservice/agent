@@ -18,6 +18,7 @@ using namespace std;
 #include "dwdebugger.h"
 #include "util.h"
 #include <ApplicationServices/ApplicationServices.h>
+#include <Carbon/Carbon.h>
 #include <IOKit/IOKitLib.h>
 #include <mach/mach_init.h>
 #include <mach/mach_error.h>
@@ -38,8 +39,8 @@ public:
     bool captureCursor(int monitor, int* info, long& id, unsigned char** data);
     bool getActiveWinPos(long* id, int* info);
     void getCursorPixel(int x, int y, unsigned char* rgba);
-    void inputKeyboard(const char* type, const char* key, bool ctrl, bool alt, bool shift);
-	void inputMouse(int monitor, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift);
+    void inputKeyboard(const char* type, const char* key, bool ctrl, bool alt, bool shift, bool command);
+	void inputMouse(int monitor, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command);
 	wchar_t* getClipboardText();
 	void setClipboardText(wchar_t* wText);
 	void copy();
@@ -94,6 +95,7 @@ private:
 	bool mousebtn1Down;
 	bool mousebtn2Down;
 	bool mousebtn3Down;
+	bool commandDown;
 	bool ctrlDown;
 	bool altDown;
 	bool shiftDown;
@@ -104,12 +106,15 @@ private:
 	float calculateCPULoad(unsigned long long idleTicks, unsigned long long totalTicks);
 	void wakeupMonitor();
 	CGKeyCode getCGKeyCode(const char* key);
-	void ctrlaltshift(bool ctrl, bool alt, bool shift);
-	int getModifiers(bool ctrl, bool alt, bool shift);
+	void ctrlaltshift(bool ctrl, bool alt, bool shift, bool command);
+	int getModifiers(bool ctrl, bool alt, bool shift, bool command);
 	void newScreenShotInfo(ScreenShotInfo* ii, int w, int h);
 	void termScreenShotInfo(ScreenShotInfo* ii);
 	ScreenShotInfo* getScreenShotInfo(int idx);
-
+	CGKeyCode keyCodeForChar(const char c);
+	CGKeyCode keyCodeForCharWithLayout(const char c, const UCKeyboardLayout *uchrHeader);
+	//TODO NOT SECURE
+	//wstring exec(const char* cmd);
 };
 
 #endif

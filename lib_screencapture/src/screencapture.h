@@ -33,8 +33,8 @@ public:
 	void monitor(int id, int index);
 	void difference(int id, int typeFrame, int quality, CallbackDifference cbdiff);
 
-	void inputKeyboard(int id, const char* type, const char* key, bool ctrl, bool alt, bool shift);
-	void inputMouse(int id, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift);
+	void inputKeyboard(int id, const char* type, const char* key, bool ctrl, bool alt, bool shift, bool command);
+	void inputMouse(int id, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command);
 	wchar_t* copyText(int id);
 	void pasteText(int id,wchar_t* str);
 	//float getCpuUsage();

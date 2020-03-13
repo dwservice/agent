@@ -839,22 +839,22 @@ void ScreenCapture::terminate(int id){
 }
 
 
-void ScreenCapture::inputKeyboard(int id, const char* type, const char* key, bool ctrl, bool alt, bool shift){
+void ScreenCapture::inputKeyboard(int id, const char* type, const char* key, bool ctrl, bool alt, bool shift, bool command){
 	map<int,SESSION>::iterator itmap = hmSession.find(id);
 	if (itmap==hmSession.end()){
 		return;
 	}
-	captureNative.inputKeyboard(type,key,ctrl,alt,shift);
+	captureNative.inputKeyboard(type,key,ctrl,alt,shift,command);
 	inputsEvent();
 }
 
-void ScreenCapture::inputMouse(int id, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift){
+void ScreenCapture::inputMouse(int id, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command){
 	map<int,SESSION>::iterator itmap = hmSession.find(id);
 	if (itmap==hmSession.end()){
 		return;
 	}
 	SESSION &ses = itmap->second;
-	captureNative.inputMouse(ses.monitor, x, y, button, wheel, ctrl, alt, shift);
+	captureNative.inputMouse(ses.monitor, x, y, button, wheel, ctrl, alt, shift,command);
 	inputsEvent();
 }
 

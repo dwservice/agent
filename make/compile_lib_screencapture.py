@@ -32,7 +32,7 @@ CONF_MAC["outname"]="dwagscreencapture.dylib"
 CONF_MAC["cpp_include_paths"]=[utils.PATHTMP + os.sep + "lib_z", utils.PATHTMP + os.sep + "lib_turbojpeg"] 
 CONF_MAC["cpp_library_paths"]=CONF_MAC["cpp_include_paths"]
 CONF_MAC["libraries"]=["z", "turbojpeg"]
-CONF_MAC["frameworks"]=["ApplicationServices","SystemConfiguration","IOKit"]
+CONF_MAC["frameworks"]=["ApplicationServices","SystemConfiguration","IOKit","Carbon"]
 CONF["mac"]=CONF_MAC
 
 class Compile():
