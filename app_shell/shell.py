@@ -278,13 +278,31 @@ class Linux():
         return self._id
     
     def _getutf8lang(self):
-        try:                
-            p = subprocess.Popen("locale -a | grep -i utf8", stdout=subprocess.PIPE, shell=True)
+        try:
+            p = subprocess.Popen("locale | grep LANG=", stdout=subprocess.PIPE, shell=True)
             (po, pe) = p.communicate()
             p.wait()
             if len(po) > 0:
-                ar = po.split("\n")
-                return ar[0].split(".")[0] + ".utf8"
+                ar = po.split("\n")[0].split("=")[1].split(".")
+                if ar[1].upper()=="UTF8" or ar[1].upper()=="UTF-8":
+                    return ar[0] 
+        except:
+            None
+        try:                
+            p = subprocess.Popen("locale -a", stdout=subprocess.PIPE, shell=True)
+            (po, pe) = p.communicate()
+            p.wait()
+            if len(po) > 0:
+                arlines = po.split("\n")
+                for r in arlines:
+                    ar = r.split(".")
+                    if len(ar)>1 and ar[0].upper()=="EN_US" and (ar[1].upper()=="UTF8" or ar[1].upper()=="UTF-8"):
+                        return ar[0]
+                #If not found get the first utf8
+                for r in arlines:
+                    ar = r.split(".")
+                    if len(ar)>1 and (ar[1].upper()=="UTF8" or ar[1].upper()=="UTF-8"):
+                        return ar[0]
         except:
             None
         return None
@@ -305,7 +323,7 @@ class Linux():
             env["PATH"] = os.environ['PATH']
             applng=os.environ.get('LANG')
             if applng is not None:
-                if not applng.endswith(".utf8"):
+                if not (applng.upper().endswith(".UTF8") or applng.upper().endswith(".UTF-8")):
                     applng=None
             if applng is None:
                 applng = self._getutf8lang()
