@@ -70,7 +70,10 @@ def get_native_suffix():
             else:
                 return "linux_armhf_v1"
         elif hwnm == "Pine64":
-            return "linux_arm64_v1"
+            if is_os_64bit():
+                return "linux_arm64_v1"
+            else:
+                return "linux_armhf_v2"
         
         sapp = platform.machine()
         if sapp is not None:

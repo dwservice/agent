@@ -968,37 +968,38 @@ class ConnectionCheckAlive(threading.Thread):
     def reset(self):
         self._semaphore.acquire()
         try:
-            self._counter.reset()
-            self._connection_keepalive_send = False
+            if self._connection_keepalive_send:
+                self._counter.reset()
+                self._connection_keepalive_send = False
         finally:
             self._semaphore.release()
         
             
     def run(self):
-        #print "Thread alive started"
+        #print "Thread alive started: " + str(self._connection)        
         bfireclose=False
         while not self._connection.is_shutdown():
             time.sleep(1)
             self._semaphore.acquire()
             try:
                 #Verifica alive
-                if not self._connection_keepalive_send:
+                if not self._connection_keepalive_send:                    
+                    #print "Thread alive send counter: " + str(self._counter.get_value()) + " " + str(self._connection)                    
                     if self._counter.is_elapsed((ConnectionCheckAlive._KEEPALIVE_INTERVALL-ConnectionCheckAlive._KEEPALIVE_THRESHOLD)*1000):
                         self._connection_keepalive_send=True
                         self._send_keep_alive()
-                        #self._connection._task_pool.execute(self._send_keep_alive)
+                        #print "Thread alive send: " + str(self._connection)
+                        
                 else:
-                    if self._counter.is_elapsed(ConnectionCheckAlive._KEEPALIVE_INTERVALL*1000):
+                    if self._counter.is_elapsed((ConnectionCheckAlive._KEEPALIVE_INTERVALL+ConnectionCheckAlive._KEEPALIVE_THRESHOLD)*1000):
                         bfireclose=not self._connection.is_close()
                         break                  
             finally:
                 self._semaphore.release()
-                
-            
-        self._connection.close();
+        self._connection.shutdown();
         if bfireclose is True:
-            self._connection.fire_close()
-        #print "Thread alive stopped"
+            self._connection.fire_close(True)        
+        #print "Thread alive stopped: " + str(self._connection)
 
 class ConnectionReader(threading.Thread):
     
@@ -1019,11 +1020,11 @@ class ConnectionReader(threading.Thread):
             cnt+=len(s)
         return ''.join(data)
         
-        
     
     def run(self):
-        #print "Thread read started"
+        #print "Thread read started: " + str(self._connection)        
         bfireclose=False
+        bconnLost=True
         sock = self._connection.get_socket()
         try:
             while not self._connection.is_shutdown():
@@ -1039,7 +1040,8 @@ class ConnectionReader(threading.Thread):
                             lendt = bt1;
                         else:
                             bt0=ord(data[0]);
-                            if bt0 == 136: #CLOSE
+                            if bt0 == 136: #CLOSE  
+                                bconnLost=False                              
                                 bfireclose=not self._connection.is_close()
                                 break
                             elif bt0 == 138: #PONG
@@ -1078,14 +1080,15 @@ class ConnectionReader(threading.Thread):
             self._connection.fire_except(e) 
         self._connection.shutdown()
         if bfireclose is True:
-            self._connection.fire_close()
-        #print "Thread read stopped"
-
+            self._connection.fire_close(bconnLost)        
+        #print "Thread read stopped: " + str(self._connection)
+        
 
 class Connection:
             
     def __init__(self, events):
         self._close=True
+        self._connection_lost=False
         self._shutdown=False
         self._on_data= None
         self._on_close = None
@@ -1122,9 +1125,6 @@ class Connection:
                     appprp["dw_" + k]=prop[k];
                     
                     
-            #appprp["dwex_SupportReconnect"]="true"
-            #appprp["dwex_ReconnectIDUpdateFreq"]="100"            
-            
             appprp["host"] = prop['host'] + ":" + prop['port']
             appprp["Connection"] = 'keep-alive, Upgrade'
             appprp["Upgrade"] = 'websocket'
@@ -1143,8 +1143,6 @@ class Connection:
                     raise Exception("Server error.")
             
             
-            #rk = resp.get_headers().get("dwex_ReconnectKey")
-            
             self._close=False
             self._sock.settimeout(None)
             
@@ -1155,7 +1153,7 @@ class Connection:
             #Avvia thread lettura
             self._tdread = ConnectionReader(self)
             self._tdread.start()
-                        
+            return resp            
                             
         except Exception as e:
             self.shutdown()
@@ -1166,63 +1164,25 @@ class Connection:
     
    
     def send(self, data):
-        '''
-        self._semaphore_send.acquire()
-        try:
-            self._reconnect_sent_id+=1
-            self._reconnect_buff.append({"id": self._reconnect_sent_id, "data": appdt})
-            self._reconnect_buff_size+=len(appdt)
-                        
-            print "ADD SIZE:" + str(self._reconnect_buff_size))
-            
-        finally:
-            self._semaphore_send.release()        
-        self._send_ws_data("".join([struct.pack("!qq",self._reconnect_sent_id,self._reconnect_recv_current_id),appdt]))
-        '''
-        self._send_ws_data(data)
-        if self._tdalive is not None:
-            self._tdalive.reset()
+        self._send_ws_data(data)        
         
     def fire_data(self, dt):
         if self._on_data is not None:
-            self._on_data(dt)
-        '''
-        ar=struct.unpack("!qq",dt[0:16])
-        self._semaphore_send.acquire()
+            self._on_data(dt)        
+            
+    def fire_close(self,connlost):        
+        onc=None
+        self._semaphore.acquire()
         try:
-            self._reconnect_recv_current_id=ar[0]
-            apid=ar[1]
-            remidx=-1
-            for i in range(len(self._reconnect_buff)):
-                itm=self._reconnect_buff[i]
-                if itm["id"]>apid:
-                    remidx=i
-                    break
-                self._reconnect_buff_size-=len(itm["data"])
-            if remidx>=0:
-                self._reconnect_buff=self._reconnect_buff[remidx:]
-            else:
-                self._reconnect_buff=[]
-            self._semaphore_send.notify_all()
-            
-            print "REM SIZE:" + str(self._reconnect_buff_size) 
+            self._connection_lost=connlost
+            onc=self._on_close
+            self._on_data= None
+            self._on_close = None
+            self._on_except = None
         finally:
-            self._semaphore_send.release()
-                
-        if len(dt)>16:
-            chl = struct.unpack("!I",dt[16:20])[0]
-            if chl==0:
-                if self._on_data is not None:
-                    self._on_data(dt[20:])
-            else:
-                c = self.get_channel(chl)
-                if c is not None:
-                    c.fire_data(dt[20:])
-        '''
-            
-    def fire_close(self):
-        if self._on_close is not None:
-            self._on_close()
+            self._semaphore.release()
+        if onc is not None:
+            onc()
     
     def fire_except(self,e):  
         if self._on_except is not None:
@@ -1303,6 +1263,15 @@ class Connection:
             self._semaphore.release()
         return bret
     
+    def is_connection_lost(self):
+        bret = True
+        self._semaphore.acquire()
+        try:
+            bret = self._connection_lost
+        finally:
+            self._semaphore.release()
+        return bret        
+    
     def is_shutdown(self):
         bret = True
         self._semaphore.acquire()
@@ -1313,26 +1282,39 @@ class Connection:
         return bret
     
     def close(self):
-        if not self.is_close():
+        bsendclose=False
+        try:
+            self._semaphore_send.acquire()
             try:
-                self._semaphore_send.acquire()
-                try:
+                if not self._close:
                     self._close=True
-                    self._send_ws_close();
+                    bsendclose=True
+                    self._on_data= None
+                    self._on_close = None
+                    self._on_except = None
                     #print "session send stream close."
-                finally:
-                    self._semaphore_send.release()
+            finally:
+                self._semaphore_send.release()
+            if bsendclose:
+                self._send_ws_close();
                 #Attende lo shutdown
-                while not self._shutdown:
+                cnt = Counter()
+                while not self.is_shutdown():
                     time.sleep(0.2)
-            except:
-                None
+                    if cnt.is_elapsed(10000):
+                        break
+        except:
+            None
+            
     
     def shutdown(self):
         
         self._semaphore.acquire()
         try:
+            if self._shutdown:
+                return
             self._close=True
+            self._shutdown=True
         finally:
             self._semaphore.release()
         
@@ -1347,8 +1329,8 @@ class Connection:
             #    self._tdread.join(5000)
             self._tdread = None
             
-            try:
-                self._sock.shutdown(1)
+            try:                
+                self._sock.shutdown(socket.SHUT_RDWR)
             except:
                 None
             try:
@@ -1359,13 +1341,3 @@ class Connection:
             self._prop = None
             self._proxy_info = None
         
-        self._semaphore.acquire()
-        try:
-            self._shutdown=True
-        finally:
-            self._semaphore.release()
-        
-        
-
-
-

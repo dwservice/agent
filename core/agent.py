@@ -68,7 +68,7 @@ def load_osmodule():
     return native.get_instance()
 
 def unload_osmodule(omdl):
-    omdl.unload_library();
+    omdl.unload_library()
 
 def get_prop(prop,key,default=None):
     if key in prop:
@@ -163,8 +163,8 @@ class Agent():
         self._logger.addHandler(hdlr) 
         self._logger.setLevel(logging.INFO)
         #Reindirizza stdout e stderr
-        sys.stdout=StdRedirect(self._logger,logging.DEBUG);
-        sys.stderr=StdRedirect(self._logger,logging.ERROR);
+        sys.stdout=StdRedirect(self._logger,logging.DEBUG)
+        sys.stderr=StdRedirect(self._logger,logging.ERROR)
         
         #Inizializza campi
         self._task_pool = None
@@ -184,9 +184,10 @@ class Agent():
         self._cnt=self._cnt_max
         self._sharedmemserver=None
         self._httpserver=None
-        self._proxy_info=None
-        self._connection = None
-        self._main_temp_msg = None
+        self._proxy_info=None        
+        self._main_message = None
+        self._main_recovery_id = None
+        self._main_recovery_timeout = None        
         self._debug_path = None
         self._debug_indentation_max=-1
         self._debug_thread_filter=None
@@ -217,7 +218,7 @@ class Agent():
         self._agent_native_suffix=None
         
         self._config_semaphore = threading.Condition()
-        self._osmodule = load_osmodule();
+        self._osmodule = load_osmodule()
         self._svcpid=None
         
         #Inizializza il path delle shared mem
@@ -225,7 +226,7 @@ class Agent():
     
     def unload_library(self):
         if self._osmodule is not None:
-            unload_osmodule(self._osmodule);
+            unload_osmodule(self._osmodule)
             self._osmodule=None
     
     #RIMASTO PER COMPATIBILITA' CON VECCHIE CARTELLE RUNONFLY
@@ -252,7 +253,7 @@ class Agent():
                 smsg = u"EXCEPTION:" + unicode(utils.exception_to_string(e))
             if len(smsg)>sz:
                 smsg=smsg[0:sz] + u" ..."
-            smsg = smsg.replace("\n", " ").replace("\r", " ").replace("\t", "   ");
+            smsg = smsg.replace("\n", " ").replace("\r", " ").replace("\t", "   ")
         return smsg
     
     def _debug_filter_check(self,nm,flt):
@@ -346,14 +347,14 @@ class Agent():
             try:
                 f = utils.file_open(self._path_config)
             except Exception as e:
-                self.write_err("Error reading config file. " + utils.exception_to_string(e));
+                self.write_err("Error reading config file. " + utils.exception_to_string(e))
                 self._config = None
                 return
             try:
                 self._config = json.loads(f.read())
-                self.write_info("Readed config file.");
+                self.write_info("Readed config file.")
             except Exception as e:
-                self.write_err("Error parse config file: " + utils.exception_to_string(e));
+                self.write_err("Error parse config file: " + utils.exception_to_string(e))
                 self._config = None
             finally:
                 f.close()
@@ -417,11 +418,11 @@ class Agent():
         return cnt
     
     def _load_config(self):
-        #self.write_info("load configuration...");
+        #self.write_info("load configuration...")
         #VERIFICA agentConnectionPropertiesUrl
         self._agent_url_primary = self._get_config('url_primary', None)
         if self._agent_url_primary  is None:
-            self.write_info("Missing url_primary configuration.");
+            self.write_info("Missing url_primary configuration.")
             return False
         if not self._runonfly:
             self._agent_key = self._get_config('key', None)
@@ -433,7 +434,7 @@ class Agent():
     
     
     def _load_agent_properties(self):
-        self.write_info("Reading agent properties...");
+        self.write_info("Reading agent properties...")
         try:
             app_url = None
             prp_url = None
@@ -452,12 +453,12 @@ class Agent():
             try:
                 prp_url = communication.get_url_prop(app_url, self.get_proxy_info())
                 if "error" in prp_url:
-                    self.write_info("Error read agentUrlPrimary: " + prp_url['error']);
+                    self.write_info("Error read agentUrlPrimary: " + prp_url['error'])
                     if prp_url['error']=="INVALID_KEY":
                         if not self._runonfly:
-                            self.remove_key();
+                            self.remove_key()
                     if self._runonfly_runcode is not None and prp_url['error']=="RUNCODE_NOTFOUND":
-                        self._update_onfly_status("RUNCODE_NOTFOUND");
+                        self._update_onfly_status("RUNCODE_NOTFOUND")
                     return False
                 if self._runonfly:
                     self._agent_key = get_prop(prp_url, 'key', None)
@@ -471,7 +472,7 @@ class Agent():
                         self._runonfly_password=get_prop(prp_url, 'userPassword', None)
                                         
             except Exception as e:
-                self.write_info("Error reading agentUrlPrimary: " + utils.exception_to_string(e));
+                self.write_info("Error reading agentUrlPrimary: " + utils.exception_to_string(e))
                 return False
                 
             appst = get_prop(prp_url, 'state', None)
@@ -481,7 +482,7 @@ class Agent():
             elif appst=="S":
                 self.write_info("Agent suppressed.")
                 if not self._runonfly:
-                    self.remove_key();
+                    self.remove_key()
                 return False
             self._agent_server = get_prop(prp_url, 'server', None)
             if self._agent_server is None:
@@ -501,7 +502,7 @@ class Agent():
             self.write_info("Readed agent properties.")
             return True
         except Exception as e:
-            self.write_info("Error reading agentUrlPrimary: " + utils.exception_to_string(e));
+            self.write_info("Error reading agentUrlPrimary: " + utils.exception_to_string(e))
             return False
     
     def set_config_password(self, pwd):
@@ -1092,7 +1093,7 @@ class Agent():
                             self._debug_class_filter = self._get_config('debug_class_filter',self._debug_class_filter)
                             if self._agent_debug_mode:
                                 self._logger.setLevel(logging.DEBUG)
-                                self._debug_path=os.getcwdu();
+                                self._debug_path=os.getcwdu()
                                 if not self._debug_path.endswith(utils.path_sep):
                                     self._debug_path+=utils.path_sep
                                 threading.setprofile(self._debug_func)
@@ -1132,7 +1133,7 @@ class Agent():
                                         self._cnt_random = random.randrange(self._cnt_min, self._cnt_max) #Evita di avere connessioni tutte assieme
                                         skiponflyretry=True
                         elif not self._agent_missauth:
-                            self.write_info("Missing agent authentication configuration.");
+                            self.write_info("Missing agent authentication configuration.")
                             self._agent_missauth=True
                         self._agent_status = self._STATUS_OFFLINE
                 if not self._update_ready and self._runonfly:                    
@@ -1173,7 +1174,7 @@ class Agent():
             except Exception as ge:
                 self.write_except(ge, "TERM GUI LNC: ")
           
-        self.write_info("Stop agent manager");
+        self.write_info("Stop agent manager")
         
     def _check_pid(self, pid):
         if self._svcpid is not None:
@@ -1283,36 +1284,71 @@ class Agent():
                     return self._runonfly_action(prm)            
         return None
     
-    def _run_agent(self):
-        self.write_info("Initializing agent (key: " + self._agent_key + ", node: " + self._agent_server + ")..." );
-        conn = None
+    
+    def _check_reloads(self):
+        cntses=0;
+        self._connections_semaphore.acquire()
         try:
-            prop = {}
-            prop['host'] = self._agent_server
-            prop['port'] = self._agent_port
-            prop['methodConnectPort']  = self._agent_method_connect_port
-            prop['instance'] = self._agent_instance
-            prop['userName'] = 'AG' + self._agent_key
-            prop['password'] = self._agent_password
-            prop['localeID'] = 'en_US'
-            prop['version'] = self._agent_version
-            conn = communication.Connection({"on_data": self._on_data, "on_except": self.write_except});
-            conn.open(prop, self.get_proxy_info())
-            self._connection=conn
-            self._connections={}
-            self._main_temp_msg={"length":0, "read":0, "data":utils.Bytes(), "fire":self._fire_msg}
+            cntses=len(self._sessions)
+            if cntses==0 and self._is_reload_agent():
+                return False
+        finally:
+            self._connections_semaphore.release()
+        self._reload_apps(cntses==0)
+        return True
+    
+    def _update_supported_apps(self,binit):
+        if binit:
+            self._suppapps=";".join(self.get_supported_applications())
+            self._suppappscheckcnt=communication.Counter(20*1000) #20 SECONDS
+        else:
+            try:
+                if self._suppappscheckcnt.is_elapsed():
+                    self._suppappscheckcnt.reset()
+                    sapps=";".join(self.get_supported_applications())
+                    if self._suppapps!=sapps:
+                        self._suppapps=sapps
+                        m = {
+                            'name':  'update', 
+                            'supportedApplications': self._suppapps
+                        }                
+                        self._main_message.send_message(m)
+            except Exception as e:
+                self.write_except(e)
+    
+    def _run_agent(self):
+        self.write_info("Initializing agent (key: " + self._agent_key + ", node: " + self._agent_server + ")..." )
+        try:
+            appconn = None
+            try:
+                appconn = Connection(self, None, 'AG' + self._agent_key, self._agent_password)            
+                self._main_message=MainMessage(self, appconn)
+            except Exception as ee:
+                if appconn is not None:
+                    appconn.close()
+                raise ee
+                                           
+            self._connections_semaphore.acquire()
+            try:
+                self._connections={}
+                self._main_recovery_id=None
+                self._main_recovery_timeout=None
+            finally:
+                self._connections_semaphore.release()                        
             self._sessions={}
             self._apps={}
             self._apps_to_reload={}
             self._reload_agent_reset()
             #ready agent
-            suppapps=";".join(self.get_supported_applications());
+            self._suppapps=";".join(self.get_supported_applications())
+            self._update_supported_apps(True)
             m = {
                     'name':  'ready', 
                     'osType':  get_os_type(),
                     'osTypeCode':  str(get_os_type_code()), 
                     'fileSeparator':  utils.path_sep,
-                    'supportedApplications': suppapps
+                    'supportedApplications': self._suppapps,
+                    'supportedRecovery': 'True'
                 }
             hwnm = detectinfo.get_hw_name()
             if hwnm is not None:
@@ -1326,40 +1362,23 @@ class Agent():
                     if vn[0:4]!="app_":
                         m["version@" + vn]=cur_vers[vn]
             
-            self._send_message(conn,m)
+            self._main_message.send_message(m)
             self._agent_status = self._STATUS_ONLINE
-            self.write_info("Initialized agent (key: " + self._agent_key + ", node: " + self._agent_server + ")." );
+            self.write_info("Initialized agent (key: " + self._agent_key + ", node: " + self._agent_server + ")." )
             if self._runonfly:
                 self._update_onfly_status("CONNECTED")
                 self._runonfly_conn_retry=0
                 try:
                     if self._runonfly_runcode is None:
-                        self._set_config("preferred_run_user",self._agent_key.split('@')[1]);
+                        self._set_config("preferred_run_user",self._agent_key.split('@')[1])
                 except:
                     None
-            checksuppappscnt=communication.Counter(20*1000) #20 SECONDS
-            while self.is_run() and not conn.is_close() and not self._is_reboot_agent() and not self._is_reload_config():
+            while self.is_run() and not self._is_reboot_agent() and not self._is_reload_config() and not self._main_message.is_close():
                 time.sleep(1)
-                cntses=0;
-                self._connections_semaphore.acquire()
-                try:
-                    cntses=len(self._sessions)
-                    if cntses==0 and self._is_reload_agent():
-                        break #RELOAD AGENT
-                finally:
-                    self._connections_semaphore.release()
-                self._reload_apps(cntses==0)           
-                #CHECK IF SUPPORTED APPS IS CHANGED
-                if checksuppappscnt.is_elapsed():
-                    checksuppappscnt.reset()
-                    sapps=";".join(self.get_supported_applications());
-                    if suppapps!=sapps:
-                        suppapps=sapps
-                        m = {
-                            'name':  'update', 
-                            'supportedApplications': suppapps
-                        }
-                        self._send_message(conn,m)
+                if not self._check_reloads():
+                    break;                
+                self._update_supported_apps(False)
+
             if self._runonfly:
                 self._runonfly_user=None
                 self._runonfly_password=None
@@ -1369,12 +1388,13 @@ class Agent():
             return False
         finally:
             self._close_all_sessions()
-            if conn is not None:
-                self.write_info("Terminated agent (key: " + self._agent_key + ", node: " + self._agent_server + ")." );
-                self._connection=None
+            if self._main_message is not None:
+                self.write_info("Terminated agent (key: " + self._agent_key + ", node: " + self._agent_server + ")." )
+                appmm = self._main_message
+                self._main_message=None
                 self._sessions={}
                 self._unload_apps()
-                conn.close()
+                appmm.close()                
             self._reload_agent_reset()
     
     
@@ -1477,7 +1497,7 @@ class Agent():
                     self._libs[name]=appcnf
                     self.write_info("Loaded lib " + name + ".")
         except Exception as e:
-            self.write_except("Error loading lib " + name + ": " + utils.exception_to_string(e));
+            self.write_except("Error loading lib " + name + ": " + utils.exception_to_string(e))
             raise e
     
     def load_lib(self, name):
@@ -1512,7 +1532,7 @@ class Agent():
                 del self._libs[name]
                 self.write_info("Unloaded lib " + name + ".")
         except Exception as e:
-            self.write_except("Error unloading lib " + name + ": " + utils.exception_to_string(e));
+            self.write_except("Error unloading lib " + name + ": " + utils.exception_to_string(e))
             raise e
         finally:
             self._libs_apps_semaphore.release()
@@ -1645,7 +1665,7 @@ class Agent():
             self._init_app(name)
             return self._apps[name]
         except Exception as e:
-            self.write_except(e);
+            self.write_except(e)
             raise e
         finally:
             self._libs_apps_semaphore.release()
@@ -1679,94 +1699,11 @@ class Agent():
         try:
             for sid in self._sessions.keys():
                 #self._fire_close_conn_apps(sid)
-                self._sessions[sid].close();
+                self._sessions[sid].close()
                 #del conn[sid]
         finally:
             self._connections_semaphore.release()
-    
-    
-    def _fire_msg(self, msg):
-        try:
-            if self._connection is None:
-                return
-            msg_name = msg["name"]
-            if msg_name=="updateInfo":
-                if "agentGroup" in msg:
-                    self._agent_group=msg["agentGroup"]
-                if "agentName" in msg:
-                    self._agent_name=msg["agentName"]
-            elif msg_name=="reboot":
-                self._reboot_agent()
-            elif msg_name=="reload":
-                #WAIT RANDOM TIME BEFORE TO REBOOT AGENT
-                wtime=random.randrange(0, 6*3600)*1000 # 6 ORE
-                self._reload_agent(wtime)
-            elif msg_name=="reloadApps":
-                self._libs_apps_semaphore.acquire()
-                try:
-                    arAppsUpdated = msg["appsUpdated"].split(";")
-                    for appmn in arAppsUpdated:
-                        self._apps_to_reload[appmn]=True
-                finally:
-                    self._libs_apps_semaphore.release()
-            elif msg_name=="reloadLibs":
-                self._libs_apps_semaphore.acquire()
-                try:
-                    arLibsUpdated = msg["libsUpdated"].split(";")
-                    for libmn in arLibsUpdated:
-                        self._set_reload_apps_with_lib_deps(libmn)
-                finally:
-                    self._libs_apps_semaphore.release()
-            elif msg_name=="openConnection":
-                self.open_connection(msg)
-            elif msg_name=="openSession":
-                self.open_session(msg)
-        except Exception as e:
-            self.write_except(e)
-            if 'requestKey' in msg:
-                m = {
-                    'name': 'error' , 
-                    'requestKey':  msg['requestKey'] , 
-                    'class':  e.__class__.__name__ , 
-                    'message':  utils.exception_to_string(e)
-                }
-                if self._connection is not None:
-                    self._send_message(self._connection,m)
-
-    def _on_data(self, data):
-        self.on_data_message(self._main_temp_msg,data)
-    
-    def _on_message(self,firemsg,dt):
-        dt.decompress_zlib()
-        firemsg(json.loads(dt.to_str("utf8")))  
-    
-    def _send_message(self, conn, msg):
-        appm=utils.Bytes()
-        appm.append_str(json.dumps(msg), "utf8")
-        appm.compress_zlib()
-        appm.insert_int(0, len(appm))
-        conn.send(appm)        
-    
-    def on_data_message(self, tm, data):
-        p=0
-        while p<len(data):
-            if tm["length"]==0:
-                tm["length"] = struct.unpack("!I",data[p:p+4])[0]
-                p+=4
-            c=tm["length"]-tm["read"]
-            rms=len(data)-p
-            if rms<c:
-                c=rms
-            tm["data"].append_bytes(data.new_buffer(p,c))
-            tm["read"]+=c
-            p=p+c
-            if tm["read"]==tm["length"]:
-                self._task_pool.execute(self._on_message, tm["fire"],tm["data"])
-                tm["length"]=0
-                tm["read"]=0
-                tm["data"]=utils.Bytes()
         
-    
     def open_connection(self, msg):
         self._connections_semaphore.acquire()
         try:
@@ -1778,7 +1715,7 @@ class Agent():
                 'name': 'response', 
                 'requestKey':  msg["requestKey"], 
             }
-        self._send_message(self._connection, m)
+        return m
             
     def close_connection(self, cn):
         self._connections_semaphore.acquire()
@@ -1803,19 +1740,21 @@ class Agent():
                 'name': 'response', 
                 'requestKey':  msg["requestKey"], 
             }
-        self._send_message(self._connection, m)
-        self.write_info("openSession (id=" + sid + ")");
+        self.write_info("Open session (id=" + sid + ")")
+        return m
 
 
     def close_session(self, ses):
         self._connections_semaphore.acquire()
         try:
             sid = ses.get_idsession()
-            self._fire_close_conn_apps(sid)
-            del self._sessions[sid]
+            if sid in self._sessions:                
+                self._fire_close_conn_apps(sid)
+                del self._sessions[sid]
+                self.write_info("Close session (id=" + sid + ")")
         finally:
             self._connections_semaphore.release()
-        self.write_info("closeSession (id=" + sid + ")");
+        
     
     def get_app_permission(self,cinfo,name):
         prms = cinfo.get_permissions()
@@ -1844,31 +1783,43 @@ class Agent():
         else:
             ret = func(cinfo, params)
             return ret
-        
+
+
 class Connection():
     def __init__(self, agent, sid, user, password):
         self._evt_on_data=None
         self._evt_on_close=None
-        self._evt_on_except=None
+        self._evt_on_recovery=None
+        self._evt_on_except=None        
         self._agent=agent
         self._id=sid
-        prop = {}
-        prop['host'] = self._agent._agent_server
-        prop['port'] = self._agent._agent_port
-        prop['methodConnectPort']  = self._agent._agent_method_connect_port
-        prop['instance'] = self._agent._agent_instance
-        prop['userName'] = user
-        prop['password'] = password
-        prop['localeID'] = 'en_US'
-        prop['version'] = self._agent._agent_version
-        self._conn = communication.Connection({"on_data": self._on_data, "on_except": self._on_except, "on_close":self._on_close});
-        self._conn.open(prop, self._agent.get_proxy_info())
+        self._user=user
+        self._semaphore = threading.Condition()
+        self._recovering=False
+        self._destroy=False
+        self._allow_recovery=False
+        self._password=password
+        prop = self._get_prop_conn()
+        prop['userName'] = self._user
+        prop['password'] = self._password        
+        self._raw = communication.Connection({"on_data": self._on_data, "on_except": self._on_except, "on_close":self._on_close})
+        self._raw.open(prop, self._agent.get_proxy_info())
+    
+    def _get_prop_conn(self):
+        prop_conn = {}
+        prop_conn['host'] = self._agent._agent_server
+        prop_conn['port'] = self._agent._agent_port
+        prop_conn['methodConnectPort']  = self._agent._agent_method_connect_port
+        prop_conn['instance'] = self._agent._agent_instance
+        prop_conn['localeID'] = 'en_US'
+        prop_conn['version'] = self._agent._agent_version
+        return prop_conn
     
     def get_id(self):
         return self._id
     
     def send(self,data):
-        self._conn.send(data)
+        self._raw.send(data)        
     
     def set_events(self,evts):
         if evts is None:
@@ -1880,7 +1831,11 @@ class Connection():
         if "on_close" in evts:
             self._evt_on_close=evts["on_close"]
         else:
-            self._evt_on_close=None
+            self._evt_on_close=None        
+        if "on_recovery" in evts:
+            self._evt_on_recovery=evts["on_recovery"]
+        else:
+            self._evt_on_recovery=None
         if "on_except" in evts:
             self._evt_on_except=evts["on_except"]
         else:
@@ -1889,88 +1844,238 @@ class Connection():
     def _on_data(self, dt):
         if self._evt_on_data is not None:
             self._evt_on_data(dt)
+    
+    
+    def _set_recovering(self, r, d):
+        bcloseraw=False
+        self._semaphore.acquire()
+        try:
+            self._recovering=r
+            if d is not None:
+                if self._destroy==True and d==False:
+                    bcloseraw=True
+                else:
+                    self._destroy=d
+            self._semaphore.notify_all()
+        finally:
+            self._semaphore.release()
+        if bcloseraw:
+            self._raw.close()
         
+    
+    def wait_recovery(self):
+        self._semaphore.acquire()
+        try:
+            self._semaphore.wait(0.5)
+            while not self._destroy and self._recovering:
+                self._semaphore.wait(0.2)
+            return not self._destroy
+        finally:
+            self._semaphore.release()
+    
     def _on_close(self):
-        self._agent.close_connection(self)
-        if self._evt_on_close is not None:
-            self._evt_on_close()
-            
-    def _on_except(self,e):
+        #RECOVERY CONN
+        self._set_recovering(True,None)
+        brecon=False
+        breconmsg=False  
+        self._agent._connections_semaphore.acquire()
+        try:
+            crecid = self._agent._main_recovery_id
+            crectimeout = self._agent._main_recovery_timeout
+        finally:
+            self._agent._connections_semaphore.release()
+        if crecid is not None and self._allow_recovery and self._raw.is_connection_lost() and self._raw.is_close():
+            breconmsg=True            
+            if self._id is None:
+                self._agent.write_info("Recovering connection (main)..." )
+            else:
+                self._agent.write_info("Recovering connection (id: " + self._id + ")..." )
+            cntretry=communication.Counter()
+            cntwait=communication.Counter()
+            while not cntretry.is_elapsed(crectimeout):          
+                if cntwait.is_elapsed(2000):
+                    cntwait.reset()
+                    try:
+                        prop = self._get_prop_conn()
+                        prop['userName'] = self._user
+                        if self._id is None:
+                            prop['password'] = "RECOVERY:" + crecid
+                        else:
+                            prop['password'] = "RECOVERY:" + crecid + "@" + self._id                            
+                        appraw = communication.Connection({"on_data": self._on_data, "on_except": self._on_except, "on_close":self._on_close})
+                        appraw.open(prop, self._agent.get_proxy_info())
+                        self._raw=appraw
+                        brecon = True
+                        break
+                    except Exception as e:
+                        None
+                else:
+                    time.sleep(0.2)
+                self._semaphore.acquire()
+                try:
+                    if self._destroy==True:
+                        return
+                finally:
+                    self._semaphore.release()
+        
+        if not brecon:
+            if breconmsg:
+                if self._id is None:
+                    self._agent.write_info("Recovery connection failed (main)." )
+                else:
+                    self._agent.write_info("Recovery connection failed (id: " + self._id + ")." )
+            self._set_recovering(False,True)
+            self._agent.close_connection(self)
+            if self._evt_on_close is not None:
+                self._evt_on_close()            
+        else:
+            if breconmsg:
+                if self._id is None:
+                    self._agent.write_info("Recovered connection (main)." )
+                else:
+                    self._agent.write_info("Recovered connection (id: " + self._id + ")." )
+            if self._evt_on_recovery is not None:
+                self._evt_on_recovery()
+            self._set_recovering(False,False)
+                
+    def _on_except(self,e):        
         if self._evt_on_except is not None:
             self._evt_on_except(e)
         else:
             self._agent.write_except(e)
     
-    def close(self):
-        self._agent.close_connection(self)
-        self._conn.close()
-
-class Session():
-    
-    def __init__(self, agent, conn, idses, perms):
-        self._agent=agent
-        self._bclose = False
-        self._temp_msg={"length":0, "read":0, "data":utils.Bytes(), "fire":self._fire_msg}
-        self._conn=conn
-        self._conn.set_events({"on_close" : self._on_close, "on_data" : self._on_data})
-        self._idsession= idses
-        self._permissions = perms
-        self._semaphore = threading.Condition()
-        self._semaphore_req = threading.Condition()
-        self._pending_req={}
-        self._bwsendcalc=communication.BandwidthCalculator()
-        self._lastacttm=time.time()
-
-    def get_idsession(self):
-        return self._idsession
-    
-    def get_permissions(self):
-        return self._permissions
-    
     def is_close(self):
-        ret = True
         self._semaphore.acquire()
         try:
-            ret=self._bclose
+            return self._destroy
         finally:
-            self._semaphore.release()
-        return ret
+            self._semaphore.release()        
     
+    def close(self):
+        self._set_recovering(False,True)
+        if self._id is not None:
+            self._agent.close_connection(self)            
+        self._raw.close()
+        
+
+class Message():
+    
+    def __init__(self, agent, conn):
+        self._agent=agent
+        self._temp_msg={"length":0, "read":0, "data":utils.Bytes()}
+        self._conn=conn
+        self._conn.set_events({"on_close" : self._on_close, "on_data" : self._on_data, "on_recovery": self._on_recovery})
+        self._conn._allow_recovery=True
+        self._bwsendcalc=communication.BandwidthCalculator()
+        self._lastacttm=time.time()
+        self._lastreqcnt=0l
+        self._send_response_recovery=[]
+            
     def get_last_activity_time(self):
         return self._lastacttm
     
     def _set_last_activity_time(self):
         self._lastacttm=time.time()
     
+    def on_data_message(self, data):    
+        p=0
+        while p<len(data):
+            dt = None
+            self._conn._semaphore.acquire()
+            try:
+                if self._temp_msg["length"]==0:
+                    self._temp_msg["length"] = struct.unpack("!I",data[p:p+4])[0]
+                    p+=4
+                c=self._temp_msg["length"]-self._temp_msg["read"]
+                rms=len(data)-p
+                if rms<c:
+                    c=rms
+                self._temp_msg["data"].append_bytes(data.new_buffer(p,c))
+                self._temp_msg["read"]+=c            
+                p=p+c
+                if self._temp_msg["read"]==self._temp_msg["length"]:
+                    dt = self._temp_msg["data"]
+            finally:
+                self._conn._semaphore.release()
+            if dt is not None:
+                try:
+                    dt.decompress_zlib()
+                    msg=json.loads(dt.to_str("utf8"))                    
+                    if self._check_recovery_msg(msg):
+                        self._agent._task_pool.execute(self._fire_msg, msg)
+                except Exception as e:
+                    self._agent.write_except(e)
+                finally:
+                    self._clear_temp_msg()
+    
+    def _check_recovery_msg(self,msg):
+        if "requestCount" in msg:
+            self._conn._semaphore.acquire()
+            try:
+                rc = msg["requestCount"]
+                if rc>self._lastreqcnt+1l:
+                    msgskip={}
+                    msgskip["requestKey"]="SKIP"
+                    msgskip["begin"]=self._lastreqcnt+1l
+                    msgskip["end"]=rc-1l
+                    self._agent._task_pool.execute(self.send_message, msgskip)
+                self._lastreqcnt=rc                
+            finally:
+                self._conn._semaphore.release()
+        if msg["name"]=="recovery":
+            if "cntRequestReceived" in msg:
+                cntRequestReceived=msg["cntRequestReceived"];
+                self._conn._semaphore.acquire()
+                try:
+                    appar=[]
+                    for o in self._send_response_recovery: 
+                        if o["requestCount"]>cntRequestReceived:
+                            appar.append(o)
+                    self._send_response_recovery=appar
+                finally:
+                    self._conn._semaphore.release()
+            if "status" in msg and msg["status"]=="end":
+                appar=[]
+                self._conn._semaphore.acquire()
+                try:                    
+                    appar=[]
+                    for o in self._send_response_recovery: 
+                        appar.append(o)
+                finally:
+                    self._conn._semaphore.release()
+                if len(appar)>0:
+                    self._agent._task_pool.execute(self._send_message_recovery, appar)
+            if "requestKey" in msg:
+                resp={}
+                resp["requestKey"]=msg["requestKey"]
+                if "requestCount" in msg:
+                    resp["requestCount"] = msg["requestCount"]
+                self._agent._task_pool.execute(self.send_message, resp)            
+            return False
+        return True
+    
+    def _send_message_recovery(self,ar):
+        for msg in ar:
+            self.send_message(msg)
+    
     def _on_data(self,data):
         self._set_last_activity_time()
-        self._agent.on_data_message(self._temp_msg,data)
+        self.on_data_message(data)
     
-    def _fire_msg(self,msg):
+    def _clear_temp_msg(self):
+        self._conn._semaphore.acquire()
         try:
-            msg_name = msg["name"]
-            if msg_name=="request":
-                self._request(msg)
-            elif msg_name=="download":
-                self._download(msg)
-            elif msg_name=="upload":
-                self._upload(msg)
-            elif msg_name=="websocket":
-                self._websocket(msg)
-            elif msg_name=="websocketsimulate":
-                self._websocketsimulate(msg)
-            else:
-                raise Exception("Invalid message name: " + msg_name)
-        except Exception as e:
-            self._agent.write_except(e)
-            if 'requestKey' in msg:
-                m = {
-                    'name': 'error' , 
-                    'requestKey':  msg['requestKey'] , 
-                    'class':  e.__class__.__name__ , 
-                    'message':  utils.exception_to_string(e)
-                }
-                self._send_message(m)
+            self._temp_msg["length"]=0
+            self._temp_msg["read"]=0
+            self._temp_msg["data"]=utils.Bytes()
+        finally:
+            self._conn._semaphore.release()
+            
+    def _on_recovery(self):
+        self._clear_temp_msg()
+    
+    def _fire_msg(self, msg):
+        None
     
     def _send_conn(self,conn,data):
         pos=0
@@ -1979,7 +2084,7 @@ class Session():
             bps = self._bwsendcalc.get_bps()
             bfsz = communication.calculate_buffer_size(bps)
             if bfsz is None:
-                bfsz=self._connection.get_send_buffer_size()
+                bfsz=self._conn.get_send_buffer_size()
             if bfsz>=tosnd:
                 conn.send(data.new_buffer(pos,tosnd))
                 self._bwsendcalc.add(tosnd)
@@ -1991,12 +2096,18 @@ class Session():
                 pos+=bfsz
 
     
-    def _send_message(self,msg):
-        appm=utils.Bytes()
-        appm.append_str(json.dumps(msg), "utf8")
-        appm.compress_zlib()
-        appm.insert_int(0, len(appm))
-        self._send_conn(self._conn, appm)
+    def send_message(self,msg):
+        while True:
+            try:
+                appm=utils.Bytes()
+                appm.append_str(json.dumps(msg), "utf8")
+                appm.compress_zlib()
+                appm.insert_int(0, len(appm))
+                self._send_conn(self._conn, appm)
+                break
+            except Exception as e:                
+                if not self._conn.wait_recovery():
+                    raise e
            
     def send_response(self,msg,resp):
         m = {
@@ -2008,8 +2119,132 @@ class Session():
             m["module"] = msg["module"]
         if "command" in msg:
             m["command"] = msg["command"]
-        self._send_message(m);    
+        if "requestCount" in msg:
+            m["requestCount"] = msg["requestCount"]
+            self._conn._semaphore.acquire()
+            try:
+                self._send_response_recovery.append(m)
+            finally:
+                self._conn._semaphore.release()        
+        self.send_message(m)    
+    
+    def is_close(self):
+        return self._conn.is_close()
+    
+    def _on_close(self):
+        None
         
+    def close(self):
+        self._conn.close()        
+
+class MainMessage(Message):    
+    
+    def __init__(self, agent, conn):
+        Message.__init__(self, agent, conn)
+    
+    def _fire_msg(self, msg):
+        try:
+            #if self._agent._connection is not None:
+            #    return
+            resp = None
+            msg_name = msg["name"]
+            if msg_name=="recoveryInfo":
+                self._agent._connections_semaphore.acquire()
+                try:
+                    self._agent._main_recovery_id=msg["id"]
+                    self._agent._main_recovery_timeout=(msg["timeout"]+5)*1000
+                finally:
+                    self._agent._connections_semaphore.release()                
+            elif msg_name=="updateInfo":
+                if "agentGroup" in msg:
+                    self._agent._agent_group=msg["agentGroup"]
+                if "agentName" in msg:
+                    self._agent._agent_name=msg["agentName"]
+            elif msg_name=="reboot":
+                self._agent._reboot_agent()
+            elif msg_name=="reload":
+                #WAIT RANDOM TIME BEFORE TO REBOOT AGENT
+                wtime=random.randrange(0, 6*3600)*1000 # 6 ORE
+                self._agent._reload_agent(wtime)
+            elif msg_name=="reloadApps":
+                self._agent._libs_apps_semaphore.acquire()
+                try:
+                    arAppsUpdated = msg["appsUpdated"].split(";")
+                    for appmn in arAppsUpdated:
+                        self._agent._apps_to_reload[appmn]=True
+                finally:
+                    self._agent._libs_apps_semaphore.release()
+            elif msg_name=="reloadLibs":
+                self._agent._libs_apps_semaphore.acquire()
+                try:
+                    arLibsUpdated = msg["libsUpdated"].split(";")
+                    for libmn in arLibsUpdated:
+                        self._agent._set_reload_apps_with_lib_deps(libmn)
+                finally:
+                    self._agent._libs_apps_semaphore.release()
+            elif msg_name=="openConnection":
+                resp=self._agent.open_connection(msg)
+            elif msg_name=="openSession":
+                resp=self._agent.open_session(msg)
+            if resp is not None:
+                self.send_response(msg, resp)
+        except Exception as e:
+            self._agent.write_except(e)
+            if 'requestKey' in msg:
+                m = {
+                    'name': 'error' , 
+                    'requestKey':  msg['requestKey'] , 
+                    'class':  e.__class__.__name__ , 
+                    'message':  utils.exception_to_string(e)
+                }
+                self.send_message(m)
+                #if self._agent._connection is not None:
+                    #self.send_message(self._connection,m)
+                    
+            
+class Session(Message):
+    
+    def __init__(self, agent, conn, idses, perms):
+        Message.__init__(self, agent, conn)
+        self._bclose = False
+        self._idsession= idses
+        self._permissions = perms
+
+    def get_idsession(self):
+        return self._idsession
+    
+    def get_permissions(self):
+        return self._permissions
+        
+    def _fire_msg(self,msg):
+        try:
+            resp = None
+            msg_name = msg["name"]
+            if msg_name=="request":
+                resp = self._request(msg)
+            elif msg_name=="download":
+                resp = self._download(msg)
+            elif msg_name=="upload":
+                resp = self._upload(msg)
+            elif msg_name=="websocket":
+                resp = self._websocket(msg)
+            elif msg_name=="websocketsimulate":
+                resp = self._websocketsimulate(msg)
+            else:
+                raise Exception("Invalid message name: " + msg_name)
+            if resp is not None:
+                self.send_response(msg, resp)
+        except Exception as e:
+            self._agent.write_except(e)
+            if 'requestKey' in msg:
+                m = {
+                    'name': 'error' , 
+                    'requestKey':  msg['requestKey'] , 
+                    'class':  e.__class__.__name__ , 
+                    'message':  utils.exception_to_string(e)
+                }
+                self.send_message(m)
+            
     def _request(self, msg):
         resp = ""
         try:
@@ -2030,9 +2265,9 @@ class Session():
             m = utils.exception_to_string(e)
             self._agent.write_debug(m)
             resp=  ":".join(["E", m])
-        self.send_response(msg, resp)
+        return resp        
     
-    def _websocket(self, msg):
+    def _websocket(self, msg):        
         rid=msg["idRaw"]
         wsock=None
         self._agent._connections_semaphore.acquire()
@@ -2041,10 +2276,10 @@ class Session():
                 raise Exception("Connection not found (id: " + rid + ")")
             wsock = WebSocket(self,self._agent._connections[rid], msg)  
         finally:
-            self._agent._connections_semaphore.release()        
+            self._agent._connections_semaphore.release()
+        resp = {}        
         try:
-            self._agent.invoke_app(msg['module'],  "websocket",  self,  wsock)
-            resp = {}
+            self._agent.invoke_app(msg['module'],  "websocket",  self,  wsock)            
             if not wsock.is_accept():
                 raise Exception("WebSocket not accepted")
         except Exception as e:
@@ -2052,11 +2287,10 @@ class Session():
                 wsock.close()
             except:
                 None
-            resp = {}
-            resp["error"]=utils.exception_to_string(e)
+            resp["error"]=utils.exception_to_string(e)            
         resp['name']='response'
         resp['requestKey']=msg['requestKey']
-        self._send_message(resp)
+        return resp
     
     def _websocketsimulate(self, msg):
         rid=msg["idRaw"]
@@ -2068,9 +2302,9 @@ class Session():
             wsock = WebSocketSimulate(self,self._agent._connections[rid], msg)  
         finally:
             self._agent._connections_semaphore.release()
+        resp = {}
         try:
             self._agent.invoke_app(msg['module'],  "websocket",  self,  wsock)
-            resp = {}
             if not wsock.is_accept():
                 raise Exception("WebSocket not accepted")
         except Exception as e:
@@ -2078,11 +2312,10 @@ class Session():
                 wsock.close()
             except:
                 None
-            resp = {}
             resp["error"]=utils.exception_to_string(e)
         resp['name']='response'
         resp['requestKey']=msg['requestKey']
-        self._send_message(resp)    
+        return resp    
     
     def _download(self, msg):
         rid=msg["idRaw"]
@@ -2093,10 +2326,10 @@ class Session():
                 raise Exception("Connection not found (id: " + rid + ")")
             fdownload = Download(self, self._agent._connections[rid], msg)
         finally:
-            self._agent._connections_semaphore.release()   
+            self._agent._connections_semaphore.release()
+        resp = {}   
         try:
             self._agent.invoke_app(msg['module'],  "download",  self,  fdownload)
-            resp = {}
             if fdownload.is_accept():
                 mt = mimetypes.guess_type(fdownload.get_path())
                 if mt is None or mt[0] is None or not isinstance(mt[0], str):
@@ -2114,12 +2347,11 @@ class Session():
             try:
                 fdownload.close()
             except:
-                None
-            resp = {}
+                None            
             resp["error"]=utils.exception_to_string(e)
         resp['name']='response'
         resp['requestKey']=msg['requestKey']
-        self._send_message(resp)
+        return resp
     
     def _upload(self, msg):
         rid=msg["idRaw"]
@@ -2131,9 +2363,9 @@ class Session():
             fupload = Upload(self, self._agent._connections[rid], msg)
         finally:
             self._agent._connections_semaphore.release()
+        resp = {}
         try:
             self._agent.invoke_app(msg['module'],  "upload",  self,  fupload)
-            resp = {}
             if not fupload.is_accept():
                 raise Exception("Upload file not accepted")
         except Exception as e:
@@ -2141,35 +2373,22 @@ class Session():
                 fupload.close()
             except:
                 None
-            resp = {}
             resp["error"]=utils.exception_to_string(e)
         resp['name']='response'
         resp['requestKey']=msg['requestKey']
-        self._send_message(resp)
+        return resp
     
     def _on_close(self):
-        if not self._bclose:
-            self._semaphore.acquire()
-            try:
-                self._bclose=True
-            finally:
-                self._semaphore.release()
-            self._agent._task_pool.execute(self._agent.close_session,self)
+        self._agent._task_pool.execute(self._agent.close_session,self)
     
     def close(self):
-        if not self._bclose:
-            self._semaphore.acquire()
-            try:
-                self._bclose=True
-            finally:
-                self._semaphore.release()
-            self._agent.close_session(self)
-            self._conn.close()
+        self._agent._task_pool.execute(self._agent.close_session,self)
+        Message.close(self)        
             
 
 class WebSocket:
     DATA_STRING = ord('s')
-    DATA_BYTES= ord('b');
+    DATA_BYTES= ord('b')
     
     def __init__(self, parent, conn, props):
         self._parent=parent
@@ -2220,11 +2439,11 @@ class WebSocket:
                         self._data = self._data.new_buffer(4+self._len)
                         self._len=-1;
                         if self._on_data is not None:
-                            self._on_data(self,apptp,appdata);
+                            self._on_data(self,apptp,appdata)
                     else:
                         break
             except:
-                self.close();
+                self.close()
                 if self._on_close is not None:
                     self._on_close()
     
@@ -2395,11 +2614,11 @@ class WebSocketSimulate:
                         finally:
                             self._semaphore.release()
                         if "destroy" in prppst:
-                            self.close();
+                            self.close()
                             if self._on_close is not None:
                                 self._on_close()
             except Exception as e:
-                self.close();
+                self.close()
                 if self._on_close is not None:
                     self._on_close()
                     
@@ -2615,7 +2834,7 @@ class Upload():
         self._length=long(self._props['length'])
         self._calcbps=communication.BandwidthCalculator() 
             
-        sprnpath=utils.path_dirname(path);    
+        sprnpath=utils.path_dirname(path)    
         while True:
             r="".join([random.choice("0123456789") for x in xrange(6)])            
             self._tmpname=sprnpath + utils.path_sep + "temporary" + r + ".dwsupload";
@@ -2777,7 +2996,7 @@ if __name__ == "__main__":
                 sys.path.append("..")            
             bmain=False
             name=a1[4:]
-            sys.argv.remove(a1);
+            sys.argv.remove(a1)
             
             objlib = importlib.import_module("app_" + name)
             func = getattr(objlib, 'run_main', None)
