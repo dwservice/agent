@@ -2218,22 +2218,19 @@ class Session(Message):
         
     def _fire_msg(self,msg):
         try:
-            resp = None
             msg_name = msg["name"]
             if msg_name=="request":
-                resp = self._request(msg)
+                self.send_response(msg,self._request(msg))
             elif msg_name=="download":
-                resp = self._download(msg)
+                self.send_message(self._download(msg))
             elif msg_name=="upload":
-                resp = self._upload(msg)
+                self.send_message(self._upload(msg))
             elif msg_name=="websocket":
-                resp = self._websocket(msg)
+                self.send_message(self._websocket(msg))
             elif msg_name=="websocketsimulate":
-                resp = self._websocketsimulate(msg)
+                self.send_message(self._websocketsimulate(msg))
             else:
-                raise Exception("Invalid message name: " + msg_name)
-            if resp is not None:
-                self.send_response(msg, resp)
+                raise Exception("Invalid message name: " + msg_name)                
         except Exception as e:
             self._agent.write_except(e)
             if 'requestKey' in msg:
