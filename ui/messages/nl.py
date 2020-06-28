@@ -148,7 +148,7 @@ data={
     'runWithoutInstallationClosing':u'Sessie sluiten...',
     'runWithoutInstallationConnecting':u'Sessie openen...',
     'runWithoutInstallationEnd':u'Sessie gesloten.',
-    'runWithoutInstallationOnlineBottom':u'WAARSCHUWING:\nLaat deze informatie niet zien aan mensen die je niet vertrouwd, anders kan je ze toegang geven tot deze Agent. Als je niet zeker weet wat je doet, sluit deze applicatie.',
+    'runWithoutInstallationOnlineBottom':u'WAARSCHUWING:\nLaat deze informatie niet zien aan mensen die je niet vertrouwt, anders kan je ze toegang geven tot deze Agent. Als je niet zeker weet wat je doet, sluit deze applicatie.',
     'runWithoutInstallationOnlineBottomPutCode':u'WAARSCHUWING:\nDe agent is nu klaar om verbindingen te aanvaarden. Als je niet weet wat je aan het doen bent, sluit dan deze toepassing.',
     'runWithoutInstallationOnlinePassword':u'Wachtwoord: {0}',
     'runWithoutInstallationOnlineTop':u'De sessie is actief.\nOm met de agent te verbinden ga naar https://www.dwservice.net',
@@ -176,7 +176,7 @@ data={
     'warningRemovePath':u'Waarschuwing: de installatie map bestaat al en zal worden verwijderd.',
     'welcomeLicense':u'Licentie\nDeze software is gratis en open source.\nHet bestaat uit één hoofdcomponent en meerdere aanvullende componenten gedefinieerd als "app" welke onder verschillende licenties kunnen vallen. Voor meer informatie ga naar: https://www.dwservice.net/en/licenses-sources.html',
     'welcomeSecurity':u'Beveiliging\nOm uw privacy te waarborgen garanderen wij dat er geen informatie wordt opgeslagen op onze servers, en alle communicatie is versleuteld zodat andere partijen deze niet kunnen lezen.',
-    'welcomeSoftwareUpdates':u'Software updates\nBijwerken van deze software gebeurd automatisch',
+    'welcomeSoftwareUpdates':u'Software updates\nBijwerken van deze software gebeurt automatisch',
     'windowsAdminPrivileges':u'Je dient administrator rechten te hebben om DWAgent te installeren.\nStart het programma met de optie \'Als administrator uitvoeren\'',
     'yes':u'Ja'
 }

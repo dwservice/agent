@@ -7,7 +7,7 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
 data={
-    'accept':u'Ich akzeptiere',
+    'accept':u'Akzeptieren',
     'agentName':u'Agentenname',
     'alreadyInstalled':u'DWAgent ist bereits installiert. \n\nDer Agent wird automatisch auf die neueste Version aktualisiert. Das heisst, es können keine manuellen Updates durchgeführt werden.',
     'back':u'Zurück',
@@ -143,12 +143,12 @@ data={
     'reEnterCode':u'Code erneut eingeben',
     'reEnterData':u'Daten erneut eingeben',
     'rePassword':u'Passwort erneut eingeben',
-    'removeFile':u'Lösche Datei...',
+    'removeFile':u'Datei wird gelöscht...',
     'runWithoutInstallation':u'Ausführen',
     'runWithoutInstallationClosing':u'Schliesse Sitzung...',
     'runWithoutInstallationConnecting':u'Öffne Sitzung...',
     'runWithoutInstallationEnd':u'Sitzung beendet.',
-    'runWithoutInstallationOnlineBottom':u'WARNUNG:\nGeben Sie diese Information nicht Dritten, denen Sie nicht vertrauen. Sonst können sich diese mit diesem Agenten vebinden. Im Zweifelsfall schliessen Sie dieses Programm.',
+    'runWithoutInstallationOnlineBottom':u'WARNUNG:\nGeben Sie diese Informationen nicht Dritten, denen Sie nicht vertrauen. Sonst können sich diese mit diesem Agenten vebinden. Im Zweifelsfall schliessen Sie dieses Programm.',
     'runWithoutInstallationOnlineBottomPutCode':u'WARNUNG:\nNun kann der Agent die Verbindung annehmen. Wenn Sie sich nicht sicher sind, was Sie tun, schliessen Sie bitte diese Anwendung.',
     'runWithoutInstallationOnlinePassword':u'Passwort: {0}',
     'runWithoutInstallationOnlineTop':u'Die Sitzung ist aktiv.\nZum Verbinden öffnen Sie https://www.dwservice.net',
