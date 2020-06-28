@@ -1659,6 +1659,10 @@ class Install:
         if self._sharedmemclient!=None and not self._sharedmemclient.is_close():
             self._sharedmemclient.close()
     
+    def _send_password_config(self):
+        if "configPassword" in self._options:
+            self.send_req("change_pwd",{'password': self._options["configPassword"]})
+    
     def _send_proxy_config(self):
         pt = ''
         if self._proxy.get_port() is not None:
@@ -2201,6 +2205,20 @@ class Install:
                     if 'proxy_password' in prpconf and prpconf['proxy_password']!="":
                         self._proxy.set_password(self.obfuscate_password(prpconf['proxy_password']))
         
+        if self._silent: 
+            #SETUP PROXY
+            if "proxyType" in self._options:
+                self._proxy=communication.ProxyInfo()
+                self._proxy.set_type(self._options["proxyType"])
+            if self._proxy is not None and "proxyHost" in self._options:
+                self._proxy.set_host(self._options["proxyHost"])
+            if self._proxy is not None and "proxyPort" in self._options:
+                self._proxy.set_port(int(self._options["proxyPort"]))
+            if self._proxy is not None and "proxyUser" in self._options:
+                self._proxy.set_user(self._options["proxyUser"])
+            if self._proxy is not None and "proxyPassword" in self._options:
+                self._proxy.set_password(self._options["proxyPassword"])
+        
         pth = self._install_path.get()
         if pth.endswith(utils.path_sep) is True:
             pth=pth[0:len(pth)-1]
@@ -2239,6 +2257,10 @@ class Install:
                 msg = self._native.check_init_install(True)
                 if msg is not None:
                     raise Exception(msg)
+                if self._proxy is None:
+                    self._append_log(u"Proxy NONE.")
+                else:
+                    self._append_log(u"Proxy " + self._proxy.get_type() + u" " + self._proxy.get_host() + u":" + str(self._proxy.get_port()) + u".")
         
             
             if not self._runWithoutInstall:
@@ -2327,6 +2349,9 @@ class Install:
                     return self.step_config_init(curui)
                 else:
                     curui.set_param('firstConfig',False)
+                    if self._proxy is not None:
+                        self._send_proxy_config()
+                    self._send_password_config()
                     return self.step_config_install_request(curui)
                 
             else:
@@ -2517,7 +2542,19 @@ def fmain(args): #SERVE PER MACOS APP
         elif arg.lower().startswith("password="):
             arotps["password"]=arg[9:]
         elif arg.lower().startswith("name="):
-            arotps["agentName"]=arg[5:]
+            arotps["agentName"]=arg[5:]            
+        elif arg.lower().startswith("proxytype="):            
+            arotps["proxyType"]=arg[10:]
+        elif arg.lower().startswith("proxyhost="):            
+            arotps["proxyHost"]=arg[10:]
+        elif arg.lower().startswith("proxyport="):            
+            arotps["proxyPort"]=arg[10:]
+        elif arg.lower().startswith("proxyuser="):            
+            arotps["proxyUser"]=arg[10:]
+        elif arg.lower().startswith("proxypassword="):            
+            arotps["proxyPassword"]=arg[14:]
+        elif arg.lower().startswith("configpassword="):
+            arotps["configPassword"]=arg[15:]
         elif arg.lower().startswith("logpath="):
             arotps["logpath"]=arg[8:]
         elif arg.lower().startswith("lang="):
