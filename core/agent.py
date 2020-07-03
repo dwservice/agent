@@ -933,6 +933,9 @@ class Agent():
         finally:
             self._config_semaphore.release()    
     
+    def _reboot_os(self):
+        self.get_osmodule().reboot()
+    
     def _reboot_agent(self):
         self._config_semaphore.acquire()
         try:
@@ -2160,6 +2163,8 @@ class MainMessage(Message):
                     self._agent._agent_group=msg["agentGroup"]
                 if "agentName" in msg:
                     self._agent._agent_name=msg["agentName"]
+            elif msg_name=="rebootOS":
+                self._agent._reboot_os()
             elif msg_name=="reboot":
                 self._agent._reboot_agent()
             elif msg_name=="reload":
