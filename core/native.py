@@ -185,6 +185,9 @@ class Windows():
                
     def is_gui(self):
         return True 
+    
+    def reboot(self):
+        os.system("shutdown -r -f -t 0")
 
 class Linux():
     
@@ -272,6 +275,8 @@ class Linux():
             None
         return False
     
+    def reboot(self):
+        os.system("reboot")
 
 class Mac():
         
@@ -472,3 +477,6 @@ class Mac():
         finally:
             self._propguilnc_semaphore.release() 
         return None
+    
+    def reboot(self):
+        os.system("shutdown -r now")

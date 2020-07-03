@@ -28,8 +28,9 @@ extern "C"{
 	sem_t *semaphoreOpen(const char *__name);
 	int semaphoreClose(sem_t *__sem);
 	int semaphoreUnlink(const char *__name);
+	int sharedMemoryOpen(const char *name, int oflag, mode_t mode);
+	int sharedMemoryUnlink(const char *name);
 #endif
-
 }
 
 #endif /* MAIN_H_ */

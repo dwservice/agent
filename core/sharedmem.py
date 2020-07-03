@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 
 '''
@@ -80,18 +81,21 @@ def load_semaphore_lib():
 
 
 def init_path():
-    if not utils.path_exists(SHAREDMEM_PATH):
-        utils.path_makedir(SHAREDMEM_PATH)
-    else:
-        #Elimina tutti i file
-        lst=utils.path_list(SHAREDMEM_PATH);
-        for fname in lst:
-            try:
-                if fname[0:7]=="stream_":
-                    if utils.path_exists(SHAREDMEM_PATH + utils.path_sep + fname):
-                        utils.path_remove(SHAREDMEM_PATH + utils.path_sep + fname)
-            except:
-                None
+    try:
+        if not utils.path_exists(SHAREDMEM_PATH):
+            utils.path_makedir(SHAREDMEM_PATH)
+        else:
+            #Elimina tutti i file
+            lst=utils.path_list(SHAREDMEM_PATH);
+            for fname in lst:
+                try:
+                    if fname[0:7]=="stream_":
+                        if utils.path_exists(SHAREDMEM_PATH + utils.path_sep + fname):
+                            utils.path_remove(SHAREDMEM_PATH + utils.path_sep + fname)
+                except:
+                    None
+    except Exception as e:
+        print "sharemem init error: " + str(e)
 
 def create_semlock(obj, cpid, tp, val, imax):
     sid=None
@@ -259,28 +263,25 @@ class Condition(multiprocessing.synchronize.Condition):
             self._semlock=None   
 
 class Stream():
-    
+        
     def __init__(self):
         self._semaphore = threading.Condition()
         self._binit=False
-        self._mmap=None
+        self._mapfile=None
     
     def _is_init(self):
         return self._binit
         
-    def create(self,size=2*512*1024,fixperm=None):
+    def create(self,fixperm=None):
         self._semaphore.acquire()
         try:
             if self._binit==True:
                 raise Exception("Shared file already initialized.")
             self._side=1
-            self._size=size
-            fname = sharedmem_manager.getStreamFile(self._size)
-            self._path=sharedmem_manager.getPath(fname)
-            if fixperm is not None:
-                fixperm(self._path)
+            self._mapfile = sharedmem_manager.createStream(fixperm)
+            self._size = self._mapfile.get_size()
             self._initialize()
-            return fname
+            return self._mapfile.get_name()
         finally:
             self._semaphore.release() 
         
@@ -290,10 +291,9 @@ class Stream():
             if self._binit==True:
                 raise Exception("Shared file already initialized.")
             self._side=2
-            self._path=sharedmem_manager.getPath(fname)
-            if not utils.path_exists(self._path):
-                raise Exception("Shared file not found.")
-            self._size=utils.path_size(self._path)
+            
+            self._mapfile = sharedmem_manager.openStream(fname)
+            self._size=self._mapfile.get_size()
             self._initialize()
         finally:
             self._semaphore.release() 
@@ -301,10 +301,10 @@ class Stream():
     def _get_state(self):
         self._semaphore.acquire()
         try:
-            self._mmap.seek(self._state_pos)
-            locstate = self._mmap.read(1)
-            self._mmap.seek(self._state_other_pos)
-            othstate = self._mmap.read(1)
+            self._mapfile.seek(self._state_pos)
+            locstate = self._mapfile.read(1)
+            self._mapfile.seek(self._state_other_pos)
+            othstate = self._mapfile.read(1)
             return (locstate,othstate)
         finally:
             self._semaphore.release()            
@@ -313,118 +313,121 @@ class Stream():
     def _set_other_state(self,v):
         self._semaphore.acquire()
         try:
-            self._mmap.seek(self._state_other_pos)
-            self._mmap.write(v)
+            self._mapfile.seek(self._state_other_pos)
+            self._mapfile.write(v)
         finally:
             self._semaphore.release()
 
     def _get_local_alive(self):
         self._semaphore.acquire()
         try:
-            self._mmap.seek(self._alive_pos)
-            return self._mmap.read(1)
+            self._mapfile.seek(self._alive_pos)
+            return self._mapfile.read(1)
         finally:
             self._semaphore.release()
     
     def _set_local_alive(self,v):
         self._semaphore.acquire()
         try:
-            self._mmap.seek(self._alive_pos)
-            self._mmap.write(v)
+            self._mapfile.seek(self._alive_pos)
+            self._mapfile.write(v)
         finally:
             self._semaphore.release()
 
     def _get_other_alive(self):
         self._semaphore.acquire()
         try:
-            self._mmap.seek(self._alive_other_pos)
-            return self._mmap.read(1)
+            self._mapfile.seek(self._alive_other_pos)
+            return self._mapfile.read(1)
         finally:
             self._semaphore.release()
             
     def _set_other_alive(self,v):
         self._semaphore.acquire()
         try:
-            self._mmap.seek(self._alive_other_pos)
-            self._mmap.write(v)
+            self._mapfile.seek(self._alive_other_pos)
+            self._mapfile.write(v)
         finally:
             self._semaphore.release()            
     
     def _get_pointer(self,pos):
         self._semaphore.acquire()
         try:
-            self._mmap.seek(pos)
-            return struct.unpack('!i', self._mmap.read(4))[0]
+            self._mapfile.seek(pos)
+            return struct.unpack('!i', self._mapfile.read(4))[0]
         finally:
             self._semaphore.release()
         
     def _initialize(self):
-        self._binit=True
-        self._terminate_time=0
-        self._terminate_retry=-1
-        self._side_size=(self._size-CONDITION_SIZE_BYTE)/2
-        self._condition_shared=None
-        self._condition_shared_pos=0
-        if self._side==1:
-            self._state_pos=CONDITION_SIZE_BYTE+0
-            self._alive_pos=CONDITION_SIZE_BYTE+1            
-            self._pid_pos=CONDITION_SIZE_BYTE+2
-            self._write_pnt_pos=CONDITION_SIZE_BYTE+6;
-            self._write_data_pos=CONDITION_SIZE_BYTE+14;
-            self._state_other_pos=CONDITION_SIZE_BYTE+self._side_size                        
-            self._alive_other_pos=CONDITION_SIZE_BYTE+self._side_size+1            
-            self._pid_other_pos=CONDITION_SIZE_BYTE+self._side_size+2
-            self._read_pnt_pos=CONDITION_SIZE_BYTE+self._side_size+10;
-            self._read_data_pos=CONDITION_SIZE_BYTE+self._side_size+14
-            self._write_limit=CONDITION_SIZE_BYTE+self._side_size
-            self._read_limit=self._size
-        elif self._side==2:
-            self._state_pos=CONDITION_SIZE_BYTE+self._side_size
-            self._alive_pos=CONDITION_SIZE_BYTE+self._side_size+1
-            self._pid_pos=CONDITION_SIZE_BYTE+self._side_size+2
-            self._write_pnt_pos=CONDITION_SIZE_BYTE+self._side_size+6
-            self._write_data_pos=CONDITION_SIZE_BYTE+self._side_size+14
-            self._state_other_pos=CONDITION_SIZE_BYTE+0
-            self._alive_other_pos=CONDITION_SIZE_BYTE+1
-            self._pid_other_pos=CONDITION_SIZE_BYTE+2
-            self._read_pnt_pos=CONDITION_SIZE_BYTE+10
-            self._read_data_pos=CONDITION_SIZE_BYTE+14
-            self._write_limit=self._size
-            self._read_limit=CONDITION_SIZE_BYTE+self._side_size
-        self._last_read_time=long(time.time() * 1000)
-        self._last_write_time=long(time.time() * 1000)
-        self._file=utils.file_open(self._path, "r+b")
-        self._mmap = mmap.mmap(self._file.fileno(), 0)
-        self._mmap.seek(0)
-        self._mmap.write(struct.pack("!qiqqiqqiqqiq", -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1))
-        if self._side==1:
-            self._mmap.seek(CONDITION_SIZE_BYTE)
-            self._mmap.write(struct.pack('!cciii','C','K',os.getpid(),0,0))            
-            self._mmap.seek(CONDITION_SIZE_BYTE+self._side_size)
-            self._mmap.write(struct.pack('!cciii','W','K',-1,0,0))
-            self._waitconn_tm=long(time.time() * 1000)
-        elif self._side==2:
-            self._mmap.seek(CONDITION_SIZE_BYTE+self._side_size)            
-            self._mmap.write(struct.pack('!cciii','C','K',os.getpid(),0,0))
-        sharedmem_manager.add(self);
+        try:
+            self._binit=True
+            self._terminate_time=0
+            self._terminate_retry=-1
+            self._side_size=(self._size-CONDITION_SIZE_BYTE)/2
+            self._condition_shared=None
+            self._condition_shared_pos=0
+            if self._side==1:
+                self._state_pos=CONDITION_SIZE_BYTE+0
+                self._alive_pos=CONDITION_SIZE_BYTE+1            
+                self._pid_pos=CONDITION_SIZE_BYTE+2
+                self._write_pnt_pos=CONDITION_SIZE_BYTE+6;
+                self._write_data_pos=CONDITION_SIZE_BYTE+14;
+                self._state_other_pos=CONDITION_SIZE_BYTE+self._side_size                        
+                self._alive_other_pos=CONDITION_SIZE_BYTE+self._side_size+1            
+                self._pid_other_pos=CONDITION_SIZE_BYTE+self._side_size+2
+                self._read_pnt_pos=CONDITION_SIZE_BYTE+self._side_size+10;
+                self._read_data_pos=CONDITION_SIZE_BYTE+self._side_size+14
+                self._write_limit=CONDITION_SIZE_BYTE+self._side_size
+                self._read_limit=self._size
+            elif self._side==2:
+                self._state_pos=CONDITION_SIZE_BYTE+self._side_size
+                self._alive_pos=CONDITION_SIZE_BYTE+self._side_size+1
+                self._pid_pos=CONDITION_SIZE_BYTE+self._side_size+2
+                self._write_pnt_pos=CONDITION_SIZE_BYTE+self._side_size+6
+                self._write_data_pos=CONDITION_SIZE_BYTE+self._side_size+14
+                self._state_other_pos=CONDITION_SIZE_BYTE+0
+                self._alive_other_pos=CONDITION_SIZE_BYTE+1
+                self._pid_other_pos=CONDITION_SIZE_BYTE+2
+                self._read_pnt_pos=CONDITION_SIZE_BYTE+10
+                self._read_data_pos=CONDITION_SIZE_BYTE+14
+                self._write_limit=self._size
+                self._read_limit=CONDITION_SIZE_BYTE+self._side_size
+            self._last_read_time=long(time.time() * 1000)
+            self._last_write_time=long(time.time() * 1000)        
+            self._mapfile.seek(0)
+            self._mapfile.write(struct.pack("!qiqqiqqiqqiq", -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1))
+            if self._side==1:
+                self._mapfile.seek(CONDITION_SIZE_BYTE)
+                self._mapfile.write(struct.pack('!cciii','C','K',os.getpid(),0,0))            
+                self._mapfile.seek(CONDITION_SIZE_BYTE+self._side_size)
+                self._mapfile.write(struct.pack('!cciii','W','K',-1,0,0))
+                self._waitconn_tm=long(time.time() * 1000)
+            elif self._side==2:
+                self._mapfile.seek(CONDITION_SIZE_BYTE+self._side_size)            
+                self._mapfile.write(struct.pack('!cciii','C','K',os.getpid(),0,0))
+        except Exception as ex:
+            self._mapfile.close()
+            self._mapfile.destroy()
+            raise ex
+        sharedmem_manager.add(self); 
         
     def _initlock(self):    
         while self._condition_shared is None:
             if self._side==1:
                 #LEGGE PID REMOTO PER CREARE LOCK
-                self._mmap.seek(self._pid_other_pos)
-                cpid=struct.unpack('!i', self._mmap.read(4))[0]
+                self._mapfile.seek(self._pid_other_pos)
+                cpid=struct.unpack('!i', self._mapfile.read(4))[0]
                 if cpid!=-1:                                                            
                     self._condition_shared=Condition()    
                     lp=self._condition_shared.create(cpid);
-                    self._mmap.seek(self._condition_shared_pos)
-                    self._mmap.write(struct.pack("!qiqqiqqiqqiq", lp[0][0], lp[0][1], lp[0][2], lp[1][0], lp[1][1], lp[1][2], lp[2][0], lp[2][1], lp[2][2], lp[3][0], lp[3][1], lp[3][2]))
+                    self._mapfile.seek(self._condition_shared_pos)
+                    self._mapfile.write(struct.pack("!qiqqiqqiqqiq", lp[0][0], lp[0][1], lp[0][2], lp[1][0], lp[1][1], lp[1][2], lp[2][0], lp[2][1], lp[2][2], lp[3][0], lp[3][1], lp[3][2]))
                     
             elif self._side==2:
                 #LEGGE LOCKID PER CONNETTESI AI LOCK
                 if self._condition_shared is None:
-                    self._mmap.seek(self._condition_shared_pos)
-                    applp=struct.unpack('!qiqqiqqiqqiq', self._mmap.read(80))
+                    self._mapfile.seek(self._condition_shared_pos)
+                    applp=struct.unpack('!qiqqiqqiqqiq', self._mapfile.read(80))
                     if applp[0]!=-1:
                         lp=[]
                         lp.append((applp[0],applp[1],applp[2]))
@@ -442,48 +445,43 @@ class Stream():
             self._binit=False            
             self._terminate_time = long(time.time() * 1000)
             self._terminate_retry=0
-            err=""
+            serr=""
             try:
-                self._mmap.seek(self._state_pos)
-                self._mmap.write('T')
-                self._mmap.close()
+                self._mapfile.seek(self._state_pos)
+                self._mapfile.write('T')
+                self._mapfile.close()                
             except Exception as e:
-                err+="Error map close: " + str(e) + "; ";
-            try:
-                self._file.close()
-            except Exception as e:
-                err+="Error shared file close: " + str(e) + ";"
+                serr+="Error shared file close: " + str(e) + ";"
             if self._condition_shared is not None:
                 self._condition_shared.destroy()
-            if (err!=""):
-                raise Exception(err)
+            if (serr!=""):
+                raise Exception(serr)
     
-    def _destroy_file(self):
+    def _destroy_mapfile(self):
         if self._side==1:
-            if self._terminate_retry>=0:
-                if utils.path_exists(self._path):
-                    apptm=long(time.time() * 1000)
-                    elp=apptm-self._terminate_time
-                    if elp>2000:
-                        try:
-                            self._terminate_retry+=1
-                            utils.path_remove(self._path)
-                        except Exception as e:
-                            if self._terminate_retry>=5:
-                                raise e
-                            return False
-                        return True
-                    else:
-                        if elp<0:
-                            self._terminate_time = long(time.time() * 1000)
-                        return False                    
+            if self._terminate_retry>=0:                
+                apptm=long(time.time() * 1000)
+                elp=apptm-self._terminate_time
+                if elp>2000:
+                    try:
+                        self._terminate_retry+=1
+                        self._mapfile.destroy()
+                    except Exception as e:
+                        if self._terminate_retry>=5:
+                            raise e
+                        return False
+                    return True
+                else:
+                    if elp<0:
+                        self._terminate_time = long(time.time() * 1000)
+                    return False                    
         return True
     
     def _close(self):
         if self._binit==True:
-            if self._mmap is not None:
-                self._mmap.seek(self._state_pos)
-                self._mmap.write('X')
+            if self._mapfile is not None:
+                self._mapfile.seek(self._state_pos)
+                self._mapfile.write('X')
                 
     def close(self):
         self._semaphore.acquire()
@@ -603,42 +601,42 @@ class Stream():
             try:
                 #Cursore write si trova dopo Cursore read
                 rpw=self._write_data_pos+pw
-                self._mmap.seek(rpw)
+                self._mapfile.seek(rpw)
                 if pw>=pr: 
                     if towrite<self._write_limit-rpw:
-                        utils.mmap_write(self._mmap,apps,dtpos,towrite)
+                        utils.mmap_write(self._mapfile,apps,dtpos,towrite)
                         pw+=towrite
                         dtpos+=towrite
                         towrite=0
                     else:
                         if pr>0:
                             appsz=self._write_limit-rpw
-                            utils.mmap_write(self._mmap,apps,dtpos,appsz)
+                            utils.mmap_write(self._mapfile,apps,dtpos,appsz)
                             pw=0
                         else:
                             appsz=self._write_limit-rpw-1
-                            utils.mmap_write(self._mmap,apps,dtpos,appsz)
+                            utils.mmap_write(self._mapfile,apps,dtpos,appsz)
                             pw+=appsz
                         dtpos+=appsz
                         towrite-=appsz
                 #Cursore write si trova prima Cursore read
                 rpw=self._write_data_pos+pw
-                self._mmap.seek(rpw)
+                self._mapfile.seek(rpw)
                 if pw<pr: 
                     if towrite<=pr-pw-1:
-                        utils.mmap_write(self._mmap,apps,dtpos,towrite)
+                        utils.mmap_write(self._mapfile,apps,dtpos,towrite)
                         pw+=towrite
                         dtpos+=towrite
                         towrite=0
                     else:
                         appsz=pr-pw-1
-                        utils.mmap_write(self._mmap,apps,dtpos,appsz)
+                        utils.mmap_write(self._mapfile,apps,dtpos,appsz)
                         pw=pr-1
                         dtpos+=appsz
                         towrite-=appsz
                 
-                self._mmap.seek(self._write_pnt_pos)
-                self._mmap.write(struct.pack('!i', pw))
+                self._mapfile.seek(self._write_pnt_pos)
+                self._mapfile.write(struct.pack('!i', pw))
             finally:
                 self._semaphore.release()
                 
@@ -687,8 +685,8 @@ class Stream():
                     appsz=maxbyte
                     bfullread=False
                 rpr=self._read_data_pos+pr
-                self._mmap.seek(rpr)
-                dtread.append_bytes(utils.mmap_read(self._mmap,appsz))
+                self._mapfile.seek(rpr)
+                dtread.append_bytes(utils.mmap_read(self._mapfile,appsz))
                 if bfullread:
                     pr=0
                 else:
@@ -702,15 +700,15 @@ class Stream():
                         appsz=maxbyte-bread
                         bfullread=False
                     rpr=self._read_data_pos+pr
-                    self._mmap.seek(rpr)
-                    dtread.append_bytes(utils.mmap_read(self._mmap,appsz))
+                    self._mapfile.seek(rpr)
+                    dtread.append_bytes(utils.mmap_read(self._mapfile,appsz))
                     if bfullread:
                         pr=pw
                     else:
                         pr+=appsz
             
-            self._mmap.seek(self._read_pnt_pos)
-            self._mmap.write(struct.pack('!i', pr))
+            self._mapfile.seek(self._read_pnt_pos)
+            self._mapfile.write(struct.pack('!i', pr))
         finally:
             self._semaphore.release()
         
@@ -886,8 +884,178 @@ class Property():
         
 
 
+class MapFile():
+    
+    _SIZE=2*512*1024
+    _memlistname=[]
+    
+    def __init__(self):
+        self._mmap=None
+        self.bcreate=False
+        self.bdestroy=True
+        
+    def _rndseq(self,cnt):
+        ar=[]
+        for x in range(cnt):
+            if x==0:
+                ar.append(random.choice(string.ascii_lowercase))
+            else:
+                ar.append(random.choice(string.ascii_lowercase + string.digits))            
+        return ''.join(ar)
+    
+    def _new_mem_name(self):
+        while True:
+            nm = "dwastr" + self._rndseq(20)
+            if nm not in MapFile._memlistname:
+                MapFile._memlistname.append(nm)
+                return nm
+                break
+    
+    def _create_mem(self, fixperm):
+        if not utils.is_windows():
+            if load_semaphore_lib():
+                cnt=5
+                while True:
+                    self.fname = self._new_mem_name()
+                    self.fd = _sharememmap["libbase"].sharedMemoryOpen(self.fname, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o666)                                        
+                    if self.fd!=-1:
+                        self.ftype="M"
+                        try:
+                            os.ftruncate(self.fd,MapFile._SIZE)
+                            stats=os.fstat(self.fd)
+                            if stats.st_size!=MapFile._SIZE:
+                                raise Exception("Invalid stat size.")
+                            self._prepare_map()
+                            self.bdestroy=False
+                            return                
+                            #print "create fd: " + str(self.fd) + " " + self.fname                
+                        except Exception as ex:
+                            os.close(self.fd)
+                            _sharememmap["libbase"].sharedMemoryUnlink(self.fname)
+                            raise ex
+                    else:                    
+                        cnt-=1
+                        if cnt==0:
+                            raise Exception("Invalid fd.")
+                        else:
+                            time.sleep(0.2)
+            else:
+                raise Exception("Library not loaded.")
+        else:   
+            self.fname = self._new_mem_name()
+            self.ftype="M"
+            self._prepare_map()
+            self.bdestroy=False
+            
+    def _create_disk(self, fixperm):
+        while True:
+            self.fname = "stream_" + self._rndseq(8)
+            self.fpath=SHAREDMEM_PATH + utils.path_sep + self.fname + ".shm"
+            if not utils.path_exists(self.fpath):
+                with utils.file_open(self.fpath, "wb") as f:
+                    f.write(" "*MapFile._SIZE)
+                if fixperm is not None:
+                    fixperm(self.fpath)
+                self.file=utils.file_open(self.fpath, "r+b")
+                self.ftype="F"
+                self._prepare_map()
+                self.bdestroy=False                
+                break
+    
+    def create(self,fixperm):
+        try:
+            self._create_mem(fixperm)
+        except:
+            self._create_disk(fixperm)
+        self.bcreate=True 
+              
+        
+    def open(self, name):
+        self.ftype=name[0]
+        self.fname=name[1:]        
+        if self.ftype=="F":
+            self.fpath=sharedmem_manager.getPath(self.fname)
+            if not utils.path_exists(self.fpath):
+                raise Exception("Shared file not found.")
+            self.file=utils.file_open(self.fpath, "r+b")           
+        elif self.ftype=="M":
+            if not utils.is_windows():
+                if load_semaphore_lib():
+                    self.fd = _sharememmap["libbase"].sharedMemoryOpen(self.fname, os.O_RDWR, 0o666)
+                    if self.fd!=-1:
+                        #print "open fd: " + str(self.fd) + " " + self.fname                
+                        stats=os.fstat(self.fd)
+                        if stats.st_size!=MapFile._SIZE:
+                            raise Exception("Invalid map size.")
+                    else:
+                        raise Exception("Invalid fd.")
+                else:
+                    raise Exception("Library not loaded.")            
+        self._prepare_map()                
+    
+    def _prepare_map(self):
+        if self.ftype=="F":
+            self._mmap=mmap.mmap(self.file.fileno(), 0)
+        elif self.ftype=="M":
+            if not utils.is_windows():
+                self._mmap=mmap.mmap(self.fd, MapFile._SIZE)
+            else:                
+                self._mmap=mmap.mmap(0, MapFile._SIZE, "Global\\" + self.fname)
+    
+    def seek(self, p):
+        self._mmap.seek(p)
+    
+    def write(self, dt):
+        self._mmap.write(dt)
+        
+    def read(self, sz):
+        return self._mmap.read(sz)
+    
+    def close(self):
+        serr=""
+        try:
+            if self._mmap is not None:
+                self._mmap.close()
+                self._mmap = None            
+        except Exception as e:
+            serr+="Error map close: " + str(e) + "; ";
+        
+        if self.ftype=="F":
+            if self.file is not None:
+                self.file.close()
+                self.file=None
+        elif self.ftype=="M":
+            if not utils.is_windows():
+                if self.fd is not None:
+                    os.close(self.fd)
+                    self.fd=None
+        if serr!="":
+            raise Exception(serr)
+    
+    def destroy(self):        
+        if not self.bdestroy:
+            self.bdestroy=True
+            if self.bcreate:
+                if self.ftype=="F":
+                    if utils.path_exists(self.fpath):
+                        utils.path_remove(self.fpath)            
+                elif self.ftype=="M":
+                    if not utils.is_windows():
+                        iret = _sharememmap["libbase"].sharedMemoryUnlink(self.fname)
+                        if iret!=0:                    
+                            raise Exception("sharedMemoryUnlink fail")
+                    else:
+                        MapFile._memlistname.remove(self.fname)
+                    
+    def get_name(self):
+        return self.ftype + self.fname
+    
+    def get_size(self):
+        return MapFile._SIZE
+    
+
 class Manager(threading.Thread):
-    def __init__(self,fname=None):
+    def __init__(self):
         threading.Thread.__init__(self,name="SharedMemManager")
         self.daemon=True
         
@@ -902,27 +1070,15 @@ class Manager(threading.Thread):
         finally:
             self._semaphore.release()
     
-    def getStreamFile(self,size):
-        fname=None
-        self._semaphore.acquire()
-        try:
-            while True:
-                ar=[]
-                for x in range(8):
-                    if x==0:
-                        ar.append(random.choice(string.ascii_lowercase))
-                    else:
-                        ar.append(random.choice(string.ascii_lowercase + string.digits))
-                fname = "stream_" + ''.join(ar)
-                fpath=SHAREDMEM_PATH + utils.path_sep + fname + ".shm"
-                if not utils.path_exists(fpath):
-                    with utils.file_open(fpath, "wb") as f:
-                        f.write(" "*size)
-                    break
-            
-        finally:
-            self._semaphore.release()    
-        return fname
+    def createStream(self,fixperm):
+        s = MapFile()
+        s.create(fixperm)
+        return s
+    
+    def openStream(self, fname):
+        s = MapFile()
+        s.open(fname)
+        return s        
     
     def getPath(self,name,path=None):
         if path is None:
@@ -960,7 +1116,7 @@ class Manager(threading.Thread):
                     newremfile = []
                     for sm in remfile:
                         try:
-                            if not sm._destroy_file():
+                            if not sm._destroy_mapfile():
                                 newremfile.append(sm)
                         except Exception as e:
                             print("SharedMem manager destroy file error: " + str(e))
