@@ -165,20 +165,25 @@ void ScreenCaptureNative::trimnl (char *s) {
 
 bool ScreenCaptureNative::initialize() {
 	//INIT MONITOR
+  	bterminate=false;
 	activeTTY=0;
 	envxauthority="";
 	envxwayland="";
 	envxdisplay="";
 	getMonitorCount();
+  	//std::thread td(&ScreenCaptureNative::detectKeyboardChanged, this);
+    //td.detach();
 	return true;
 }
 
 void ScreenCaptureNative::terminate() {
+  	bterminate=true;
 	for(vector<ScreenShotInfo>::size_type i = 0; i < screenShotInfo.size(); i++) {
 		termScreenShotInfo(&screenShotInfo[i]);
 	}
 	screenShotInfo.clear();
 	monitorsInfo.clear();
+	clearCustomKeyUnicode();
 	if (xdpy != NULL) {
 		XCloseDisplay(xdpy);
 		xdpy = NULL;
@@ -215,12 +220,7 @@ bool ScreenCaptureNative::makeDirs(std::string path){
 
 
 bool ScreenCaptureNative::existsFile(std::string filename) {
-	struct stat   buffer;
-    if (stat (filename.c_str(), &buffer) == 0){
-    	return true;
-    }else{
-    	return false;
-    }
+  	return ( access( filename.c_str(), F_OK ) != -1 );
 }
 
 long ScreenCaptureNative::getActiveTTY(){
@@ -416,48 +416,58 @@ bool ScreenCaptureNative::setXEnvirionment(long actty){
 	}
 
 	/*
-	printf("tty %d \n",actty);
-	printf("appxauthority %s \n",appxauthority.c_str());
-	printf("appxwayland %s \n",appxwayland.c_str());
-	printf("appxdisplay %s \n",appxdisplay.c_str());
-	printf("cmdxauthority %s \n",cmdxauthority.c_str());
-	printf("cmdxdisplay %s \n",cmdxdisplay.c_str());
-	printf("detectedxdisplay %s \n",detectedxdisplay.c_str());
+	dwdbg->print("tty %d",actty);
+	dwdbg->print("appxauthority %s",appxauthority.c_str());
+	dwdbg->print("appxwayland %s",appxwayland.c_str());
+	dwdbg->print("appxdisplay %s",appxdisplay.c_str());
+	dwdbg->print("cmdxauthority %s",cmdxauthority.c_str());
+	dwdbg->print("cmdxdisplay %s",cmdxdisplay.c_str());
+  	dwdbg->print("envxauthority %s",envxauthority.c_str());
+	dwdbg->print("envxdisplay %s",envxdisplay.c_str());
+	dwdbg->print("detectedxdisplay %s",detectedxdisplay.c_str());
 	*/
 
 	//Verifica Differenze
 	if ((appxauthority!="") || (appxwayland!="")){
 		if (envxauthority!=appxauthority){
 			envxauthority=appxauthority;
+			//dwdbg->print("setXEnvirionment changed: envxauthority");
 			bret=true;
 		}
 		if (envxwayland!=appxwayland){
 			envxwayland=appxwayland;
+            //dwdbg->print("setXEnvirionment changed: envxwayland");
 			bret=true;
 		}
 		if (envxdisplay!=appxdisplay){
 			envxdisplay=appxdisplay;
+            //dwdbg->print("setXEnvirionment changed: envxdisplay1");
 			bret=true;
 		}
 	}else{
 		if ((cmdxauthority!="") && (cmdxdisplay!="")){
 			if ((envxauthority!=cmdxauthority) || (envxdisplay!=cmdxdisplay)){
 				//Se non esiste il file xauthority lo crea
-				if (!existsFile(cmdxauthority)){
-					makeDirs(cmdxauthority.substr(0, cmdxauthority.find_last_of('/')));
+				if (existsFile(cmdxauthority)){
+                  	bret=true;
+                }else{
+                  	makeDirs(cmdxauthority.substr(0, cmdxauthority.find_last_of('/')));
 					int fdauth = open(cmdxauthority.c_str(), O_RDWR|O_CREAT, 0600);
 					if (fdauth != -1) {
 						close(fdauth);
-					}else{
-						cmdxauthority="";
-					}
+                        bret=true;
+                    }
 				}
-				envxauthority=cmdxauthority;
-				envxdisplay=cmdxdisplay;
-				bret=true;
+                if (bret==true){
+                    envxauthority=cmdxauthority;
+                    envxdisplay=cmdxdisplay;
+                    dwdbg->print("setXEnvirionment changed: envxauthority and envxdisplay");
+                    bret=true;
+                }
 			}
 		}else if (envxdisplay!=detectedxdisplay){
 			envxdisplay=detectedxdisplay;
+            //dwdbg->print("setXEnvirionment changed: envxdisplay2");
 			bret=true;
 		}
 	}
@@ -489,9 +499,35 @@ bool ScreenCaptureNative::setXEnvirionment(long actty){
 	return bret;
 }
 
+
+bool ScreenCaptureNative::isKeyboardChanged(){
+  	bool bret=false;
+  	if (xdpy != NULL) {
+      	XEvent event;
+        while (XPending(xdpy)){
+            XNextEvent(xdpy, &event);
+            if (event.type == MappingNotify) {
+                XMappingEvent *e = (XMappingEvent *) &event;
+                if (e->request == MappingKeyboard) {
+                    //dwdbg->print("\n\n#################################################");
+                    //dwdbg->print("The keyboard mapping was changed!");
+                    //dwdbg->print("\n\n#################################################");
+                    if (skipKeyboardChangedCounter.getCounter()>=1000){
+                    	bret=true;
+                    }
+                }                
+            }
+       }
+    }
+  	return bret;
+}
+
 int ScreenCaptureNative::getMonitorCount() {
-	int elapsed=monitorsCounter.getCounter();
+  	int elapsed=monitorsCounter.getCounter();
 	if ((firstmonitorscheck) || (elapsed>=MONITORS_INTERVAL)){
+     
+      	clearCustomKeyUnicode();
+      
 		firstmonitorscheck=false;
 
 		monitorsInfo.clear();
@@ -513,7 +549,7 @@ int ScreenCaptureNative::getMonitorCount() {
 		changedenvs=setXEnvirionment(activeTTY);
 
 		if ((xdpy == NULL) || (changedactty) || (changedenvs)){
-			for(vector<ScreenShotInfo>::size_type i = 0; i < screenShotInfo.size(); i++) {
+          	for(vector<ScreenShotInfo>::size_type i = 0; i < screenShotInfo.size(); i++) {
 				termScreenShotInfo(&screenShotInfo[i]);
 			}
 			screenShotInfo.clear();
@@ -522,6 +558,10 @@ int ScreenCaptureNative::getMonitorCount() {
 				unloadKeyMap();
 			}
 			if ((xdpy = XOpenDisplay(NULL)) != NULL) {
+              	
+              	//for XNextEvent
+              	XKeysymToKeycode(xdpy, XK_F1);
+              
 				root = XDefaultRootWindow(xdpy);
 				screen = XScreenOfDisplay(xdpy, 0);
 				visual = XDefaultVisualOfScreen(screen);
@@ -604,7 +644,13 @@ int ScreenCaptureNative::getMonitorCount() {
 			i--;
 		}
 		monitorsCounter.reset();
+      
 	}
+    //Verifica se la tastiera è cambiata 
+  	if (isKeyboardChanged()){
+      	unloadKeyMap();
+      	loadKeyMap();
+    }
 	if (monitorsInfo.size()<=1){ //Non trovato nessun monitor solo un monitor
 		return monitorsInfo.size();
 	}else{
@@ -725,7 +771,7 @@ long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTUR
 
 
 	if ((ii->shotID==0) || (ii->intervallCounter.getCounter()>=distanceFrameMs)) {
-		ii->intervallCounter.reset();
+		ii->intervallCounter.reset();        
 		XShmGetImage(xdpy, root, ii->image, x, y, AllPlanes);
 		/*
 		destroyImage();
@@ -734,6 +780,7 @@ long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTUR
 	}
 	capimage->data = (unsigned char*)ii->image->data;
 	capimage->bpp = ii->image->bits_per_pixel;
+	capimage->bpr = ii->image->bytes_per_line;
 	capimage->redmask=ii->image->red_mask;
 	capimage->greenmask=ii->image->green_mask;
 	capimage->bluemask=ii->image->blue_mask;
@@ -788,29 +835,29 @@ bool ScreenCaptureNative::getActiveWinPos(long* id, int* info){
 }
 
 void ScreenCaptureNative::loadKeyMap() {
+  	kccustom=0;
+  	kccustominit=false;
 	XkbDescPtr xkb = XkbGetMap(xdpy, XkbAllComponentsMask, XkbUseCoreKbd); //XkbAllClientInfoMask
 	XkbClientMapPtr cm = xkb->map;
+	//dwdbg->print("###################################################");
+	//dwdbg->print("###################################################");
+	//dwdbg->print("###################################################");  
 	for (int i=xkb->min_key_code;i<=xkb->max_key_code;i++){
 		int oft=cm->key_sym_map[i].offset;
-		if (cm->key_sym_map[i].group_info==0){
-			KEYMAP* keyMap = new KEYMAP[4];
-			for (int i=0;i<max_grp;i++){
-				keyMap[i].unicode=0;
-				keyMap[i].sym=NoSymbol;
-				keyMap[i].code=i;
-				keyMap[i].modifier=0;
-			}
-			arNewUnicodeMap.push_back(keyMap);
+		if (cm->key_sym_map[i].group_info==0){			
+            //dwdbg->print("%d - Not defined1",i);
+          	kccustom=i;			
 		}else{
 			for (int g=0;g<=cm->key_sym_map[i].group_info-1;g++){
 				if (g<max_grp){
 					int ig=cm->key_sym_map[i].kt_index[g];
 					//KEYSYM
 					for (int l=0;l<=cm->types[ig].num_levels-1;l++){
-						KeySym ks = xkb->map->syms[oft];
+						KeySym ks = xkb->map->syms[oft];						
 						if (ks!=NoSymbol){
 							long uc = keysym2ucs(ks);
-							if (uc!=-1){
+							if (uc!=-1){						
+                             	//dwdbg->print("%d - g: %d - l: %d - KeySym: %04x - Unicode: %04x",i,g,l,ks,uc);
 								//Se non esiste le crea
 								map<int,KEYMAP*>::iterator itmap = hmUnicodeMap.find(uc);
 								KEYMAP* keyMap;
@@ -838,15 +885,26 @@ void ScreenCaptureNative::loadKeyMap() {
 										}
 									}
 								}
-							}
-
-						}
+							}else{
+                            	//dwdbg->print("%d - g: %d - l: %d - KeySym: %04x",i,g,l,ks);
+                            }
+						}else{
+                          	if ((cm->key_sym_map[i].group_info==1) && (cm->types[ig].num_levels==1)){
+                            	//dwdbg->print("%d - Not defined2",i);
+                              	kccustom=i;
+                            }else{
+                        		//dwdbg->print("%d - g: %d - l: %d - KeySym: NoSymbol",i,g,l);
+                            }
+                        }
 						oft++;
 					}
 				}
 			}
 		}
 	}
+	//dwdbg->print("###################################################");
+	//dwdbg->print("###################################################");
+	//dwdbg->print("###################################################");
 	XkbFreeClientMap(xkb, XkbAllComponentsMask, true);
 }
 
@@ -855,10 +913,7 @@ void ScreenCaptureNative::unloadKeyMap() {
 		delete [] it->second;
 	}
 	hmUnicodeMap.clear();
-	for (std::vector<KEYMAP*>::iterator it = arNewUnicodeMap.begin() ; it != arNewUnicodeMap.end(); ++it){
-		delete [] *it;
-	}
-	arNewUnicodeMap.clear();
+  	kccustom=0; 	
 }
 
 KeySym ScreenCaptureNative::getKeySym(const char* key){
@@ -940,25 +995,46 @@ KeySym ScreenCaptureNative::getKeySym(const char* key){
 	return 0;
 }
 
-KeyCode ScreenCaptureNative::addKeyUnicode(int uc) {
-	XkbDescPtr xkb = XkbGetMap(xdpy, XkbAllComponentsMask, XkbUseCoreKbd);
-	KeySym sym=ucs2keysym(uc);
-	if (sym!=NoSymbol){
-		KeyCode kc=247;
-		int* ari=new int[1];
-		ari[0]=0;
-		XkbChangeTypesOfKey(xkb,kc,1,XkbGroup1Mask,ari,NULL);
-		delete [] ari;
-		KeySym* appks = XkbResizeKeySyms(xkb,kc,1);
-		appks[0]=sym;
-		xkb->device_spec=XkbUseCoreKbd;
-		XkbMapChangesRec changes;
-		changes.changed = XkbKeySymsMask;
-		changes.first_key_sym = kc;
-		changes.num_key_syms = 1;
-		XkbChangeMap(xdpy, xkb, &changes);
-		return kc;
-	}
+void ScreenCaptureNative::clearCustomKeyUnicode(){
+  	if ((kccustom!=0) && (kccustominit==true)){
+  		XkbDescPtr xkb = XkbGetMap(xdpy, XkbAllComponentsMask, XkbUseCoreKbd);
+        KeySym* appks = XkbResizeKeySyms(xkb,kccustom,1);
+        appks[0]=NoSymbol;
+        xkb->device_spec=XkbUseCoreKbd;
+        XkbMapChangesRec changes;
+        changes.changed = XkbKeySymsMask;
+        changes.first_key_sym = kccustom;
+        changes.num_key_syms = 1;
+        XkbChangeMap(xdpy, xkb, &changes);
+        XkbFreeClientMap(xkb, XkbAllComponentsMask, true);      	
+      	kccustominit=false;
+      	skipKeyboardChangedCounter.reset();
+    }
+}
+
+KeyCode ScreenCaptureNative::createCustomKeyUnicode(int uc) {
+  	if (kccustom!=0){
+        KeySym sym=ucs2keysym(uc);
+        if (sym!=NoSymbol){
+            XkbDescPtr xkb = XkbGetMap(xdpy, XkbAllComponentsMask, XkbUseCoreKbd);
+            int* ari=new int[1];
+            ari[0]=0;
+            XkbChangeTypesOfKey(xkb,kccustom,1,XkbGroup1Mask,ari,NULL);
+            delete [] ari;
+            KeySym* appks = XkbResizeKeySyms(xkb,kccustom,1);
+            appks[0]=sym;
+            xkb->device_spec=XkbUseCoreKbd;
+            XkbMapChangesRec changes;
+            changes.changed = XkbKeySymsMask;
+            changes.first_key_sym = kccustom;
+            changes.num_key_syms = 1;
+            XkbChangeMap(xdpy, xkb, &changes);
+            XkbFreeClientMap(xkb, XkbAllComponentsMask, true);
+            kccustominit=true;
+          	skipKeyboardChangedCounter.reset();
+            return kccustom;
+        }
+    }
 	return 0;
 }
 
@@ -997,7 +1073,7 @@ void ScreenCaptureNative::ctrlaltshift(bool ctrl, bool alt, bool shift){
 
 void ScreenCaptureNative::inputKeyboard(const char* type, const char* key, bool ctrl, bool alt, bool shift, bool command){
 	if (xdpy != NULL) {
-		if (strcmp(type,"CHAR")==0){
+		if (strcmp(type,"CHAR")==0){          	
 			int uc = atoi(key);
 			//Legge lo stato della tastiera
 			XkbStateRec kbstate;
@@ -1024,35 +1100,36 @@ void ScreenCaptureNative::inputKeyboard(const char* type, const char* key, bool 
 						}
 					}
 				}
-			}else{
-				kc=addKeyUnicode(uc);
+			}
+          	if (kc==0){
+              	kc=createCustomKeyUnicode(uc);
+              	md=0;
+                curg=0;
 			}
 			//Simula il tasto
 			if (kc!=0){
-
-				//Cambia tastiera se necessario
+				//Cambia gruppo
 				if (curg!=kbstate.group){
 					XkbLockGroup(xdpy, XkbUseCoreKbd, curg);
-					//VERIFICARE SE NECESSARIO XkbLatchGroup
-					//XkbLatchGroup(xdpy, XkbUseCoreKbd, curg);
 				}
 
 				//Imposta modifiers
 				if (md!=kbstate.locked_mods){
 					XkbLockModifiers(xdpy,XkbUseCoreKbd,255,md);
-					//VERIFICARE SE NECESSARIO XkbLatchModifiers
-					//XkbLatchModifiers(xdpy, XkbUseCoreKbd, 255, md);
 				}
 
 				XTestFakeKeyEvent(xdpy, kc, True, CurrentTime);
 				XTestFakeKeyEvent(xdpy, kc, False, CurrentTime);
-
+				
+              	//Ripristina gruppo
+              	if (curg!=kbstate.group){
+					XkbLockGroup(xdpy, XkbUseCoreKbd, kbstate.group);
+				}
+              	
 				//Ripristina modifiers
 				if (md!=kbstate.locked_mods){
 					XkbLockModifiers(xdpy,XkbUseCoreKbd,255,kbstate.locked_mods);
-					//VERIFICARE SE NECESSARIO XkbLatchModifiers
-					//XkbLatchModifiers(xdpy, XkbUseCoreKbd, 255, kbstate.locked_mods);
-				}
+				}              
 				XFlush(xdpy);
 			}
 		}else if (strcmp(type,"KEY")==0){
@@ -1071,39 +1148,6 @@ void ScreenCaptureNative::inputKeyboard(const char* type, const char* key, bool 
 
 		}
 	}
-
-	/*if (xdpy != NULL) {
-		KeySym ks = getKeySym(key);
-		if (ks!=0){
-			KeyCode kc = XKeysymToKeycode(xdpy, ks);
-			XTestFakeKeyEvent(xdpy, kc, True, CurrentTime);
-			XTestFakeKeyEvent(xdpy, kc, False, CurrentTime);
-			XFlush(xdpy);
-
-			XSync(xdpy, False);
-		}
-	}
-	//void ScreenCaptureNative::inputKeyboardChar(int uc) {
-	char s[5];
-	sprintf(s, "U%x", uc);
-	KeySym sym  = XStringToKeysym(s);
-	if (lastuc!=uc){
-		int min, max, numcodes;
-		KeySym *keysym;
-		XDisplayKeycodes(xdpy,&min,&max);
-		keysym = XGetKeyboardMapping(xdpy,min,max-min+1,&numcodes);
-		keysym[(max-min-1)*numcodes]=sym;
-		XChangeKeyboardMapping(xdpy,min,numcodes,keysym,(max-min));
-		XFree(keysym);
-		//XFlush(xdpy);
-		lastuc=uc;
-	}
-	KeyCode kc = XKeysymToKeycode(xdpy,sym);
-	XTestFakeKeyEvent(xdpy, kc, True, CurrentTime);
-	XTestFakeKeyEvent(xdpy, kc, False, CurrentTime);
-	XFlush(xdpy);
-
-	XSync(xdpy, False);*/
 }
 
 void ScreenCaptureNative::mouseMove(int x,int y){

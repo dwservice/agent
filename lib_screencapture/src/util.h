@@ -21,6 +21,7 @@ typedef struct {
 	unsigned char* data;
 	int bpp;
 	int bpc;
+	int bpr;
 	int redmask;
 	int greenmask;
 	int bluemask;

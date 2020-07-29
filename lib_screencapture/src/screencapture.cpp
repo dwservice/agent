@@ -416,6 +416,7 @@ void ScreenCapture::differenceFrameTJPEG(SESSION &ses, CAPTURE_IMAGE &capimage,C
 			drcur.x2=-1;
 			drcur.y2=-1;
 		}
+		inew=y*capimage.bpr;
 		for (int x=0;x<ses.shotw;x++){
 			getRGB(capimage, inew, rgb);
 			if ((firstdata==true) || (rgb.red!=ses.data[ip]) || (rgb.green!=ses.data[ip+1]) || (rgb.blue!=ses.data[ip+2])){
@@ -445,6 +446,7 @@ void ScreenCapture::differenceFrameTJPEG(SESSION &ses, CAPTURE_IMAGE &capimage,C
 			inew+=capimage.bpc;
 			ip+=3;
 		}
+
 	}
 	//Close block
 	if (drcur.y2!=-1){
@@ -691,7 +693,7 @@ void ScreenCapture::difference(int id, int typeFrame, int quality, CallbackDiffe
 		int p=0;
 		p+=shortToArray(diffBuffer,p,10);
 		p+=shortToArray(diffBuffer,p,ses.monitorCount);
-		dwdbg->print("ScreenCapture::tokenMonitorCount");
+		dwdbg->print("ScreenCapture::tokenMonitorCount. count: %i",ses.monitorCount);
 		cbdiff(sz,diffBuffer);
 	}
 	if (mc>0){
@@ -705,7 +707,7 @@ void ScreenCapture::difference(int id, int typeFrame, int quality, CallbackDiffe
 			CAPTURE_IMAGE capimg;
 			dwdbg->print("ScreenCapture::captureScreen#Start");
 			long shotID = captureNative.captureScreen(ses.monitor, dFMs, &capimg);
-			dwdbg->print("ScreenCapture::captureScreen#End. shotID:",shotID);
+			dwdbg->print("ScreenCapture::captureScreen#End. shotID: %ld",shotID);
 			if (shotID==-1) {
 				if (ses.screenLocked == false) {
 					ses.screenLocked = true;

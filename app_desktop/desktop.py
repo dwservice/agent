@@ -1051,14 +1051,14 @@ class CaptureProcess():
             if self._get_osmodule().sas():
                 bok = False
         if bok:
-            apps=u"KEYBOARD:"+str(sid)+";"+str(tp)+";"+str(code)+";"+str(ctrl)+";"+str(alt)+";"+str(shift)+";"+str(cmdkey)
+            apps=u"KEYBOARD:"+unicode(sid)+u";"+ unicode(tp) +u";"+unicode(code)+u";"+unicode(ctrl)+u";"+unicode(alt)+u";"+unicode(shift)+u";"+unicode(cmdkey)
             #print(apps)
             self._request_async(apps)
         
     
     def mouse(self, dm, x, y , btn, whl, ctrl, alt, shift, cmdkey) :
         sid=self.get_id(dm)
-        apps=u"MOUSE:"+str(sid)+";"+str(x)+";"+str(y)+";"+str(btn)+";"+str(whl)+";"+str(ctrl)+";"+str(alt)+";"+str(shift)+";"+str(cmdkey)
+        apps=u"MOUSE:"+unicode(sid)+u";"+unicode(x)+u";"+unicode(y)+u";"+unicode(btn)+u";"+unicode(whl)+u";"+unicode(ctrl)+u";"+unicode(alt)+u";"+unicode(shift)+u";"+unicode(cmdkey)
         #print(apps)
         self._request_async(apps)
     
@@ -1237,6 +1237,5 @@ class CaptureProcess():
         for appid in listids.keys():
             self._get_osmodule().term(appid)
         self._debug_print("Term capture process.")
-
 
 

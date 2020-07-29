@@ -133,15 +133,6 @@ BOOL CALLBACK ScreenCaptureNative::monitorEnumProc(HMONITOR hMonitor,HDC hdcMoni
 	mi.y=lprcMonitor->top;
 	mi.w=lprcMonitor->right-lprcMonitor->left;
 	mi.h=lprcMonitor->bottom-lprcMonitor->top;
-
-	//FIX RISOLUZIONI SIMILE A 1366x768
-	if (((float)mi.w/(float)8)!=(mi.w/8)){
-		mi.w=(int)((int)((float)mi.w/(float)8)+(float)1) * 8;
-	}
-	//if (((float)mi.h/(float)8)!=(mi.h/8)){
-	//   mi.h=(int)((int)((float)mi.h/(float)8)+(float)1) * 8;
-	//}
-
 	monitorsInfo.push_back(mi);
 	return TRUE;
 }
@@ -157,15 +148,6 @@ int ScreenCaptureNative::getMonitorCount(){
 		mi.y=GetSystemMetrics(SM_YVIRTUALSCREEN);
 		mi.w=GetSystemMetrics(SM_CXVIRTUALSCREEN);
 		mi.h=GetSystemMetrics(SM_CYVIRTUALSCREEN);
-
-		//FIX RISOLUZIONI SIMILE A 1366x768
-		if (((float)mi.w/(float)8)!=(mi.w/8)){
-			mi.w=(int)((int)((float)mi.w/(float)8)+(float)1) * 8;
-		}
-		//if (((float)mi.h/(float)8)!=(mi.h/8)){
-		//   mi.h=(int)((int)((float)mi.h/(float)8)+(float)1) * 8;
-		//}
-
 		monitorsInfo.push_back(mi);
 		HDC hdc = GetDC(NULL);
 		EnumDisplayMonitors(hdc, 0, ScreenCaptureNativeMonitorEnumProc, (LPARAM)this);
@@ -441,6 +423,13 @@ void ScreenCaptureNative::terminate() {
 void ScreenCaptureNative::newScreenShotInfo(ScreenShotInfo* ii, int w, int h) {
 	ii->w = w;
 	ii->h = h;
+	ii->bpp = 24;
+	ii->bpc = 3;
+	ii->bpr = w*3;
+	if (((float)w/(float)8)!=(w/8)){
+		int appw = (int)((int)((float)w/(float)8)+(float)1) * 8;
+		ii->bpr = ii->bpr + (appw-w);
+	}
 	ii->data = NULL;
 	ii->shotID=-1;
 	ii->intervallCounter.reset();
@@ -465,7 +454,7 @@ void ScreenCaptureNative::initScreenShotInfo(ScreenShotInfo* ii) {
 	}*/
 	ZeroMemory(&ii->bitmapInfo, sizeof(BITMAPINFO));
 	ii->bitmapInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-	ii->bitmapInfo.bmiHeader.biBitCount = 24;
+	ii->bitmapInfo.bmiHeader.biBitCount = ii->bpp;
 	ii->bitmapInfo.bmiHeader.biCompression = BI_RGB;
 	ii->bitmapInfo.bmiHeader.biPlanes = 1;
 	ii->bitmapInfo.bmiHeader.biWidth = ii->w;
@@ -516,375 +505,6 @@ BOOL CALLBACK checkLayered(HWND hWnd, LPARAM lParam) {
 	}
 	return TRUE;
 }
-
-
-/*
-bool ScreenCaptureNative::captureCursor(int monitor, int* info, long& id, unsigned char** rgbdata) {
-	int cursorVis=1;
-	CURSORINFO appCursorInfo;
-	appCursorInfo.cbSize = sizeof(CURSORINFO);
-	if (GetCursorInfo(&appCursorInfo)){
-		if (appCursorInfo.flags!=0){
-			cursorVis=1;
-			cursorX=appCursorInfo.ptScreenPos.x;
-			cursorY=appCursorInfo.ptScreenPos.y;
-			if ((appCursorInfo.hCursor!=cursorHandle) || (id==-1)){
-				cursorHandle=appCursorInfo.hCursor;
-				ICONINFO info;
-				if (GetIconInfo(cursorHandle, &info)){
-					BITMAP bmMask;
-					GetObject(info.hbmMask, sizeof(BITMAP), (LPVOID)&bmMask);
-					if (bmMask.bmPlanes != 1 || bmMask.bmBitsPixel != 1) {
-						DeleteObject(info.hbmMask);
-					}else{
-						bool bok = false;
-						//unsigned char* dataNorm = NULL;
-						//unsigned char* dataMask = NULL;
-						bool isColorShape = (info.hbmColor != NULL);
-						int w = bmMask.bmWidth;
-						int h = isColorShape ? bmMask.bmHeight : bmMask.bmHeight/2;
-						//int nbit = bmMask.bmWidthBytes;
-
-						//IMAGE
-						HDC hdstImage = CreateCompatibleDC(NULL);
-						BITMAPINFO biImage;
-						ZeroMemory(&biImage, sizeof(BITMAPINFO));
-						biImage.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-						biImage.bmiHeader.biBitCount = 32;
-						biImage.bmiHeader.biCompression = BI_RGB;
-						biImage.bmiHeader.biPlanes = 1;
-						biImage.bmiHeader.biWidth = w;
-						biImage.bmiHeader.biHeight = -h;
-						biImage.bmiHeader.biSizeImage = 0;
-						biImage.bmiHeader.biXPelsPerMeter = 0;
-						biImage.bmiHeader.biYPelsPerMeter = 0;
-						biImage.bmiHeader.biClrUsed = 0;
-						biImage.bmiHeader.biClrImportant = 0;
-						void *bufferImage;
-						HANDLE hbmDIBImage = CreateDIBSection(hdstImage, (BITMAPINFO*)&biImage, DIB_RGB_COLORS, &bufferImage, NULL, 0);
-						HANDLE hbmDIBOLDImage = (HBITMAP)SelectObject(hdstImage, hbmDIBImage);
-						unsigned char* appDataImage = (unsigned char*)bufferImage;
-
-						//MASK
-						HDC hdstMask = CreateCompatibleDC(NULL);
-						BITMAPINFO biMask;
-						ZeroMemory(&biMask, sizeof(BITMAPINFO));
-						biMask.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-						biMask.bmiHeader.biBitCount = 32;
-						biMask.bmiHeader.biCompression = BI_RGB;
-						biMask.bmiHeader.biPlanes = 1;
-						biMask.bmiHeader.biWidth = w;
-						biMask.bmiHeader.biHeight = -h;
-						biMask.bmiHeader.biSizeImage = 0;
-						biMask.bmiHeader.biXPelsPerMeter = 0;
-						biMask.bmiHeader.biYPelsPerMeter = 0;
-						biMask.bmiHeader.biClrUsed = 0;
-						biMask.bmiHeader.biClrImportant = 0;
-						void *bufferMask;
-						HANDLE hbmDIBMask = CreateDIBSection(hdstMask, (BITMAPINFO*)&biMask, DIB_RGB_COLORS, &bufferMask, NULL, 0);
-						HANDLE hbmDIBOLDMask = (HBITMAP)SelectObject(hdstMask, hbmDIBMask);
-						unsigned char* appDataMask = (unsigned char*)bufferMask;
-
-
-						//NORMAL
-						HDC hdstNormal = CreateCompatibleDC(NULL);
-						BITMAPINFO biNormal;
-						ZeroMemory(&biNormal, sizeof(BITMAPINFO));
-						biNormal.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-						biNormal.bmiHeader.biBitCount = 32;
-						biNormal.bmiHeader.biCompression = BI_RGB;
-						biNormal.bmiHeader.biPlanes = 1;
-						biNormal.bmiHeader.biWidth = w;
-						biNormal.bmiHeader.biHeight = -h;
-						biNormal.bmiHeader.biSizeImage = 0;
-						biNormal.bmiHeader.biXPelsPerMeter = 0;
-						biNormal.bmiHeader.biYPelsPerMeter = 0;
-						biNormal.bmiHeader.biClrUsed = 0;
-						biNormal.bmiHeader.biClrImportant = 0;
-						void *bufferNormal;
-						HANDLE hbmDIBNormal = CreateDIBSection(hdstNormal, (BITMAPINFO*)&biNormal, DIB_RGB_COLORS, &bufferNormal, NULL, 0);
-						HANDLE hbmDIBOLDNormal = (HBITMAP)SelectObject(hdstNormal, hbmDIBNormal);
-						unsigned char* appDataNormal = (unsigned char*)bufferNormal;
-
-
-
-						DrawIconEx(hdstImage, 0, 0, (HICON)cursorHandle, 0, 0, 0, NULL, DI_IMAGE);
-						DrawIconEx(hdstMask, 0, 0, (HICON)cursorHandle, 0, 0, 0, NULL, DI_MASK);
-						DrawIconEx(hdstNormal, 0, 0, (HICON)cursorHandle, 0, 0, 0, NULL, DI_NORMAL);
-
-
-						bool cursorCheckMask=true;
-						int isck = 0;
-						for (int y=0; y<h; y++) {
-							for (int x=0; x<w; x++) {
-								if ((appDataImage[isck + 3])>0) {
-									cursorCheckMask = false;
-									break;
-								}
-								isck += 4;
-							}
-						}
-
-
-						unsigned char* cursorData = NULL;
-						cursorData = (unsigned char*)malloc(((w*3) * (h*3)) * 4);
-
-						int is = 0;
-						int id = 0;
-						for (int y=0; y<h; y++) {
-							int appis=is;
-							for (int x=0; x<w; x++) {
-								unsigned char r;
-								unsigned char g;
-								unsigned char b;
-								unsigned char a;
-
-								if (cursorCheckMask){
-									r = appDataImage[is + 2];
-									g = appDataImage[is + 1];
-									b = appDataImage[is];
-									if ((appDataMask[is + 2]==0) && (appDataMask[is + 1]==0) && (appDataMask[is]==0)){
-										a = 255;
-									}else{
-										if ((appDataMask[is + 2]==appDataImage[is + 2]) && (appDataMask[is + 1]==appDataImage[is + 1]) && (appDataMask[is]==appDataImage[is])){
-											r = 128;
-											g = 128;
-											b = 128;
-											a = 255;
-										}else{
-											a = 0;
-										}
-									}
-								}else{
-									r = appDataImage[is + 2];
-									g = appDataImage[is + 1];
-									b = appDataImage[is];
-									a = appDataImage[is + 3];
-								}
-								cursorData[id] = r;
-								cursorData[id + 1] = g;
-								cursorData[id + 2] = b;
-								cursorData[id + 3] = a;
-								id += 4;
-								is += 4;
-							}
-
-							is=appis;
-							for (int x=0; x<w; x++) {
-								cursorData[id] = appDataMask[is + 3];
-								cursorData[id + 1] = appDataMask[is + 3];
-								cursorData[id + 2] = appDataMask[is + 3];
-								cursorData[id + 3] = 0;
-								id += 4;
-								is += 4;
-							}
-
-							is=appis;
-							for (int x=0; x<w; x++) {
-								cursorData[id] = appDataNormal[is + 3];
-								cursorData[id + 1] = appDataNormal[is + 3];
-								cursorData[id + 2] = appDataNormal[is + 3];
-								cursorData[id + 3] = 0;
-								id += 4;
-								is += 4;
-							}
-
-						}
-
-						//NO TRANSPARENT
-						is = 0;
-						for (int y=0; y<h; y++) {
-							int appis=is;
-							for (int x=0; x<w; x++) {
-								unsigned char r;
-								unsigned char g;
-								unsigned char b;
-								unsigned char a;
-
-								r = appDataImage[is + 2];
-								g = appDataImage[is + 1];
-								b = appDataImage[is];
-								a = 255;
-								cursorData[id] = r;
-								cursorData[id + 1] = g;
-								cursorData[id + 2] = b;
-								cursorData[id + 3] = a;
-								id += 4;
-								is += 4;
-							}
-
-							is=appis;
-							for (int x=0; x<w; x++) {
-								unsigned char r;
-								unsigned char g;
-								unsigned char b;
-								unsigned char a;
-
-								r = appDataMask[is + 2];
-								g = appDataMask[is + 1];
-								b = appDataMask[is];
-								a = 255;
-								cursorData[id] = r;
-								cursorData[id + 1] = g;
-								cursorData[id + 2] = b;
-								cursorData[id + 3] = a;
-								id += 4;
-								is += 4;
-							}
-
-							is=appis;
-							for (int x=0; x<w; x++) {
-								unsigned char r;
-								unsigned char g;
-								unsigned char b;
-								unsigned char a;
-
-								r = appDataNormal[is + 2];
-								g = appDataNormal[is + 1];
-								b = appDataNormal[is];
-								a = 255;
-								cursorData[id] = r;
-								cursorData[id + 1] = g;
-								cursorData[id + 2] = b;
-								cursorData[id + 3] = a;
-								id += 4;
-								is += 4;
-							}
-
-						}
-
-						//TRANSPARENT
-						is = 0;
-						for (int y=0; y<h; y++) {
-							int appis=is;
-							for (int x=0; x<w; x++) {
-								unsigned char r;
-								unsigned char g;
-								unsigned char b;
-								unsigned char a;
-
-								r = appDataImage[is + 2];
-								g = appDataImage[is + 1];
-								b = appDataImage[is];
-								a = appDataImage[is + 3];
-								cursorData[id] = r;
-								cursorData[id + 1] = g;
-								cursorData[id + 2] = b;
-								cursorData[id + 3] = a;
-								id += 4;
-								is += 4;
-							}
-
-							is=appis;
-							for (int x=0; x<w; x++) {
-								unsigned char r;
-								unsigned char g;
-								unsigned char b;
-								unsigned char a;
-
-								r = appDataMask[is + 2];
-								g = appDataMask[is + 1];
-								b = appDataMask[is];
-								a = appDataMask[is + 3];
-								cursorData[id] = r;
-								cursorData[id + 1] = g;
-								cursorData[id + 2] = b;
-								cursorData[id + 3] = a;
-								id += 4;
-								is += 4;
-							}
-
-							is=appis;
-							for (int x=0; x<w; x++) {
-								unsigned char r;
-								unsigned char g;
-								unsigned char b;
-								unsigned char a;
-
-								r = appDataNormal[is + 2];
-								g = appDataNormal[is + 1];
-								b = appDataNormal[is];
-								a = appDataNormal[is + 3];
-								cursorData[id] = r;
-								cursorData[id + 1] = g;
-								cursorData[id + 2] = b;
-								cursorData[id + 3] = a;
-								id += 4;
-								is += 4;
-							}
-
-						}
-
-
-
-						bok = true;
-
-
-						if (bok){
-							cursorW=w*3;
-							cursorH=h*3;
-							int offsetX = 0;
-							int offsetY = 0;
-							if (info.fIcon==FALSE){
-								offsetX = info.xHotspot;
-								offsetY = info.yHotspot;
-							}else{
-								offsetX = w/2;
-								offsetY = h/2;
-							}
-							cursoroffsetX=offsetX;
-							cursoroffsetY=offsetY;
-							*rgbdata = cursorData;
-							cursorID++;
-						}
-
-						SelectObject(hdstImage, hbmDIBOLDImage);
-						DeleteObject(hbmDIBImage);
-						DeleteDC(hdstImage);
-
-						SelectObject(hdstMask, hbmDIBOLDMask);
-						DeleteObject(hbmDIBMask);
-						DeleteDC(hdstMask);
-
-						SelectObject(hdstNormal, hbmDIBOLDNormal);
-						DeleteObject(hbmDIBNormal);
-						DeleteDC(hdstNormal);
-
-					}
-				}
-			}
-		}else{
-			//Cursore nascosto
-			cursorVis=0;
-			cursorW=0;
-			cursorH=0;
-			cursoroffsetX=0;
-			cursoroffsetY=0;
-			if (cursorHandle!=NULL){
-				cursorHandle=NULL;
-				cursorID++;
-			}
-		}
-	}else{
-		return false;
-	}
-	info[0]=cursorVis;
-	MonitorInfo* mi = getMonitorInfo(monitor);
-	if (mi!=NULL){
-		info[1]=cursorX-mi->x;
-		info[2]=cursorY-mi->y;
-	}else{
-		info[1]=cursorX;
-		info[2]=cursorY;
-	}
-	info[3]=cursorW;
-	info[4]=cursorH;
-	info[5]=cursoroffsetX;
-	info[6]=cursoroffsetY;
-	id=cursorID;
-	return true;
-}*/
-
 
 bool ScreenCaptureNative::captureCursor(int monitor, int* info, long& id, unsigned char** rgbdata) {
 	int cursorVis=1; 
@@ -1215,8 +835,9 @@ long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTUR
 	}
 
 	capimage->data = ii->data;
-	capimage->bpp=24;
-	capimage->bpc=3;
+	capimage->bpp=ii->bpp;
+	capimage->bpc=ii->bpc;
+	capimage->bpr=ii->bpr;
 	capimage->width = w;
 	capimage->height = h;
 	return ii->shotID;
@@ -1576,7 +1197,7 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 		addInputMouse(inputs,p,appx,appy,dwFlags | MOUSEEVENTF_LEFTUP,mouseData,0);
 	}else{
 		if (button!=-1) {
-			if ((button & 1) && (!mousebtn1Down)){
+			if (button & 1){
 				dwFlags |=  MOUSEEVENTF_LEFTDOWN;
 				mousebtn1Down=true;
 			}else if (mousebtn1Down){
@@ -1584,7 +1205,7 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 				mousebtn1Down=false;
 			}
 
-			if ((button & 2) && (!mousebtn2Down)){
+			if (button & 2){
 				dwFlags |=  MOUSEEVENTF_RIGHTDOWN;
 				mousebtn2Down=true;
 			}else if (mousebtn2Down){
@@ -1592,7 +1213,7 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 				mousebtn2Down=false;
 			}
 
-			if ((button & 4) && (!mousebtn3Down)){
+			if (button & 4){
 				dwFlags |=  MOUSEEVENTF_MIDDLEDOWN;
 				mousebtn3Down=true;
 			}else if (mousebtn3Down){

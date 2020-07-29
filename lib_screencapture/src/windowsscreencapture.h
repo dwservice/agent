@@ -68,6 +68,9 @@ private:
 		HANDLE hbmDIBOLD;
 		int w;
 		int h;
+		int bpp;
+		int bpc;
+		int bpr;
 		unsigned char* data;
 		long shotID;
 		TimeCounter intervallCounter; //Calcola il tempo di cattura da un shot ad un altra 

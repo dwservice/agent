@@ -38,8 +38,6 @@ using namespace std;
 #include "timecounter.h"
 #include "util.h"
 
-
-
 typedef short (*FPalIdx)(unsigned char* rgb);
 
 class ScreenCaptureNative{
@@ -62,7 +60,7 @@ public:
 	void copy();
 	void paste();
 	float getCpuUsage();
-	
+  
 private:
 	DWDebugger* dwdbg;
 
@@ -124,7 +122,8 @@ private:
 	int cursoroffsetY;
 	int cursorW;
 	int cursorH;
-
+	
+  	bool bterminate;
 	bool mousebtn1Down;
 	bool mousebtn2Down;
 	bool mousebtn3Down;
@@ -165,8 +164,8 @@ private:
 	void newScreenShotInfo(ScreenShotInfo* ii, int w, int h);
 	ScreenShotInfo* getScreenShotInfo(int idx);
 	void initScreenShotInfo(ScreenShotInfo* ii);
-	void termScreenShotInfo(ScreenShotInfo* ii);
-
+	void termScreenShotInfo(ScreenShotInfo* ii);	
+  	
 	int max_grp;
 	typedef struct{
 		int unicode;
@@ -175,12 +174,14 @@ private:
 		int modifier;
 	} KEYMAP;
 	map<int,KEYMAP*> hmUnicodeMap;
-	vector<KEYMAP*> arNewUnicodeMap;
-
-	void loadKeyMap();
+	KeyCode kccustom;
+    bool kccustominit;
+  	TimeCounter skipKeyboardChangedCounter;
+  	void loadKeyMap();
 	void unloadKeyMap();
-	KeyCode addKeyUnicode(int uc);
-
+	KeyCode createCustomKeyUnicode(int uc);
+	void clearCustomKeyUnicode();
+  	bool isKeyboardChanged();
 };
 
 #endif

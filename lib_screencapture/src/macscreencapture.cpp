@@ -136,13 +136,6 @@ int ScreenCaptureNative::getMonitorCount(){
 		CGDisplayModeRef dmd = CGDisplayCopyDisplayMode(did);
 		int w = CGDisplayModeGetWidth(dmd);
 		int h = CGDisplayModeGetHeight(dmd);
-		//FIX RISOLUZIONI SIMILE A 1366x768
-		if (((float)w/(float)8)!=(w/8)){
-			w=(int)((int)((float)w/(float)8)+(float)1) * 8;
-		}
-		//if (((float)h/(float)8)!=(h/8)){
-		//  h=(int)((int)((float)h/(float)8)+(float)1) * 8;
-		//}
 		if (firstmonitorscheck){
 			MonitorInfo mi;
 			mi.id=did;
@@ -272,6 +265,7 @@ long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTUR
 	capimage->data = (unsigned char*)ii->data;
 	capimage->bpp = ii->bpp;
 	capimage->bpc = ii->bpc;
+	capimage->bpr = ii->bpr;
 	capimage->width = w;
 	capimage->height = h;
 	return ii->shotID;
