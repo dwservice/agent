@@ -94,6 +94,26 @@ install_updatercd(){
 	fi
 }
 
+install_rclocal(){
+	if [ ! -f /etc/rc.d/rc.dwagent ]; then
+		ln -s "${PATH_DWA_NATIVE}/dwagsvc" /etc/rc.d/rc.dwagent
+        if [ -f /etc/rc.d/rc.local ]; then
+			sed -i '/\/etc\/rc.d\/rc.dwagent start/d' /etc/rc.d/rc.local
+        fi
+        echo "/etc/rc.d/rc.dwagent start" >> /etc/rc.d/rc.local
+        if [ -f /etc/rc.d/rc.local_shutdown ]; then
+        	sed -i '/\/etc\/rc.d\/rc.dwagent stop/d' /etc/rc.d/rc.local_shutdown
+        fi
+        echo "/etc/rc.d/rc.dwagent stop" >> /etc/rc.d/rc.local_shutdown
+        chmod +x /etc/rc.d/rc.local_shutdown
+        echo "rclocal" > "${PATH_DWA_NATIVE}/service.mng"
+        echo "Installed"
+	else
+		echo "Error: Service already installed."
+		RETVAL=1
+	fi   
+}
+
 install(){
 	if [ "$(which "systemctl" 2>/dev/null)" ] && [ "$(systemctl list-units -t service 2>/dev/null)" ]; then
     	install_systemctl
@@ -101,6 +121,8 @@ install(){
     	install_chkconfig
 	elif [ "$(which "update-rc.d" 2>/dev/null)" ]; then
         install_updatercd
+    elif [ -f /etc/rc.d/rc.local ]; then
+    	install_rclocal
 	else
 		echo "Error: Missing systemctl or chkconfig or update-rc.d command."
 		RETVAL=2
@@ -182,6 +204,30 @@ delete_updatercd(){
 	fi
 }
 
+delete_rclocal(){
+	if [ -f /etc/rc.d/rc.dwagent ]; then
+    	if [ -f /etc/rc.d/rc.local ]; then
+			sed -i '/\/etc\/rc.d\/rc.dwagent start/d' /etc/rc.d/rc.local
+        fi
+        if [ -f /etc/rc.d/rc.local_shutdown ]; then
+        	sed -i '/\/etc\/rc.d\/rc.dwagent stop/d' /etc/rc.d/rc.local_shutdown
+        fi
+        rm /etc/rc.d/rc.dwagent
+        if [ $? -eq 0 ]; then
+			if [ -f "${PATH_DWA_NATIVE}/service.mng" ]; then
+				rm "${PATH_DWA_NATIVE}/service.mng"
+            fi
+        	echo "Deleted"
+        else
+        	echo "Error: Remove symbolic link."
+        	RETVAL=12
+        fi
+    else			
+		echo "Error: Service not installed."
+		RETVAL=1
+	fi
+}
+
 delete(){
 	if [ -f "${PATH_DWA_NATIVE}/service.mng" ]; then
 		if [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "systemctl" ]; then
@@ -190,6 +236,8 @@ delete(){
 			delete_chkconfig
 		elif [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "updatercd" ]; then
 			delete_updatercd
+        elif [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "rclocal" ]; then
+			delete_rclocal
 		fi				
 	else
 		if [ "$(which "systemctl" 2>/dev/null)" ] && [ "$(systemctl list-units -t service 2>/dev/null)" ]; then
@@ -198,6 +246,8 @@ delete(){
 			delete_chkconfig
 		elif [ "$(which "update-rc.d" 2>/dev/null)" ]; then
 			delete_updatercd
+        elif [ -f /etc/rc.d/rc.local ]; then
+        	delete_rclocal
 		else
 			echo "Error: Missing chkconfig or update-rc.d command."
 			RETVAL=2
