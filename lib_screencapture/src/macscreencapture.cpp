@@ -198,7 +198,7 @@ ScreenCaptureNative::ScreenShotInfo* ScreenCaptureNative::getScreenShotInfo(int 
 	}
 }
 
-long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTURE_IMAGE* capimage){
+long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTURE_IMAGE* capimage, vector<CAPTURE_CHANGE_AREA>* capchange, vector<CAPTURE_MOVE_AREA>* capmove){
 	capimage->width = 0;
 	capimage->height = 0;
 

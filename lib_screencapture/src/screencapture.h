@@ -32,16 +32,11 @@ public:
 	void terminate(int id);
 	void monitor(int id, int index);
 	void difference(int id, int typeFrame, int quality, CallbackDifference cbdiff);
-
 	void inputKeyboard(int id, const char* type, const char* key, bool ctrl, bool alt, bool shift, bool command);
 	void inputMouse(int id, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command);
 	wchar_t* copyText(int id);
 	void pasteText(int id,wchar_t* str);
-	//float getCpuUsage();
 	ScreenCaptureNative getNative();
-
-	void areaChanged(CAPTURE_CHANGE_AREA* area);
-	void areaMoved(CAPTURE_MOVE_AREA* area);
 
 
 private:
@@ -56,6 +51,8 @@ private:
 	int diffBufferSize;
 	unsigned char* diffBuffer;
 	tjhandle tjInstance;
+	unsigned char* jpegBuf;
+	long jpegBufSize;
 
 	typedef struct{
 		int x1;
@@ -83,12 +80,6 @@ private:
 		int cursoroffsetx;
 		int cursoroffsety;
 		TimeCounter cursorCounter;
-
-		/*long activeWinID;
-		int activeWinX;
-		int activeWinY;
-		int activeWinW;
-		int activeWinH;*/
 	   
 		int monitorCount;
 		int monitor;
@@ -109,18 +100,14 @@ private:
 	void loadQuality(SESSION* ses);
 
 	void resizeDiffBufferIfNeed(int needsz);
-	//int prepareCopyArea(unsigned char* &bf,int p,int* cursz,SESSION &ses);
 	void differenceFrameTJPEG(SESSION &ses, CAPTURE_IMAGE &capimage, CallbackDifference cbdiff);
 	void differenceFrameTPALETTE(SESSION &ses, CAPTURE_IMAGE &capimage, CallbackDifference cbdiff);
 	void differenceCursor(SESSION &ses, CAPTURE_IMAGE &capimage, CallbackDifference cbdiff);
 	void inputsEvent();
-	//char convertCharBase64(char c);
-	//void debugPrint(char* str);
 	int intToArray(unsigned char* buffer,int p,int i);
 	int byteArrayToInt(unsigned char* buffer,int p);
 	int shortToArray(unsigned char* buffer,int p,short s);
 	short byteArrayToShort(unsigned char* buffer,int p);
-	
 
 };
 

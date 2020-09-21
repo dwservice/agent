@@ -50,7 +50,7 @@ public:
     bool initialize();
 	void terminate();
     void getResolution(int* size);
-    long captureScreen(int monitor, int distanceFrameMs, CAPTURE_IMAGE* capimage);
+    long captureScreen(int monitor, int distanceFrameMs, CAPTURE_IMAGE* capimage, vector<CAPTURE_CHANGE_AREA>* capchange, vector<CAPTURE_MOVE_AREA>* capmove);
     bool captureCursor(int monitor, int* info, long& id, unsigned char** data);
     bool getActiveWinPos(long* id, int* info);
     void inputKeyboard(const char* type, const char* key, bool ctrl, bool alt, bool shift, bool command);

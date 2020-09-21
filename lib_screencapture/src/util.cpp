@@ -116,8 +116,8 @@ void getCursorImage(int tp,int* w,int* h,int* offx,int* offy,unsigned char** rgb
 DistanceFrameMsCalculator::DistanceFrameMsCalculator(){
 	fastCounter.reset();
 	distanceFrameMsCounter.reset();
-	distanceFrameMs=30;
-	distanceFrameMsFast=30;
+	distanceFrameMs=10;
+	distanceFrameMsFast=10;
 }
 
 DistanceFrameMsCalculator::~DistanceFrameMsCalculator() {
@@ -135,7 +135,7 @@ int DistanceFrameMsCalculator::calculate(float fcpu){
 				if (distanceFrameMs<400){
 					distanceFrameMsFast+=10;
 				}
-			}else if (distanceFrameMsFast>30){
+			}else if (distanceFrameMsFast>10){
 				distanceFrameMsFast-=10;
 			}
 			dFMs=distanceFrameMsFast;
@@ -146,7 +146,7 @@ int DistanceFrameMsCalculator::calculate(float fcpu){
 				if (distanceFrameMs<800){
 					distanceFrameMs+=10;
 				}
-			}else if (distanceFrameMs>30){
+			}else if (distanceFrameMs>10){
 				distanceFrameMs-=10;
 			}
 			dFMs=distanceFrameMs;

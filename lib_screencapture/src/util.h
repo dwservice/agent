@@ -83,8 +83,8 @@ public:
 	void fast();
 
 private:
-	#define CPU_MAX 5.0
-	#define CPU_MAX_FAST 25.0
+	#define CPU_MAX 10.0
+	#define CPU_MAX_FAST 40.0
 
 	TimeCounter fastCounter; //Mi serve per attivate la cattura veloce se c'e' stato un input (esempio dopo un input catturo per 1 secondo in modalita' veloce)
 	TimeCounter distanceFrameMsCounter;
