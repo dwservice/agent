@@ -28,10 +28,16 @@ ScreenCapture::ScreenCapture(DWDebugger* dbg)
 	diffBufferSize = BUFFER_DIFF_SIZE;
 	diffBuffer = (unsigned char*)calloc(diffBufferSize,sizeof(unsigned char));
 	tjInstance = tjInitCompress();
+	jpegBufSize=0;
+	jpegBuf=NULL;
 }
 
 
 ScreenCapture::~ScreenCapture(){
+	if (jpegBuf!=NULL){
+		tjFree(jpegBuf);
+	}
+	jpegBuf=NULL;
 	if (tjInstance != NULL){
 		tjDestroy(tjInstance);
 	}
@@ -291,102 +297,6 @@ void ScreenCapture::differenceCursor(SESSION &ses, CAPTURE_IMAGE &capimage,Callb
 	dwdbg->print("ScreenCapture::prepareCursor#END");
 }
 
-/*
-int ScreenCapture::prepareCopyArea(unsigned char* &bf,int p,int* cursz,SESSION &ses){
-	int pbf=p;
-	long activeWinID;
-	int activeWinInfo[4];
-	if (captureNative.getActiveWinPos(&activeWinID,activeWinInfo)){
-		if (ses.activeWinID==activeWinID){
-			if (((ses.activeWinX!=activeWinInfo[0]) || (ses.activeWinY!=activeWinInfo[1])) && 
-				((ses.activeWinW==activeWinInfo[2] && ses.activeWinH==activeWinInfo[3]))){ //Non sto ridimenzionando
-				int sx=ses.activeWinX;
-				int sy=ses.activeWinY;
-				int sw=ses.activeWinW;
-				int sh=ses.activeWinH;
-				int dx=activeWinInfo[0];
-				int dy=activeWinInfo[1];
-				if (dx<0){
-					sw=sw+dx;
-					sx=sx-dx;
-					dx=0;
-				}
-				if (sx<0){
-					sx=0;
-				}
-				if ((sx+sw)>ses.shotw){
-					sw=sw-((sx+sw)-ses.shotw);
-				}
-				if ((dx+sw)>ses.shotw){
-					sw=sw-((dx+sw)-ses.shotw);
-				}
-				if (dy<0){
-					sh=sh+dy;
-					sy=sy-dy;
-					dy=0;
-				}
-				if (sy<0){
-					sy=0;
-				}
-				if ((sy+sh)>ses.shoth){
-					sh=sh-((sy+sh)-ses.shoth);
-				}
-				if ((dy+sh)>ses.shoth){
-					sh=sh-((dy+sh)-ses.shoth);
-				}
-				if ((sw>0) && (sh>0)){
-					//Copia l'area dalla vecchia immagine
-					short* bfcopy = (short*)malloc((sw*sh)*sizeof(short)); 
-					int j=0;
-					int i=(sy*ses.shotw)+sx;
-					int iskip=(ses.shotw-sw);
-					int szbt=sizeof(short);
-					for (int y=sy;y<sy+sh;y++){
-						memcpy(bfcopy+j,ses.data+i,sw*szbt);
-						j+=sw;
-						i+=sw+iskip;
-					}
-					j=0;
-					i=(dy*ses.shotw)+dx;
-					for (int y=dy;y<dy+sh;y++){
-						memcpy(ses.data+i,bfcopy+j,sw*szbt);
-						j+=sw;
-						i+=sw+iskip;
-					}
-					free(bfcopy);
-
-					//Prepara la risposta
-					// TYPE=4 DATA=SX-SY-SW-SH-DX-DY -> COPY AREA
-					resizeBufferIfNeed(bf,cursz,pbf+100);
-					pbf+=intToArray(bf,pbf,14);
-					pbf+=shortToArray(bf,pbf,4);
-					pbf+=shortToArray(bf,pbf,sx);
-					pbf+=shortToArray(bf,pbf,sy);
-					pbf+=shortToArray(bf,pbf,sw);
-					pbf+=shortToArray(bf,pbf,sh);
-					pbf+=shortToArray(bf,pbf,dx);
-					pbf+=shortToArray(bf,pbf,dy);
-					//printf("TYPE=4 %d %d %d %d %d %d\n",sx,sy,sw,sh,dx,dy);
-				}				
-			}
-		}
-		ses.activeWinID=activeWinID;
-		ses.activeWinX=activeWinInfo[0];
-		ses.activeWinY=activeWinInfo[1];
-		ses.activeWinW=activeWinInfo[2];
-		ses.activeWinH=activeWinInfo[3];
-	}
-	return pbf-p;
-}*/
-
-void ScreenCapture::areaChanged(CAPTURE_CHANGE_AREA* area) {
-
-}
-
-void ScreenCapture::areaMoved(CAPTURE_MOVE_AREA* area) {
-
-}
-
 void ScreenCapture::differenceFrameTJPEG(SESSION &ses, CAPTURE_IMAGE &capimage,CallbackDifference cbdiff){
 	int gapmin=50;
 	unsigned long sz = (ses.shotw*ses.shoth);
@@ -398,7 +308,6 @@ void ScreenCapture::differenceFrameTJPEG(SESSION &ses, CAPTURE_IMAGE &capimage,C
 	}
 	//detect changes and make blocks
 	vector<DIFFRECT>ardiff;
-	//vector<DIFFRECT>arhorizgap;
 	DIFFRECT drcur = DIFFRECT();
 	drcur.x1=-1;
 	drcur.y1=-1;
@@ -452,16 +361,22 @@ void ScreenCapture::differenceFrameTJPEG(SESSION &ses, CAPTURE_IMAGE &capimage,C
 	if (drcur.y2!=-1){
 		ardiff.push_back(drcur);
 	}
-	//drcurhorizgap=NULL;
 	if (ardiff.size()>0){
 		while (!ardiff.empty()){
 			drcur = ardiff[0];
 			int cw=(drcur.x2-drcur.x1)+1;
 			int ch=(drcur.y2-drcur.y1)+1;
+			if (jpegBufSize<3*cw*ch){
+				if (jpegBuf!=NULL){
+					tjFree(jpegBuf);
+					jpegBuf=NULL;
+				}
+				jpegBufSize = 3*cw*ch;
+				jpegBuf = tjAlloc(jpegBufSize);
+			}
 			int tot=2+1;
 			unsigned long jpegSize = 0;
-			unsigned char* jpegBuf = NULL;
-			int tjcret = tjCompress2(tjInstance, ses.data+((ses.shotw*(drcur.y1*3))+(drcur.x1*3)), cw, ses.shotw*3, ch, TJPF_RGB,&jpegBuf, &jpegSize, TJSAMP_444, ses.jpegQuality, TJFLAG_FASTDCT);
+			int tjcret = tjCompress2(tjInstance, ses.data+((ses.shotw*(drcur.y1*3))+(drcur.x1*3)), cw, ses.shotw*3, ch, TJPF_RGB,&jpegBuf, &jpegSize, TJSAMP_444, ses.jpegQuality, TJFLAG_FASTDCT | TJFLAG_NOREALLOC);
 			if (tjcret==0){
 				tot+=2+2+jpegSize;
 				resizeDiffBufferIfNeed(tot);
@@ -477,8 +392,6 @@ void ScreenCapture::differenceFrameTJPEG(SESSION &ses, CAPTURE_IMAGE &capimage,C
 				shortToArray(diffBuffer,3,drcur.x1);
 				shortToArray(diffBuffer,5,drcur.y1);
 				memcpy(diffBuffer+7,jpegBuf,jpegSize);
-				tjFree(jpegBuf);
-				jpegBuf = NULL;
 				cbdiff(tot,diffBuffer);
 			}
 			ardiff.erase(ardiff.begin());
@@ -705,8 +618,10 @@ void ScreenCapture::difference(int id, int typeFrame, int quality, CallbackDiffe
 			intToArray(diffBuffer,2,dFMs);
 			cbdiff(6,diffBuffer);
 			CAPTURE_IMAGE capimg;
+			vector<CAPTURE_CHANGE_AREA> capchange;
+			vector<CAPTURE_MOVE_AREA> capmove;
 			dwdbg->print("ScreenCapture::captureScreen#Start");
-			long shotID = captureNative.captureScreen(ses.monitor, dFMs, &capimg);
+			long shotID = captureNative.captureScreen(ses.monitor, dFMs, &capimg, &capchange, &capmove);
 			dwdbg->print("ScreenCapture::captureScreen#End. shotID: %ld",shotID);
 			if (shotID==-1) {
 				if (ses.screenLocked == false) {
@@ -759,10 +674,6 @@ void ScreenCapture::difference(int id, int typeFrame, int quality, CallbackDiffe
 					}
 					if (ses.quality!=quality){
 						ses.quality=quality;
-						if (ses.data != NULL) {
-							free(ses.data);
-							ses.data=NULL;
-						}
 						loadQuality(&ses);
 					}
 					if (ses.typeFrame==TYPE_FRAME_PALETTE_V1){
@@ -797,15 +708,7 @@ void ScreenCapture::initSession(int id){
 	hmSession[id].screenLocked=false;
 	hmSession[id].quality=-1;
 	hmSession[id].typeFrame=-1;
-
-	/*hmSession[id].activeWinID=-1;
-	hmSession[id].activeWinX=-1;
-	hmSession[id].activeWinY=-1;
-	hmSession[id].activeWinW=-1;
-	hmSession[id].activeWinH=-1;*/
-
 	hmSession[id].data=NULL;
-
 	hmSession[id].monitorCount=-1;
 	hmSession[id].monitor=-1;
 

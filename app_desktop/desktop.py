@@ -171,6 +171,134 @@ class Desktop():
     
     def req_websocket(self, cinfo, wsock):
         self._add_desktop_manager(cinfo, wsock)
+        
+class SpeedManager():
+    
+    def __init__(self, dskmain):
+        self._dskmain=dskmain
+        self._frame_sent=0l
+        self._frame_sent_size=0l
+        self._frame_received=0l
+        self._frame_distance=0l
+        self._fps_counter=None
+        self._fps_frame=0l
+        self._fps=-1
+        self._qa_check_frame=None
+        self._qa_check_frame_size_avg=None
+        self._qa_check_frame_size=None
+        self._qa_check_frame_time=None
+        self._qa_time_wait=0.0
+        self._qa_time_counter=None
+        self._qa_time_bytes=0l
+        self._qa_detect=9
+        
+        
+    def get_frame_sent(self):
+        return self._frame_sent
+    
+    def get_qa_detect(self):
+        return self._qa_detect
+    
+    def update_frame_size(self,w,h):        
+        self._qa_check_frame_size_avg=long(((float(w*h*3)*10.0)/100.0))        
+    
+    def sent(self,fsize):
+        self._frame_sent+=1l
+        self._frame_sent_size=fsize
+        if self._frame_sent==1l:
+            self._qa_time_counter=communication.Counter()            
+            self._qa_check_frame=self._frame_sent        
+            self._qa_check_frame_size=fsize
+            self._qa_check_frame_time=time.time()
+        self._qa_time_bytes+=fsize
+        
+            
+    def received(self, frec):
+        self._frame_received=frec
+        
+        #CALCULATE FPS
+        if self._fps_counter is None:
+            self._fps_counter=communication.Counter()
+            self._fps_frame=self._frame_received
+        elif self._fps_counter.is_elapsed(1000):
+            nf = self._frame_received-self._fps_frame
+            self._fps = int((float(nf) * 1000.0)/float(self._fps_counter.get_value()))
+            self._fps_frame=self._frame_received
+            self._fps_counter.reset()
+        
+        #CALCULATE QA    
+        if self._qa_check_frame is not None and self._qa_check_frame==frec:
+            newqa=None
+            elp=time.time()-self._qa_check_frame_time
+            elp=((elp*(float(self._qa_check_frame_size_avg)/2))/float(self._qa_check_frame_size))
+            if elp>=0:
+                if elp<0.2:
+                    newqa=9
+                elif elp<0.3:
+                    newqa=8
+                elif elp<0.4:
+                    newqa=7
+                elif elp<0.5:
+                    newqa=6
+                elif elp<0.6:
+                    newqa=5
+                elif elp<0.7:
+                    newqa=4
+                elif elp<0.8:
+                    newqa=3
+                elif elp<0.9:
+                    newqa=2
+                elif elp<1.0:
+                    newqa=1
+                else:
+                    newqa=0
+            if newqa is not None:
+                self._qa_detect=newqa
+                #self._dskmain._agent_main.write_info("INITQA: " + str(self._qa_detect) + " - ELAPSED: " + str(elp) + " - FRAMESIZE:" + str(self._qa_check_frame_size))
+            self._qa_check_frame=None
+            self._qa_check_frame_time=None
+            self._qa_time_counter.reset()
+            self._qa_time_bytes=0l            
+            self._qa_time_wait=0.0
+   
+            
+            
+    
+    def wait_time(self, semre):
+        while True:
+            self._frame_distance=self._frame_sent-self._frame_received                        
+            #self._dskmain._agent_main.write_info("DISTANCE: " + str(self._frame_distance) + " - FPS: " + str(self._fps) + " - FRAME: " + str(self._frame_sent) + " - QA: " + str(self._qa_detect))
+            if self._frame_sent==1:
+                bok = self._frame_sent==self._frame_received
+            else:
+                appfps = self._fps
+                if appfps==-1:
+                    appfps=self._qa_detect+3
+                bok = self._frame_distance<=appfps                            
+            if bok:
+                break
+            else:
+                tmw = time.time()
+                semre.wait(0.25)
+                elw = time.time()-tmw
+                if self._frame_sent>1:                                         
+                    if elw>0:
+                        self._qa_time_wait+=elw
+        #DETECT QA                      
+        if self._frame_sent>1 and self._qa_time_counter.is_elapsed(1000):
+            autoqawaitint=int(self._qa_time_wait*1000)
+            autoqawaitperc=int((float(autoqawaitint)/float(self._qa_time_counter.get_value()))*100.0)            
+            if autoqawaitperc>=50.0:
+                if self._qa_detect>0:
+                    self._qa_detect-=1
+                    #self._dskmain._agent_main.write_info("NEWQA: " + str(self._qa_detect) + " - WAIT: " + str(autoqawaitint) + " - PERC: " + str(autoqawaitperc) + " - BYTES: " + str(self._qa_time_bytes))
+            elif self._qa_time_bytes>long(self._qa_check_frame_size_avg*(float(self._qa_time_counter.get_value()) / 1000.0)) and autoqawaitperc<=5.0:
+                if self._qa_detect<9:
+                    self._qa_detect+=1
+                    #self._dskmain._agent_main.write_info("NEWQA: " + str(self._qa_detect) + " - WAIT: " + str(autoqawaitint) + " - PERC: " + str(autoqawaitperc) + " - BYTES: " + str(self._qa_time_bytes))
+            self._qa_time_counter.reset()
+            self._qa_time_bytes=0l
+            self._qa_time_wait=0.0
 
 class Manager(threading.Thread):
         
@@ -199,36 +327,20 @@ class Manager(threading.Thread):
         self._artosend=[]
         self._artosendsize=0
         self._semaphore = threading.Condition()
-        self._quality=9
+        self._quality=-1
         
-        #DA ELIMINARE RIMASTO PER COMPATIBILITA
-        self._frame_bytes_distance=0
-        self._frame_last_bytes_sent=0
-        self._frame_last_time_OK=False;
-        #DA ELIMINARE RIMASTO PER COMPATIBILITA
-        
-        self._frame_last_time_sent=0
-        self._frame_last_time_received=0
-        self._frame_first_token=True
+        self._frame_sent_size=None
+        self._speed_manager = SpeedManager(self._dskmain)
         
         self._supported_frame=None
         self._frame_type=0 # 0=DATA_PALETTE_COMPRESS_V1; 100=DATA_TJPEG"
         self._send_frame_type=False        
         
         
-        self._distanceFrameMs=33.0/1000.0
+        self._distanceFrameMs=10.0/1000.0
         self._distanceFrameMsCounter=communication.Counter()
         
-        self._frame_bps_tmp=0
-        self._frame_bps_max=0
-        self._frame_bps_counter=communication.Counter()
-        
-        '''
-        TODO: I WANT AUTODETECT QUALITY
-        self._frame_sent = []
-        self._frame_sent_first = True
-        '''
-        
+                        
         self._websocket.accept(10,{"on_close": self._on_close,"on_data":self._on_data})
         self._semaphore_inputs = threading.Condition()
         #self._input_click_state=None
@@ -254,54 +366,10 @@ class Manager(threading.Thread):
                     #print "frametime: " + prprequest["frametime"]
                     self._semaphore.acquire()
                     try:
-                        
-                        #DA ELIMINARE RIMASTO PER COMPATIBILITA
-                        self._frame_last_time_OK=True;
-                        #DA ELIMINARE RIMASTO PER COMPATIBILITA
-                        
-                        self._frame_last_time_received=float(prprequest["frametime"])
-                        self._semaphore.notify_all();
-                        
-                        '''
-                        TODO: I WANT AUTODETECT QUALITY 
-                        self._semaphore.acquire()
-                        try:
-                            appar=self._frame_sent[0]
-                            appar["current"]=appar["current"]+lrc
-                            if appar["complete"]==True and appar["current"]==appar["size"]:
-                                elapsed=communication.get_time()-appar["time"]
-                                if elapsed>1.0:
-                                    #bps=int(float(appar["size"])*(1.0/elapsed))
-                                    print "frame time: " + str(elapsed)  + "   size:" + str(appar["size"]) + "      len:" + str(len(self._frame_sent))
-                                del self._frame_sent[0]                            
-                        finally:
-                            self._semaphore.release()    
-                        '''
-                        
-                    finally:
-                        self._semaphore.release()
-                if prprequest is not None and "received" in prprequest:
-                    #DA ELIMINARE RIMASTO PER COMPATIBILITA
-                    self._semaphore.acquire()
-                    try:
-                        lrc=long(prprequest["received"])
-                        self._frame_bytes_distance-=lrc
-                        appbps=long(prprequest["bps"])
-                        if appbps>self._frame_bps_tmp:
-                            self._frame_bps_tmp=appbps
-                        if self._frame_bps_counter.is_elapsed(1000):
-                            if self._frame_bps_tmp>0:
-                                if self._frame_bps_tmp>self._frame_bps_max:
-                                    self._frame_bps_max=self._frame_bps_tmp
-                                else:
-                                    self._frame_bps_max=int(float(self._frame_bps_max+self._frame_bps_tmp)/2.0)
-                                                                
-                            self._frame_bps_counter.reset()
-                            self._frame_bps_tmp=0                        
+                        self._speed_manager.received(long(prprequest["frametime"]))
                         self._semaphore.notify_all();
                     finally:
                         self._semaphore.release()
-                    #DA ELIMINARE RIMASTO PER COMPATIBILITA
                 if prprequest is not None and "inputs" in prprequest:
                     if not self._allow_inputs:
                         raise Exception("Permission denied (inputs).")
@@ -362,6 +430,8 @@ class Manager(threading.Thread):
                 self._dskmain._agent_main.write_except(ex,"AppDesktop:: capture error" + self._id + " error:" + str(ex))
         
    
+   
+       
     def _on_token(self,sdata):
         if self._send_frame_type==True:
             self._send_frame_type=False
@@ -369,8 +439,11 @@ class Manager(threading.Thread):
         
         tp = struct.unpack("!h",sdata[0:2])[0]
         self._semaphore.acquire()
-        try:        
-            if tp==10: #TOKEN MONITOR AND SUPPORTED FRAME
+        try:
+            if tp==0: #Resolution
+                arsz = struct.unpack("!hh",sdata[2:6])
+                self._speed_manager.update_frame_size(arsz[0],arsz[1])
+            elif tp==10: #TOKEN MONITOR AND SUPPORTED FRAME
                 self._monitor_count = struct.unpack("!h",sdata[2:4])[0]
             elif tp==11: #SUPPORTED FRAME
                 p=2
@@ -383,46 +456,31 @@ class Manager(threading.Thread):
                 self._distanceFrameMsCounter.reset()
                 self._distanceFrameMs=struct.unpack("!i",sdata[2:6])[0]
                 sdata=None
-            elif tp==2: #TOKEN FRAME
-                if self._frame_first_token==True:
-                    self._frame_first_token=False
-                    self._frame_last_time_sent=utils.get_time()
-                    if self._frame_last_time_received==0:
-                        self._frame_last_time_received=self._frame_last_time_sent                
-                    self._websocket.send_bytes(utils.Bytes(struct.pack("!h",800)+str(self._frame_last_time_sent)))
-                    #print "self._frame_last_time_sent: " + str(self._frame_last_time_sent); 
-                                
-                if sdata[2]==1:
-                    self._frame_first_token=True 
-                
-                #DA ELIMINARE RIMASTO PER COMPATIBILITA
-                ln=len(sdata)
-                self._frame_bytes_distance+=ln
-                #DA ELIMINARE RIMASTO PER COMPATIBILITA
-                
-                #print("FRAME size: " + str(len(sdata)) + "  last:" + str(sdata[2]))                
-                '''
-                TODO: I WANT AUTODETECT QUALITY 
-                self._frame_bytes_distance+=ln
-                if self._frame_sent_first==True:
-                    self._frame_sent_first=False
-                    self._frame_sent.append({"size": ln, "current": 0, "complete": False, "time":communication.get_time()})
+            elif tp==2: #TOKEN FRAME                
+                if self._frame_sent_size==None:
+                    self._frame_sent_size=len(sdata)
+                    #print "inizio TOKEN #########################################"
                 else:
-                    appar=self._frame_sent[len(self._frame_sent)-1]
-                    appar["size"]=appar["size"]+ln
-                if struct.unpack("!b",sdata[2:3])[0]==1:
-                    appar=self._frame_sent[len(self._frame_sent)-1]
-                    appar["complete"]=True
-                '''        
+                    self._frame_sent_size+=len(sdata)
+                
+                #if len(sdata)>=7:
+                #    ar = struct.unpack("!bbbhh", sdata[0:7])
+                #    print "LEN: " + str(len(sdata)) + " " + str(ar[3]) + " " + str(ar[4]) 
+                        
+                if sdata[2]==1:                    
+                    #if self._frame_first_token==False:
+                    #   print "#"
+                    #   print "#"
+                    self._speed_manager.sent(self._frame_sent_size)
+                    self._websocket.send_bytes(utils.Bytes(struct.pack("!h",800)+str(self._speed_manager.get_frame_sent())))
+                    self._frame_sent_size=None
+                        
         finally:
             self._semaphore.release()
         if sdata is not None:
             self._websocket.send_bytes(sdata)
-            #DA ELIMINARE RIMASTO PER COMPATIBILITA
-            ln=len(sdata)
-            self._frame_last_bytes_sent+=ln        
-            #DA ELIMINARE RIMASTO PER COMPATIBILITA    
-                         
+        
+                        
                         
     def run(self):
         #last_diff_time=long(time.time() * 1000)
@@ -434,73 +492,46 @@ class Manager(threading.Thread):
         curmon=-1
         max_retry=3
         frame_type=0
-        quality=9        
+        quality_detect=self._speed_manager.get_qa_detect()
+        quality_request=-1
         while not lclose:
             try:
                 #print("_send_token_image WAIT time=" + str(long(time.time() * 1000)-apptmwait));
-                self._inputevents()                
-                '''
-                TODO: I WANT AUTODETECT QUALITY
-                self._frame_sent_first=True
-                '''
-                #last_diff_time=communication.get_time()
-                #DA ELIMINARE RIMASTO PER COMPATIBILITA
-                self._frame_last_bytes_sent=0
-                #DA ELIMINARE RIMASTO PER COMPATIBILITA
-                self._distanceFrameMsCounter.reset()              
-                self._dskmain._capture_process.difference(self, frame_type, quality,curmon,self._on_token)
+                self._inputevents()
+                #last_diff_time=communication.get_time()                
+                self._distanceFrameMsCounter.reset()
+                appqa=quality_detect
+                if quality_request>=0 and quality_request<=9:                    
+                    appqa=quality_request                   
+                self._dskmain._capture_process.difference(self, frame_type, appqa,curmon,self._on_token)
                 max_retry=5;
                 #print("_send_token_image _capture_process time=" + str(communication.get_time()-last_diff_time));
                 
-                #Wait new request
-                while True:
-                    #self._inputevents()
-                    self._semaphore.acquire()
-                    try:
-                        if self._bclose:
-                            lclose=True
-                            break
-                
-                        if not self._frame_last_time_OK:
-                            #print("self._frame_bytes_distance:" + str(self._frame_bytes_distance) + "   self._frame_bps_max: " + str(self._frame_bps_max))
-                            #DA ELIMINARE RIMASTO PER COMPATIBILITA
-                            min_distance=self._frame_bps_max/2
-                            bok = self._frame_bytes_distance<=min_distance
-                            #DA ELIMINARE RIMASTO PER COMPATIBILITA
-                        else:
-                            distancetm=self._frame_last_time_sent-self._frame_last_time_received
-                            bok = distancetm<=0.5
-                                                        
-                        if bok:    
-                            appwait=0
-                            if self._slow_mode:
-                                appwait=CAPTURE_INTERVALL_SLOW_MODE
-                            else:
-                                if not self._distanceFrameMsCounter.is_elapsed(self._distanceFrameMs):
-                                    appwait=float(self._distanceFrameMs-self._distanceFrameMsCounter.get_value()) / 1000.0                                                                    
-                            if appwait>0:
-                                #print("WAIT: " + str(appwait))
-                                self._semaphore.wait(appwait)
-                                #self._inputevents() 
-                            if self._monitor_count>0:                               
-                                curmon=self._monitor
-                            else:
-                                curmon=-1
-                            quality=self._quality
-                            frame_type=self._frame_type
-                            break                        
-                        
-                        #DA ELIMINARE RIMASTO PER COMPATIBILITA
-                        #if self._frame_last_time_OK:
-                        #    print("DISTANCE:" + str(distancetm))
-                        #print("WAIT self._frame_bytes_distance:" + str(self._frame_bytes_distance) + "  min_distance:" + str(min_distance))
-                        #DA ELIMINARE RIMASTO PER COMPATIBILITA
-                        self._semaphore.wait(0.2)
-                    finally:
-                        self._semaphore.release()   
-                
+                self._semaphore.acquire()
+                try:
+                    if self._bclose:
+                        lclose=True
+                        break                    
+                    self._speed_manager.wait_time(self._semaphore)                    
+                    appwait=0
+                    if self._slow_mode:
+                        appwait=CAPTURE_INTERVALL_SLOW_MODE
+                    else:
+                        if not self._distanceFrameMsCounter.is_elapsed(self._distanceFrameMs):
+                            appwait=float(self._distanceFrameMs-self._distanceFrameMsCounter.get_value()) / 1000.0                                                                    
+                    if appwait>0.0:
+                        #print("WAIT: " + str(appwait))
+                        self._semaphore.wait(appwait)                                 
+                    if self._monitor_count>0:                               
+                        curmon=self._monitor
+                    else:
+                        curmon=-1
+                    quality_request=self._quality
+                    frame_type=self._frame_type
+                    quality_detect = self._speed_manager.get_qa_detect()
+                finally:
+                    self._semaphore.release()
                 cnt_retry=0
-
             except Exception as e:
                 if not self.is_close():
                     if cnt_retry>=max_retry: #NUMERO TENTATITVI
@@ -831,6 +862,7 @@ class CaptureProcess():
                                     pyhome=line[11:]
                           
                         appcmd=u"\"" + exep + u"\" -S -m agent app=desktop " + unicode(fname) + u" " + unicode(str(self._agent_main._agent_debug_mode)) + u" windows " + runaselevatore
+                        #appcmd=u"\"" + exep + u"\" -S -m agent app=desktop " + unicode(fname) + u" " + unicode(str(False)) + u" windows " + runaselevatore
                         self._ppid = self._get_osmodule().startProcessAsUser(appcmd,pyhome)
                         self._currentconsoleid=self._get_osmodule().consoleSessionId();                        
                     elif agent.is_linux():

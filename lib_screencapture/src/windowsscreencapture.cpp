@@ -338,13 +338,6 @@ bool ScreenCaptureNative::initialize() {
 	cursorH=0;
 	cursorID=0;
 
-	activeWinHandle=NULL;
-	activeWinID=0;
-	activeWinX=0;
-	activeWinY=0;
-	activeWinW=0;
-	activeWinH=0;
-
 	mousebtn1Down=false;
 	mousebtn2Down=false;
 	mousebtn3Down=false;
@@ -425,11 +418,13 @@ void ScreenCaptureNative::newScreenShotInfo(ScreenShotInfo* ii, int w, int h) {
 	ii->h = h;
 	ii->bpp = 24;
 	ii->bpc = 3;
-	ii->bpr = w*3;
+	ii->bpr = w*ii->bpc;
 	if (((float)w/(float)8)!=(w/8)){
-		int appw = (int)((int)((float)w/(float)8)+(float)1) * 8;
-		ii->bpr = ii->bpr + (appw-w);
+		int appw =(int)((int)((float)w/(float)8)+(float)1) * 8;
+		ii->bpr = ii->bpr + ((appw-w)*ii->bpc);
+		ii->w = appw;
 	}
+
 	ii->data = NULL;
 	ii->shotID=-1;
 	ii->intervallCounter.reset();
@@ -771,21 +766,7 @@ bool ScreenCaptureNative::selectDesktop(char* name) {
 	return bret;
 }
 
-/*bool ScreenCaptureNative::getActiveWinPos(long* id, int* info){
-	if (activeWinHandle!=NULL){
-		*id=activeWinID;
-		info[0]=activeWinX;
-		info[1]=activeWinY;
-		info[2]=activeWinW;
-		info[3]=activeWinH;
-		return true;
-	}else{
-		return false;
-	}
-}*/
-
-
-long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTURE_IMAGE* capimage){
+long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTURE_IMAGE* capimage, vector<CAPTURE_CHANGE_AREA>* capchange, vector<CAPTURE_MOVE_AREA>* capmove){
 	capimage->width = 0;
 	capimage->height = 0;
 	
@@ -825,7 +806,7 @@ long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTUR
 			flgcpt = SRCCOPY | CAPTUREBLT;
 		}
 		//SCREEN CAPTURE
-		if (!BitBlt(ii->hdestDC, 0, 0, w, h, ii->hsrcDC, x, y, flgcpt)) {
+		if (!BitBlt(ii->hdestDC, 0, 0, ii->w, ii->h, ii->hsrcDC, x, y, flgcpt)) {
 			char msgerr[500];
 			sprintf(msgerr,"BitBlt error code: %ld",GetLastError());
 			debugger->print(msgerr);
@@ -1081,6 +1062,25 @@ void ScreenCaptureNative::inputKeyboard(const char* type,const char* key, bool c
 
 		}else{
 
+			//DISABLE VK_CAPITAL
+			SHORT vkc = GetKeyState(VK_CAPITAL);
+			if ((vkc & 0x0001)!=0){
+				inputs[p].type= INPUT_KEYBOARD;
+				inputs[p].ki.wVk = VK_CAPITAL;
+				inputs[p].ki.wScan = 0;
+				inputs[p].ki.time = 5;
+				inputs[p].ki.dwExtraInfo = 0;
+				inputs[p].ki.dwFlags =  KEYEVENTF_EXTENDEDKEY | 0;
+				p++;
+				inputs[p].type= INPUT_KEYBOARD;
+				inputs[p].ki.wVk = VK_CAPITAL;
+				inputs[p].ki.wScan = 0;
+				inputs[p].ki.time = 5;
+				inputs[p].ki.dwExtraInfo = 0;
+				inputs[p].ki.dwFlags =   KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP;
+				p++;
+			}
+
 			addCtrlAltShift(inputs,p,wCtrl,wAlt,wShift);
 
 			inputs[p].type= INPUT_KEYBOARD;
@@ -1100,6 +1100,7 @@ void ScreenCaptureNative::inputKeyboard(const char* type,const char* key, bool c
 			p++;
 
 			addCtrlAltShift(inputs,p,false,false,false);
+
 		}
 		
 
@@ -1198,24 +1199,30 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 	}else{
 		if (button!=-1) {
 			if (button & 1){
-				dwFlags |=  MOUSEEVENTF_LEFTDOWN;
-				mousebtn1Down=true;
+				if (!mousebtn1Down){
+					dwFlags |=  MOUSEEVENTF_LEFTDOWN;
+					mousebtn1Down=true;
+				}
 			}else if (mousebtn1Down){
 				dwFlags |=  MOUSEEVENTF_LEFTUP;
 				mousebtn1Down=false;
 			}
 
 			if (button & 2){
-				dwFlags |=  MOUSEEVENTF_RIGHTDOWN;
-				mousebtn2Down=true;
+				if (!mousebtn2Down){
+					dwFlags |=  MOUSEEVENTF_RIGHTDOWN;
+					mousebtn2Down=true;
+				}
 			}else if (mousebtn2Down){
 				dwFlags |=  MOUSEEVENTF_RIGHTUP;
 				mousebtn2Down=false;
 			}
 
 			if (button & 4){
-				dwFlags |=  MOUSEEVENTF_MIDDLEDOWN;
-				mousebtn3Down=true;
+				if (!mousebtn3Down){
+					dwFlags |=  MOUSEEVENTF_MIDDLEDOWN;
+					mousebtn3Down=true;
+				}
 			}else if (mousebtn3Down){
 				dwFlags |=  MOUSEEVENTF_MIDDLEUP;
 				mousebtn3Down=false;

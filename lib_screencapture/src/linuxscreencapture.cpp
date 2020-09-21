@@ -619,11 +619,13 @@ int ScreenCaptureNative::getMonitorCount() {
 			}
 		}
 		if (monitorsInfo.size()==0){
+			XWindowAttributes xwAttr;
+			Status ret = XGetWindowAttributes(xdpy, root, &xwAttr );
 			MonitorInfo mi;
 			mi.x=0;
 			mi.y=0;
-			mi.w=screen->width;
-			mi.h=screen->height;
+			mi.w=xwAttr.width;
+			mi.h=xwAttr.height;
 			monitorsInfo.push_back(mi);
 		}
 		for(vector<MonitorInfo>::size_type i = 0; i < monitorsInfo.size(); i++) {
@@ -741,7 +743,7 @@ ScreenCaptureNative::ScreenShotInfo* ScreenCaptureNative::getScreenShotInfo(int 
 	}
 }
 
-long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTURE_IMAGE* capimage){
+long ScreenCaptureNative::captureScreen(int monitor, int distanceFrameMs, CAPTURE_IMAGE* capimage, vector<CAPTURE_CHANGE_AREA>* capchange, vector<CAPTURE_MOVE_AREA>* capmove){
 	capimage->width = 0;
 	capimage->height = 0;
 
