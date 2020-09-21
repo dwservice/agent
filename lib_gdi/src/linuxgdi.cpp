@@ -667,6 +667,44 @@ void fillEllipse(int id, int x, int y, int w,int h){
 	}
 }
 
+void drawImageFromFile(int id, wchar_t* fname, int x, int y, int w, int h){
+	DWAWindow* dwa = getWindowByID(id);
+	if (dwa!=NULL){
+		XImage *p;
+		XImage *pmask;
+		XpmAttributes xattributes;
+		xattributes.valuemask = 0;
+		int sz=wcstombs(NULL,fname,0);
+		char cfilename[sz];
+		wcstombs(cfilename,fname,1024*4);
+		int rtn = XpmReadFileToImage(display,cfilename,&p,&pmask,&xattributes);
+		if (rtn==0){
+			XPutImage(display,dwa->win, dwa->gc,p,0,0,x,y,w,h);
+			XDestroyImage(p);
+		}
+	}
+}
+
+void getImageSize(wchar_t* fname, int* sz){
+	init();
+	XImage *p;
+	XImage *pmask;
+	XpmAttributes xattributes;
+	xattributes.valuemask = 0;
+	int sz1=wcstombs(NULL,fname,0);
+	char cfilename[sz1];
+	wcstombs(cfilename,fname,1024*4);
+	int rtn = XpmReadFileToImage(display,cfilename,&p,&pmask,&xattributes);
+	if (rtn==0){
+		sz[0]=p->width;
+		sz[1]=p->height;
+		XDestroyImage(p);
+	}else{
+		sz[0]=0;
+		sz[1]=0;
+	}
+}
+
 
 int getFontAscent(int id){
 	return fontascent;
