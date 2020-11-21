@@ -5,49 +5,28 @@ This Source Code Form is subject to the terms of the Mozilla
 Public License, v. 2.0. If a copy of the MPL was not distributed
 with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
-import utils
-import os
+import compile_generic
 
-PRJNAME="os_win_updater"
-
-CONF = {}
-CONF["pathsrc"]=".." + os.sep + PRJNAME + os.sep + "src"
-CONF["pathdst"]=utils.PATHTMP + os.sep + PRJNAME
-
-CONF_WINDOWS={}
-CONF_WINDOWS["outname"]="dwagupd.exe" 
-CONF_WINDOWS["cpp_include_paths"]=[]
-CONF_WINDOWS["cpp_library_paths"]=CONF_WINDOWS["cpp_include_paths"]
-CONF_WINDOWS["libraries"]=[]
-CONF["windows"]=CONF_WINDOWS
-
-
-class Compile():
+class Compile(compile_generic.Compile):
     
-    def get_name(self):
-        return PRJNAME;
-    
-    def set_cpp_compiler_flags(self, osn, flgs):
-        if osn in CONF:
-            CONF[osn]["cpp_compiler_flags"]=flgs
-    
-    def set_linker_flags(self, osn, flgs):
-        if osn in CONF:
-            CONF[osn]["linker_flags"]=flgs
-    
-    def run(self):
-        utils.info("BEGIN " + self.get_name())
-        utils.make_tmppath()
-        utils.remove_from_native(CONF)
-        confos=utils.compile_lib(CONF)
-        if confos is not None:
-            utils.copy_to_native(CONF)
-        utils.info("END " + self.get_name())
+    def __init__(self):
+        compile_generic.Compile.__init__(self,"os_win_updater")
 
-if __name__ == "__main__":    
+    def get_os_config(self,osn):
+        conf=None
+        if osn=="windows":
+            conf={}
+            conf["outname"]="dwagupd.exe" 
+            conf["cpp_include_paths"]=[]
+            conf["cpp_library_paths"]=conf["cpp_include_paths"]
+            conf["libraries"]=[]
+            conf["linker_flags"]="-static-libgcc -static-libstdc++"
+        return conf
+    
+    
+if __name__ == "__main__":
     m = Compile()
     m.run()
-    
     
     
     

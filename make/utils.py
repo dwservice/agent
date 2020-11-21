@@ -59,9 +59,9 @@ def remove_path(src):
     if os.path.exists(src):
         shutil.rmtree(src)
 
-def make_tmppath():
-    if not os.path.exists(PATHTMP):
-        os.makedirs(PATHTMP)
+def make_tmppath(pathtmp):
+    if not os.path.exists(pathtmp):
+        os.makedirs(pathtmp)
 
 def init_path(pth):
     if os.path.exists(pth):
@@ -141,7 +141,7 @@ def system_exec(cmd,wkdir):
         #return False
     return True            
 
-def remove_from_native(mainconf):
+def remove_from_native(pathnative, mainconf):
     if is_windows():        
         if not "windows" in mainconf:
             return None
@@ -154,11 +154,11 @@ def remove_from_native(mainconf):
         if not "mac" in mainconf:
             return None
         cconf = mainconf["mac"]
-    psrc = PATHNATIVE + os.sep + cconf["outname"]
+    psrc = pathnative + os.sep + cconf["outname"]
     if os.path.exists(psrc):
         os.remove(psrc)
 
-def copy_to_native(mainconf):
+def copy_to_native(pathnative, mainconf):
     if is_windows():        
         if not "windows" in mainconf:
             return None
@@ -175,12 +175,12 @@ def copy_to_native(mainconf):
     pth=mainconf["pathdst"]
     name=cconf["outname"]
     
-    if not os.path.exists(PATHNATIVE):
-        os.makedirs(PATHNATIVE)
+    if not os.path.exists(pathnative):
+        os.makedirs(pathnative)
     psrc = pth + os.sep + name
     if not os.path.exists(psrc):
         raise Exception("File " + name + " not generated. Please check compilation details.")
-    pdst = PATHNATIVE + os.sep + name
+    pdst = pathnative + os.sep + name
     if os.path.exists(pdst):
         os.remove(pdst)
     shutil.copy2(psrc, pdst)
@@ -201,7 +201,7 @@ def compile_lib(mainconf):
         if "linker_flags" in cconf:
             lflgs=cconf["linker_flags"]
         cconf["cpp_compiler"]="g++ " + cflgs + " -DOS_WINDOWS %INCLUDE_PATH% -O3 -g3 -Wall -c -fmessage-length=0 -o \"%NAMEO%\" \"%NAMECPP%\""
-        cconf["linker"]="g++ " + lflgs + " %LIBRARY_PATH% -s -static-libgcc -static-libstdc++ -municode -shared -o %OUTNAME% %SRCFILES% %LIBRARIES%"
+        cconf["linker"]="g++ " + lflgs + " %LIBRARY_PATH% -s -municode -shared -o %OUTNAME% %SRCFILES% %LIBRARIES%"
     elif is_linux():
         if not "linux" in mainconf:
             print "NO CONFIGURATION."
