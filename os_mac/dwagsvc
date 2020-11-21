@@ -14,8 +14,10 @@ run() {
 	. "${PATH_DWA_NATIVE}/dwagupd"
 	if check_update "${PATH_DWA}"; then
 		cd "${PATH_DWA}"
+		#BIGSUR FIX
+		unlink "${PATH_DWA_RUNTIME_LIBRARY}/libz.1.dylib"
 		export DYLD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
-                "${PATH_DWA_RUNTIME}/dwagent" agent.pyc -filelog -noctrlfile
+        "${PATH_DWA_RUNTIME}/dwagent" agent.pyc -filelog -noctrlfile
 	fi
 }
 

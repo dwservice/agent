@@ -13,6 +13,8 @@ EOF
 	exit $?
 else
 	cd "${PATH_DWA}"
+	#BIGSUR FIX
+	unlink "${PATH_DWA_RUNTIME_LIBRARY}/libz.1.dylib"
 	export DYLD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
 	if [ -z "$3" ] && [ -z "$4" ]; then
 		"${PATH_DWA_RUNTIME}/dwagent" installer.pyc
