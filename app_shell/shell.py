@@ -402,7 +402,7 @@ class Linux():
         if self._bterm == None:
             return
         if not isinstance(c, unicode):
-            c=c.decode("utf8");
+            c=c.decode("utf8","replace");
         self._writer.write(c)
         self._writer.flush()
 
@@ -415,7 +415,10 @@ class Linux():
         #output=reader.read(128)
         #reader.close()
         #output=self._reader.read(self._rows*self._cols)
-        return self._reader.read()
+        s = self._reader.read()
+        if s is not None and not isinstance(s, unicode):
+            s=s.decode("utf8","replace");
+        return s
 
                 
 '''class Windows():
