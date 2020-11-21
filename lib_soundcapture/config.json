@@ -1,0 +1,6 @@
+{
+	"filename_win": "dwagsoundcapture.dll",
+	"filename_linux": "dwagsoundcapture.so",
+	"filename_mac": "dwagsoundcapture.dylib",
+	"lib_dependencies": ["stdcpp","rtaudio","opus"]
+}

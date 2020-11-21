@@ -181,6 +181,7 @@ class Session(threading.Thread):
         prms = cinfo.get_permissions()
         if prms["fullAccess"]:
             self._allow_inputs=True
+            self._allow_audio=True
         else:
             pret=self._dskmain._agent_main.get_app_permission(cinfo,"desktop")
             if pret["fullAccess"]:
@@ -189,7 +190,11 @@ class Session(threading.Thread):
                 if "allowScreenInput" in pret:
                     self._allow_inputs=pret["allowScreenInput"]
                 else:
-                    self._allow_inputs=False                
+                    self._allow_inputs=False
+                if "allowAudio" in pret:
+                    self._allow_audio=pret["allowAudio"]
+                else:
+                    self._allow_audio=True
         
         self._prop=wsock.get_properties()
         self._idses=cinfo.get_idsession()
@@ -201,7 +206,9 @@ class Session(threading.Thread):
         self._quality=-1
         self._supported_frame=None
         self._frame_type=-1 # 0=DATA_PALETTE_COMPRESS_V1; 100=DATA_TJPEG"
+        self._audio_type=-1
         self._send_frame_type=False
+        self._send_audio_type=False
         self._send_buffer_size = -1
         self._send_buffer_size_counter = utils.Counter()
         self._keepalive_counter = None
@@ -210,6 +217,7 @@ class Session(threading.Thread):
         self._websocket.accept(10,{"on_close": self._on_websocket_close,"on_data":self._on_websocket_data})
         self._cursor_visible = True
         self._slow_mode = False
+        self._audio_enable = True
         self._monitor = -1 
         
         self._capture_process_recovery=False
@@ -233,6 +241,10 @@ class Session(threading.Thread):
         if self._frame_type!=-1:
             self._dskmain._capture_process.set_frame_type(self, self._frame_type)
     
+    def _init_audio(self):
+        if self._audio_type!=-1:
+            self._dskmain._capture_process.init_audio(self, self._audio_type)
+    
     def _set_quality(self):
         self._dskmain._capture_process.set_quality(self, self._quality)
     
@@ -250,6 +262,9 @@ class Session(threading.Thread):
     def _set_slow_mode(self):
         self._dskmain._capture_process.set_slow_mode(self, self._slow_mode)
     
+    def _set_audio_enable(self):
+        self._dskmain._capture_process.set_audio_enable(self, self._audio_enable)
+    
     def _on_websocket_data(self,websocket,tpdata,data):
         if not self._bdestroy:
             try:
@@ -263,7 +278,9 @@ class Session(threading.Thread):
                         self._set_frame_type()
                         self._set_monitor()
                         self._set_quality()
-                        self._set_slow_mode()                        
+                        self._set_slow_mode()
+                        self._init_audio()
+                        self._set_audio_enable()
                     else:
                         tm = float(prprequest["frametime"])
                         self._dskmain._capture_process.received_frame(self, tm)
@@ -293,6 +310,17 @@ class Session(threading.Thread):
                                         break
                                 if self._send_frame_type==True:
                                     break
+                    if prprequest is not None and "acceptAudioType" in prprequest:
+                        if not self._allow_audio:
+                            raise Exception("Permission denied (audio).")
+                        arft = prprequest["acceptAudioType"].split(";")
+                        for i in range(len(arft)):
+                            v = int(arft[i])
+                            if v==0:
+                                self._audio_type=v
+                                self._send_audio_type=True
+                                self._init_audio()                                
+                                break
                             
                 if prprequest is not None and "slow" in prprequest:
                     self._slow_mode=prprequest["slow"]=="true"
@@ -304,6 +332,9 @@ class Session(threading.Thread):
                     if self._keepalive_counter is None:
                         self._keepalive_counter = utils.Counter()
                     self._keepalive_send = True                
+                if prprequest is not None and "audioEnable" in prprequest:
+                    self._audio_enable=prprequest["audioEnable"]=="true"
+                    self._set_audio_enable()                    
             except Exception as ex:
                 self._dskmain._agent_main.write_err("AppDesktop:: on_websoket_data error. ID: " + self._id + " - Error:" + utils.exception_to_string(ex))            
             
@@ -317,6 +348,10 @@ class Session(threading.Thread):
             if self._send_frame_type==True:
                 self._send_frame_type=False
                 lst.append(utils.Bytes(struct.pack("!hh",801,self._frame_type)))
+            
+            if self._send_audio_type==True:
+                self._send_audio_type=False
+                lst.append(utils.Bytes(struct.pack("!hh",809,0))) #0=opus            
             
             tp = _struct_h.unpack(sdata[0:2])[0]
             if tp==10: #MONITOR
@@ -343,6 +378,9 @@ class Session(threading.Thread):
                 lst.append(sdata)                
             elif tp==805: #COPY
                 self._last_copy_text=unicode(base64.b64decode(sdata.new_buffer(2).to_str("utf8")).decode("utf8"))
+                lst.append(sdata)
+            elif tp==810: #AUDIO DATA
+                #print "AUDIO: " + str(len(sdata))
                 lst.append(sdata)
             elif tp==990: #CAPTURE ERROR
                 self.destroy()
@@ -529,6 +567,8 @@ class CaptureProcessClient(threading.Thread):
         self._agent_main=agent_main
         self._screen_module=None
         self._screen_listlibs=None
+        self._sound_module=None
+        self._sound_listlibs=None
         self._semaphore = threading.Condition()
         self._sharedmem=None
         self._sharedmem_bw=None
@@ -559,7 +599,24 @@ class CaptureProcessClient(threading.Thread):
     def _get_screen_module(self):
         if self._screen_module is None:
             self._screen_module = self._agent_main.load_lib("screencapture")
+            #DOWNLOAD AUDIO LIB
+            try:
+                soundenable = False
+                try:
+                    soundenable = self._agent_main.get_config("desktop.sound_enable", True);
+                except:
+                    None
+                if soundenable:
+                    self._get_sound_module()
+            except Exception as e:
+                self._agent_main.write_err("Sound library load error: " + utils.exception_to_string(e))             
         return self._screen_module
+    
+    def _get_sound_module(self):
+        if not (agent.is_windows() and (self._get_screen_module().isWinXP()==1 or self._get_screen_module().isWin2003Server()==1)):
+            if self._sound_module is None:
+                self._sound_module = self._agent_main.load_lib("soundcapture")
+        return self._sound_module
     
     def _set_process_status_updating(self,checkv):
         appldm={}
@@ -1025,7 +1082,10 @@ class CaptureProcessClient(threading.Thread):
         #UNLOAD DLL        
         if self._screen_module is not None:
             self._agent_main.unload_lib("screencapture")
-            self._screen_module=None;        
+            self._screen_module=None;
+        if self._sound_module is not None:
+            self._agent_main.unload_lib("soundcapture")
+            self._sound_module=None;
         
     def exists(self, dm):
         self._semaphore.acquire()
@@ -1080,6 +1140,11 @@ class CaptureProcessClient(threading.Thread):
         apps=u"RECEIVED_FRAME:"+unicode(sid)+u";"+unicode(tm)
         self._write_data(apps)        
     
+    def init_audio(self, dm, v):
+        sid=self.get_id(dm)
+        apps=u"INIT_AUDIO:"+unicode(sid)+u";"+unicode(v)
+        self._write_data(apps)
+    
     def set_quality(self, dm, q):
         sid=self.get_id(dm)
         apps=u"SET_QUALITY:"+unicode(sid)+u";"+unicode(q)
@@ -1098,6 +1163,11 @@ class CaptureProcessClient(threading.Thread):
     def set_slow_mode(self, dm, b):
         sid=self.get_id(dm)
         apps=u"SET_SLOW_MODE:"+unicode(sid)+u";"+unicode(b)
+        self._write_data(apps)
+    
+    def set_audio_enable(self, dm, b):
+        sid=self.get_id(dm)
+        apps=u"SET_AUDIO_ENABLE:"+unicode(sid)+u";"+unicode(b)
         self._write_data(apps)
     
     def inputs(self, dm, sinps):
@@ -1241,11 +1311,14 @@ class CaptureProcessSession(threading.Thread):
         self._frame_distance_lock=threading.Lock()
         self._frame_distance=0
         self._frame_size=0l
+        self._audio_enable=True
         self._slow_mode=False
         self._slow_mode_counter=utils.Counter()
         self._ping=-1
         self._ping_counter=None
         self._speed_calculator=CaptureProcessSessionSpeedCalculator(self)
+        self._sound_counter=utils.Counter()
+        self._sound_init=False
         self._bdestroy = False
         
     def _send_debug(self, s):
@@ -1302,9 +1375,20 @@ class CaptureProcessSession(threading.Thread):
     def set_frame_type(self,t):
         self._frame_type=t        
     
+    def init_audio(self,v):
+        if self._capture_process.get_sound_enable():            
+            self.init_sound()
+        else:
+            bts = utils.Bytes(struct.pack("!h",811))
+            bts.append_str(self._capture_process.get_sound_error_message(), "utf8")
+            self._capture_process.write_data(self._id, bts);
+    
     def set_slow_mode(self,b):
         self._slow_mode=b
         
+    def set_audio_enable(self,b):
+        self._audio_enable=b        
+            
     def set_quality(self,q):
         self._speed_calculator.set_quality_request(q)       
     
@@ -1337,9 +1421,11 @@ class CaptureProcessSession(threading.Thread):
     def wait_difference_inprogress(self):
         while self._difference_inprogress:
             time.sleep(0.005)
+            self.send_sound()
     
     def wait_time(self,tm):
         time.sleep(tm)
+        self.send_sound()
                         
     def run(self):
         self._scrinv.add(self, self._scrinv.init,[self._id])
@@ -1383,8 +1469,49 @@ class CaptureProcessSession(threading.Thread):
             self._capture_process._debug_print(utils.exception_to_string(ex) + "\n" + traceback.format_exc())            
         self._scrinv.add(self, self._scrinv.term,[self._id])
 
+    def init_sound(self):
+        if self._sound_init==False:
+            try:
+                self._sndmdl = self._capture_process._get_sound_module()
+                self._sndmdl.DWASoundCaptureInit(self._id,0,9);
+                self._sound_init=True
+            except Exception as ex:
+                try:
+                    bts = utils.Bytes(struct.pack("!h",811))
+                    bts.append_str(str(ex), "utf8")
+                    self._capture_process.write_data(self._id, bts);
+                except:
+                    None
+    
+    def term_sound(self):
+        if self._sound_init==True:
+            self._sound_init=False
+            try:
+                self._sndmdl.DWASoundCaptureTerm(self._id);                
+            except Exception as ex:
+                self._capture_process._debug_print(utils.exception_to_string(ex) + "\n" + traceback.format_exc())
+            
+
+    def send_sound(self):
+        if self._sound_init and self._sound_counter.is_elapsed(0.02):
+            self._sound_counter.reset()
+            try:
+                pdatasound = ctypes.POINTER(ctypes.c_char)()
+                szsound = self._sndmdl.DWASoundCaptureGetData(self._id, ctypes.byref(pdatasound));
+                if szsound>0 and self._audio_enable and not self._slow_mode:
+                    self._capture_process.write_data(self._id, utils.Bytes(struct.pack("!h",810)+pdatasound[0:szsound]))
+            except Exception as ex:
+                self._term_sound()
+                try:
+                    bts = utils.Bytes(struct.pack("!h",811))
+                    bts.append_str(str(ex), "utf8")
+                    self._capture_process.write_data(self._id, bts);
+                except:
+                    None                
+    
     def destroy(self,bwait=False):
         self._bdestroy=True
+        self.term_sound()
         if bwait:
             self.join(2)        
     
@@ -1454,6 +1581,47 @@ class CaptureProcessScreen(threading.Thread):
                 self._currentscr=None                
             time.sleep(0.005)
 
+class CaptureProcessSound(threading.Thread):
+        
+    def __init__(self, cprc):
+        threading.Thread.__init__(self,  name="CaptureProcessSound")
+        self._capture_process = cprc
+        self._sndmdl = self._capture_process._get_sound_module()
+        self._counter=utils.Counter();
+        self._enable=None
+        self._error_message=""
+    
+    def get_enable(self):
+        return self._enable
+
+    def get_error_message(self):
+        return self._error_message
+    
+    def run(self):
+        try:
+            self._sndmdl.DWASoundCaptureStart()
+            if agent.is_mac():
+                bf = ctypes.create_string_buffer(2048)
+                l = self._sndmdl.DWASoundCaptureGetDetectOutputName(bf,2048);
+                if l>0:
+                    sodn=bf.value[0:l]
+                else:
+                    sodn=""
+                if "SOUNDFLOWER" not in sodn.upper():
+                    raise Exception("Soundflower not found. Please install it and set it as your primary output device.")
+            self._enable=True            
+            self._counter.reset()
+            while not self._capture_process.is_destroy():
+                if self._counter.is_elapsed(3):
+                    self._counter.reset()                    
+                    #self._sndmdl.DWASoundCaptureDetectOutput() #TO CHECK                     
+                time.sleep(0.5)
+            self._sndmdl.DWASoundCaptureStop()
+        except Exception as ex:
+            self._enable=False
+            self._error_message=str(ex)
+            self._capture_process._debug_print("Sound error: " + str(ex))
+            self._sndmdl.DWASoundCaptureStop()
 
 class CaptureProcessDebug(threading.Thread):
         
@@ -1477,6 +1645,9 @@ class CaptureProcess():
         self._screen_thread=None
         self._screen_module=None
         self._screen_listlibs=None
+        self._sound_module=None
+        self._sound_thread=None        
+        self._sound_listlibs=None
         self._sharedmem=None
         self._sharedmem_bw=None
         self._sharedmem_br=None        
@@ -1484,10 +1655,14 @@ class CaptureProcess():
         self._scr_libver = 0        
         self._last_copy_text=""
         self._debug_logprocess=False
+        self._sound_enable=True
+        self._sound_error_message=""
         try:
             c = agent.read_config_file()
             if "desktop.debug_logprocess" in c:
                 self._debug_logprocess=c["desktop.debug_logprocess"]
+            if "desktop.sound_enable" in c:
+                self._sound_enable=c["desktop.sound_enable"]
         except:
             None
     
@@ -1502,6 +1677,23 @@ class CaptureProcess():
             self._screen_listlibs = native.load_libraries_with_deps("screencapture")
             self._screen_module = self._screen_listlibs[0] 
         return self._screen_module
+    
+    def _get_sound_module(self):
+        if self._sound_module is None:
+            self._sound_listlibs = native.load_libraries_with_deps("soundcapture")
+            self._sound_module = self._sound_listlibs[0]
+        return self._sound_module    
+    
+    def get_sound_enable(self):
+        if self._sound_thread is None:
+            return False
+        return self._sound_thread.get_enable()
+    
+    def get_sound_error_message(self):
+        smsg=self._sound_error_message
+        if self._sound_thread is not None:
+            smsg=self._sound_thread.get_error_message()
+        return smsg
     
     def write_data(self, sid, bts):
         self._sharedmem_bw.add_pack(["int","bytes"],[sid,bts])        
@@ -1528,7 +1720,7 @@ class CaptureProcess():
                     if appid in self._listids:
                         apparid = self._listids[appid]                                
                         apparid["screenThread"].destroy()
-                    self._listids[appid]={"id": appid, "monitor": -1}
+                    self._listids[appid]={"id": appid, "monitor": -1, "sound": "none"}
                     self._listids[appid]["screenThread"]=CaptureProcessSession(self, appid)
                     self._listids[appid]["screenThread"].start()                        
                 if ar[0]==u"TERMINATE":
@@ -1543,6 +1735,11 @@ class CaptureProcess():
                     tm=float(prms[1])
                     if appid in self._listids:
                         self._listids[appid]["screenThread"].received_frame(tm)
+                elif ar[0]==u"INIT_AUDIO":
+                    appid=int(prms[0]);
+                    v=float(prms[1])
+                    if appid in self._listids:
+                        self._listids[appid]["screenThread"].init_audio(v)
                 elif ar[0]==u"SET_SEND_BUFFER_SIZE":
                     appid=int(prms[0]);
                     sz=int(prms[1])
@@ -1568,6 +1765,11 @@ class CaptureProcess():
                     b=prms[1]=="True"
                     if appid in self._listids:
                         self._listids[appid]["screenThread"].set_slow_mode(b)
+                elif ar[0]==u"SET_AUDIO_ENABLE":
+                    appid=int(prms[0]);
+                    b=prms[1]=="True"
+                    if appid in self._listids:
+                        self._listids[appid]["screenThread"].set_audio_enable(b)
                 elif ar[0]==u"COPY_TEXT":
                     appid=int(prms[0]);
                     if appid in self._listids:
@@ -1624,6 +1826,40 @@ class CaptureProcess():
             self._screen_thread = CaptureProcessScreen(self)
             self._screen_thread.start()
             
+            try:                
+                if not (agent.is_windows() and (self._get_screen_module().isWinXP()==1 or self._get_screen_module().isWin2003Server()==1)):
+                    if self._sound_enable:
+                        fnsndcrash=None
+                        if agent.is_linux():
+                            fnsndcrash = utils.path_expanduser("~") + utils.path_sep + u".dwagent"
+                            if not utils.path_exists(fnsndcrash):
+                                utils.path_makedirs(fnsndcrash)
+                            fnsndcrash = fnsndcrash + utils.path_sep + u"app_desktop.soundcrash"
+                        if fnsndcrash is None or not utils.path_exists(fnsndcrash):
+                            if fnsndcrash is not None:                                                                
+                                fsndcrash=utils.file_open(fnsndcrash, 'wb')
+                                fsndcrash.close()
+                            try:
+                                self._get_sound_module().DWASoundCaptureVersion() #CHECK TO LOAD LIB
+                                self._sound_thread = CaptureProcessSound(self)
+                                self._sound_thread.start()
+                                while self._sound_thread.get_enable() is None and not self._sharedmem.is_closed():
+                                    time.sleep(0.25)
+                            finally:
+                                if fnsndcrash is not None:
+                                    if utils.path_exists(fnsndcrash):
+                                        os.remove(fnsndcrash)
+                        else:
+                            self._sound_error_message="Crash soundlib."
+                    else:
+                        self._sound_error_message="Not enabled."
+                else:
+                    self._sound_error_message="Not supported."
+            except Exception as ex:
+                self._sound_thread=None
+                self._sound_error_message=str(ex)                 
+                self._debug_print("Sound load error. " + str(ex));            
+            
             self._debug_print("Ready to accept requests")            
             while not self._sharedmem.is_closed():
                 srequest = self._sharedmem_br.get_str()
@@ -1641,10 +1877,15 @@ class CaptureProcess():
             apparid = self._listids[appid]
             if "screenThread" in apparid:
                 apparid["screenThread"].destroy(True)                
+        if self._sound_thread is not None:
+            self._sound_thread.join(2)
         #UNLOAD DLL
         if self._screen_module is not None:
             native.unload_libraries(self._screen_listlibs)
             self._screen_module=None;
+        if self._sound_module is not None:
+            native.unload_libraries(self._sound_listlibs)
+            self._sound_module=None;
         self._debug_print("Term capture process.")
 
 

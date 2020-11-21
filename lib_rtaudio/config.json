@@ -1,0 +1,7 @@
+{
+	"version": "5.1.0",
+	"filename_win": "librtaudio.dll",
+	"filename_mac": "librtaudio.dylib",
+	"filename_linux": "librtaudio.so",
+	"lib_dependencies": ["stdcpp"]
+}

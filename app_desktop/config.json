@@ -1,4 +1,4 @@
 {
 	"app_dependencies": [],
-	"lib_dependencies": ["screencapture"]
+	"lib_dependencies": ["screencapture","soundcapture"]
 }

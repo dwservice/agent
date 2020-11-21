@@ -1,0 +1,5 @@
+{
+	"version": "8.1.0",
+	"filename_win": "libstdc++-6.dll",
+	"lib_dependencies": ["gcc"]
+}

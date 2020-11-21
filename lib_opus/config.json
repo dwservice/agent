@@ -1,0 +1,6 @@
+{
+	"version": "1.3.1",
+	"filename_win": "opus.dll",
+	"filename_mac": "libopus.dylib",
+	"filename_linux": "libopus.so"
+}
