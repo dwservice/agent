@@ -110,6 +110,27 @@ def obfuscate_password(pwd):
 def read_obfuscated_password(enpwd):
     return zlib.decompress(base64.b64decode(enpwd))
     
+
+def read_config_file():
+        c=None
+        try:
+            f = utils.file_open("config.json")
+        except Exception as e:
+            raise Exception("Error reading config file. " + utils.exception_to_string(e))
+        try:
+            c = json.loads(f.read())
+        except Exception as e:
+            raise Exception("Error parse config file: " + utils.exception_to_string(e))
+        finally:
+            f.close()
+        return c
+
+def write_config_file(jo):
+    s = json.dumps(jo, sort_keys=True, indent=1)
+    f = utils.file_open("config.json", 'wb')
+    f.write(s)
+    f.close()
+
 class StdRedirect(object):
     
     def __init__(self,lg,lv):
@@ -168,7 +189,6 @@ class Agent():
         
         #Inizializza campi
         self._task_pool = None
-        self._path_config='config.json'
         self._config=None
         self._brun=True
         self._brebootagent=False
@@ -197,6 +217,7 @@ class Agent():
         self._libs={}
         self._apps={}
         self._apps_to_reload={}
+        self._node_files_info=None
         self._agent_log_semaphore = threading.Condition()
         self._connections_semaphore = threading.Condition()
         self._libs_apps_semaphore = threading.Condition()
@@ -336,28 +357,16 @@ class Agent():
                 self.write_except(e)
     
     def _write_config_file(self):
-        s = json.dumps(self._config, sort_keys=True, indent=1)
-        f = utils.file_open(self._path_config, 'wb')
-        f.write(s)
-        f.close()
+        write_config_file(self._config)        
         
     def _read_config_file(self):
         self._config_semaphore.acquire()
         try:
             try:
-                f = utils.file_open(self._path_config)
+                self._config = read_config_file()
             except Exception as e:
-                self.write_err("Error reading config file. " + utils.exception_to_string(e))
+                self.write_err(str(e))
                 self._config = None
-                return
-            try:
-                self._config = json.loads(f.read())
-                self.write_info("Readed config file.")
-            except Exception as e:
-                self.write_err("Error parse config file: " + utils.exception_to_string(e))
-                self._config = None
-            finally:
-                f.close()
         finally:
             self._config_semaphore.release()
     
@@ -420,13 +429,13 @@ class Agent():
     def _load_config(self):
         #self.write_info("load configuration...")
         #VERIFICA agentConnectionPropertiesUrl
-        self._agent_url_primary = self._get_config('url_primary', None)
+        self._agent_url_primary = self.get_config('url_primary', None)
         if self._agent_url_primary  is None:
             self.write_info("Missing url_primary configuration.")
             return False
         if not self._runonfly:
-            self._agent_key = self._get_config('key', None)
-            self._agent_password = self._get_config('password', None)
+            self._agent_key = self.get_config('key', None)
+            self._agent_password = self.get_config('password', None)
         else:
             self._agent_key = None
             self._agent_password = None
@@ -514,7 +523,7 @@ class Agent():
             self._config_semaphore.release()
     
     def check_config_auth(self, usr, pwd):
-        cp=self._get_config('config_password', hash_password(""))
+        cp=self.get_config('config_password', hash_password(""))
         return usr=="admin" and pwd==cp
     
     def set_proxy(self, stype,  host,  port,  user,  password):
@@ -612,7 +621,7 @@ class Agent():
         self._reload_config()
     
     
-    def _get_config(self, key, default=None):
+    def get_config(self, key, default=None):
         self._config_semaphore.acquire()
         try:
             if self._config is not None:
@@ -627,26 +636,33 @@ class Agent():
     
     def get_config_str(self, key):
         if (key=="enabled"):
-            return bool2str(self._get_config(key))
+            return bool2str(self.get_config(key))
         elif (key=="key"):
-            v = self._get_config(key)
+            v = self.get_config(key)
             if v is None:
                 v=""
             return v
         elif (key=="proxy_type"):
-            return self._get_config(key, "SYSTEM")
+            return self.get_config(key, "SYSTEM")
         elif (key=="proxy_host"):
-            return self._get_config(key, "")
+            return self.get_config(key, "")
         elif (key=="proxy_port"):
-            v = self._get_config(key)
+            v = self.get_config(key)
             if v is None:
                 return ""
             else:
                 return str(v)
         elif (key=="proxy_user"):
-            return self._get_config(key, "")
+            return self.get_config(key, "")
         elif (key=="monitor_tray_icon"):
-            v = self._get_config(key)
+            v = self.get_config(key)
+            if v is None or v is True:
+                v="True"
+            else:
+                v="False"
+            return v
+        elif (key=="recovery_session"):
+            v = self.get_config(key)
             if v is None or v is True:
                 v="True"
             else:
@@ -962,7 +978,7 @@ class Agent():
     def _reload_agent(self, ms):
         self._config_semaphore.acquire()
         try:
-            self._breloadagentcnt=communication.Counter(ms)
+            self._breloadagentcnt=utils.Counter(ms)
         finally:
             self._config_semaphore.release()
     
@@ -1090,10 +1106,10 @@ class Agent():
                         if bfirstreadconfig:
                             bfirstreadconfig=False
                             #CARICA DEBUG MODE
-                            self._agent_debug_mode = self._get_config('debug_mode',False)
-                            self._debug_indentation_max = self._get_config('debug_indentation_max',self._debug_indentation_max)
-                            self._debug_thread_filter = self._get_config('debug_thread_filter',self._debug_thread_filter)
-                            self._debug_class_filter = self._get_config('debug_class_filter',self._debug_class_filter)
+                            self._agent_debug_mode = self.get_config('debug_mode',False)
+                            self._debug_indentation_max = self.get_config('debug_indentation_max',self._debug_indentation_max)
+                            self._debug_thread_filter = self.get_config('debug_thread_filter',self._debug_thread_filter)
+                            self._debug_class_filter = self.get_config('debug_class_filter',self._debug_class_filter)
                             if self._agent_debug_mode:
                                 self._logger.setLevel(logging.DEBUG)
                                 self._debug_path=os.getcwdu()
@@ -1108,7 +1124,7 @@ class Agent():
                 if not self._runonfly:
                     if self._httpserver is None:
                         try:
-                            self._httpserver = listener.HttpServer(self._get_config('listen_port', 7950), self)
+                            self._httpserver = listener.HttpServer(self.get_config('listen_port', 7950), self)
                             self._httpserver.start()                
                         except Exception as ace:
                             self.write_except(ace, "INIT LISTENER: ")
@@ -1118,7 +1134,7 @@ class Agent():
                 #Legge la configurazione
                 skiponflyretry=False
                 if self._config is not None:
-                    self._agent_enabled = self._get_config('enabled',True)
+                    self._agent_enabled = self.get_config('enabled',True)
                     if self._agent_enabled is False:
                         if self._agent_status != self._STATUS_DISABLE:
                             self.write_info("Agent disabled")
@@ -1131,7 +1147,7 @@ class Agent():
                             #Verifica se ci sono aggiornamenti
                             if self._check_update() is True:
                                 if self._load_agent_properties() is True:                                    
-                                    if self._run_agent() is True and self._get_config('enabled',True):
+                                    if self._run_agent() is True and self.get_config('enabled',True):
                                         self._cnt = self._cnt_max
                                         self._cnt_random = random.randrange(self._cnt_min, self._cnt_max) #Evita di avere connessioni tutte assieme
                                         skiponflyretry=True
@@ -1303,7 +1319,7 @@ class Agent():
     def _update_supported_apps(self,binit):
         if binit:
             self._suppapps=";".join(self.get_supported_applications())
-            self._suppappscheckcnt=communication.Counter(20*1000) #20 SECONDS
+            self._suppappscheckcnt=utils.Counter(20) #20 SECONDS
         else:
             try:
                 if self._suppappscheckcnt.is_elapsed():
@@ -1337,7 +1353,8 @@ class Agent():
                 self._main_recovery_id=None
                 self._main_recovery_timeout=None
             finally:
-                self._connections_semaphore.release()                        
+                self._connections_semaphore.release()
+            self._node_files_info=None
             self._sessions={}
             self._apps={}
             self._apps_to_reload={}
@@ -1351,7 +1368,7 @@ class Agent():
                     'osTypeCode':  str(get_os_type_code()), 
                     'fileSeparator':  utils.path_sep,
                     'supportedApplications': self._suppapps,
-                    'supportedRecovery': 'True'
+                    'supportedRecovery': self.get_config_str('recovery_session')
                 }
             hwnm = detectinfo.get_hw_name()
             if hwnm is not None:
@@ -1404,26 +1421,41 @@ class Agent():
     def get_supported_applications(self):
         return applications.get_supported(self)
     
-    def _update_libs_apps_file(self, cur_vers, rem_vers, name_file):
+    def _update_libs_apps_file(self, tp, name, cur_vers, rem_vers, name_file):
         if name_file in cur_vers:
             cv = cur_vers[name_file]
         else:
             cv = "0"
         rv  = rem_vers[name_file + '@version']
         if cv!=rv:
+            if tp=="app":
+                self.write_info("App " + name + " updating...")
+            elif tp=="lib":
+                self.write_info("Lib " + name + " updating...")                
             app_file = name_file
             if utils.path_exists(app_file):
                 utils.path_remove(app_file)
-            self.write_info("Downloading file " + name_file + "...")
             app_url = self._agent_url_node + "getAgentFile.dw?name=" + name_file + "&version=" + rem_vers[name_file + '@version']
             communication.download_url_file(app_url ,app_file, self.get_proxy_info(), None)
             self._check_hash_file(app_file, rem_vers[name_file + '@hash'])
             self._unzip_file(app_file, "")
             utils.path_remove(app_file)
             cur_vers[name_file]=rv
-            self.write_info("Downloaded file " + name_file + ".")
             return True
         return False
+    
+    def _get_node_files_info(self):
+        if self._node_files_info is None:
+            try:
+                app_url = self._agent_url_node + "getAgentFile.dw?name=files.xml"
+                self._node_files_info = communication.get_url_prop(app_url, self.get_proxy_info())
+            except Exception as e:
+                self._node_files_info=None
+                raise Exception("Error read files.xml: "  + utils.exception_to_string(e))
+            if "error" in self._node_files_info:
+                self._node_files_info=None
+                raise Exception("Error read files.xml: " + self._node_files_info['error'])
+        return self._node_files_info
     
     def _update_libs_apps_file_exists(self,arfiles,name):
         for fn in arfiles:
@@ -1439,48 +1471,35 @@ class Agent():
                 self._update_lib_dependencies(name)
             return
         try:
-            self.write_info("Checking update " + tp + " " + name + "...")
-            rem_vers=None
-            try:
-                app_url = self._agent_url_node + "getAgentFile.dw?name=files.xml"
-                rem_vers = communication.get_url_prop(app_url, self.get_proxy_info())
-            except Exception as e:
-                raise Exception("Error read files.xml: "  + utils.exception_to_string(e))
-            if "error" in rem_vers:
-                raise Exception("Error read files.xml: " + rem_vers['error'])
-            #Verifica se esiste l'applicazione
+            rem_vers = self._get_node_files_info()
             arfiles = rem_vers['files'].split(";")
             if tp=="app":
                 zipname="app_" + name + ".zip"
             elif tp=="lib":
                 zipname="lib_" + name + "_" + self._agent_native_suffix + ".zip"
             if self._update_libs_apps_file_exists(arfiles, zipname):
-                #bupdatefvers=False 
                 f = utils.file_open('fileversions.json')
                 cur_vers = json.loads(f.read())
                 f.close()
                 if tp=="app" and not utils.path_exists("app_" + name):
                     utils.path_makedirs("app_" + name)
-                bup = self._update_libs_apps_file(cur_vers, rem_vers, zipname)                
+                bup = self._update_libs_apps_file(tp, name, cur_vers, rem_vers, zipname)                
                 if bup:                
                     s = json.dumps(cur_vers , sort_keys=True, indent=1)
                     f = utils.file_open("fileversions.json", "wb")
                     f.write(s)
                     f.close()
                     if tp=="app":
-                        self.write_info("Updated app " + name + ".")
+                        self.write_info("App " + name + " updated.")
                     elif tp=="lib":
-                        self.write_info("Updated lib " + name + ".")
+                        self.write_info("Lib " + name + " updated.")
                 if tp=="app":
                     self._update_app_dependencies(name)
                 elif tp=="lib":
                     self._update_lib_dependencies(name)
 
             else:
-                if tp=="app":
-                    self.write_info("App " + name + " not found.")
-                elif tp=="lib":
-                    self.write_info("Lib " + name + " not found (maybe it is not necessary for this OS).")
+                None #OS not needs of this lib or app
         except Exception as e:
             raise Exception("Error update " + tp + " " + name + ": " + utils.exception_to_string(e) + " Please reboot the agent or OS.")
     
@@ -1497,26 +1516,29 @@ class Agent():
                 appcnf=native.get_library_config(name)
                 if appcnf is not None:
                     appcnf["refcount"]=0
-                    self._libs[name]=appcnf
-                    self.write_info("Loaded lib " + name + ".")
-        except Exception as e:
-            self.write_except("Error loading lib " + name + ": " + utils.exception_to_string(e))
+                    self._libs[name]=appcnf                    
+        except Exception as e:            
             raise e
     
     def load_lib(self, name):
         self._libs_apps_semaphore.acquire()
         try:            
             self._init_lib(name)
-            cnflib=self._libs[name]
-            if cnflib["refcount"]==0:
-                if "lib_dependencies" in cnflib:
-                    for ln in cnflib["lib_dependencies"]:
-                        self.load_lib(ln)
-                fn = cnflib["filename_" + native.get_suffix()]
-                cnflib["refobject"]=native._load_lib_obj(fn)
-            cnflib["refcount"]+=1
-            return cnflib["refobject"]
+            if name in self._libs:
+                cnflib=self._libs[name]
+                if "filename_" + native.get_suffix() in cnflib:
+                    if cnflib["refcount"]==0:
+                        if "lib_dependencies" in cnflib:
+                            for ln in cnflib["lib_dependencies"]:
+                                self.load_lib(ln)
+                        fn = cnflib["filename_" + native.get_suffix()]
+                        cnflib["refobject"]=native._load_lib_obj(fn)
+                    cnflib["refcount"]+=1
+                    self.write_info("Lib " + name + " loaded.")
+                    return cnflib["refobject"]
+            return None
         except Exception as e:
+            self.write_except("Lib " + name + " load error: " + utils.exception_to_string(e))
             raise e
         finally:
             self._libs_apps_semaphore.release()        
@@ -1524,18 +1546,20 @@ class Agent():
     def unload_lib(self, name):
         self._libs_apps_semaphore.acquire()
         try:
-            cnflib=self._libs[name]
-            cnflib["refcount"]-=1
-            if cnflib["refcount"]==0:
-                native._unload_lib_obj(cnflib["refobject"])
-                if "lib_dependencies" in cnflib:
-                    for ln in cnflib["lib_dependencies"]:
-                        self.unload_lib(ln)
-                cnflib["refobject"]=None
-                del self._libs[name]
-                self.write_info("Unloaded lib " + name + ".")
+            if name in self._libs:
+                cnflib=self._libs[name]
+                if "filename_" + native.get_suffix() in cnflib:
+                    cnflib["refcount"]-=1
+                    if cnflib["refcount"]==0:
+                        native._unload_lib_obj(cnflib["refobject"])
+                        if "lib_dependencies" in cnflib:
+                            for ln in cnflib["lib_dependencies"]:
+                                self.unload_lib(ln)
+                        cnflib["refobject"]=None
+                        del self._libs[name]
+                        self.write_info("Lib " + name + " unloaded.")
         except Exception as e:
-            self.write_except("Error unloading lib " + name + ": " + utils.exception_to_string(e))
+            self.write_except("Lib " + name + " unload error: " + utils.exception_to_string(e))
             raise e
         finally:
             self._libs_apps_semaphore.release()
@@ -1640,12 +1664,12 @@ class Agent():
             func_destroy = getattr(md,  'destroy')
             bret = func_destroy(bforce)
             if bret:
-                self.write_info("Unloaded app " + name + ".")
+                self.write_info("App " + name + " unloaded.")
             return bret
         except AttributeError:
             return True
         except Exception as e:
-            self.write_except("Error unloading app " + name + ": " + utils.exception_to_string(e))
+            self.write_except("App " + name + " unload error: " + utils.exception_to_string(e))
             return False
                    
     def _init_app(self,name):
@@ -1658,9 +1682,9 @@ class Agent():
                 func = getattr(objlib, 'get_instance', None)
                 ret = func(self)
                 self._apps[name]=ret;
-                self.write_info("Loaded app " + name + ".")
+                self.write_info("App " + name + " loaded.")
             except Exception as e:
-                raise Exception("Error loading app " + name + ": " + utils.exception_to_string(e))
+                raise Exception("App " + name + " load error: " + utils.exception_to_string(e))
     
     def get_app(self,name):
         self._libs_apps_semaphore.acquire()
@@ -1893,10 +1917,10 @@ class Connection():
                 self._agent.write_info("Recovering connection (main)..." )
             else:
                 self._agent.write_info("Recovering connection (id: " + self._id + ")..." )
-            cntretry=communication.Counter()
-            cntwait=communication.Counter()
+            cntretry=utils.Counter()
+            cntwait=utils.Counter()
             while not cntretry.is_elapsed(crectimeout):          
-                if cntwait.is_elapsed(2000):
+                if cntwait.is_elapsed(2):
                     cntwait.reset()
                     try:
                         prop = self._get_prop_conn()
@@ -2080,24 +2104,27 @@ class Message():
     def _fire_msg(self, msg):
         None
     
+    def get_send_buffer_size(self):
+        return self._bwsendcalc.get_buffer_size()
+    
     def _send_conn(self,conn,data):
         pos=0
         tosnd=len(data)
         while tosnd>0:
-            bps = self._bwsendcalc.get_bps()
-            bfsz = communication.calculate_buffer_size(bps)
-            if bfsz is None:
-                bfsz=self._conn.get_send_buffer_size()
+            bfsz=self.get_send_buffer_size()
             if bfsz>=tosnd:
-                conn.send(data.new_buffer(pos,tosnd))
+                if pos==0:
+                    conn.send(data)
+                else:
+                    conn.send(data.new_buffer(pos,tosnd))
                 self._bwsendcalc.add(tosnd)
-                tosnd=0                
+                tosnd=0
             else:
                 conn.send(data.new_buffer(pos,bfsz))
                 self._bwsendcalc.add(bfsz)
                 tosnd-=bfsz
                 pos+=bfsz
-
+            
     
     def send_message(self,msg):
         while True:
@@ -2155,7 +2182,7 @@ class MainMessage(Message):
                 self._agent._connections_semaphore.acquire()
                 try:
                     self._agent._main_recovery_id=msg["id"]
-                    self._agent._main_recovery_timeout=(msg["timeout"]+5)*1000
+                    self._agent._main_recovery_timeout=(msg["timeout"]+5)
                 finally:
                     self._agent._connections_semaphore.release()                
             elif msg_name=="updateInfo":
@@ -2168,20 +2195,25 @@ class MainMessage(Message):
             elif msg_name=="reboot":
                 self._agent._reboot_agent()
             elif msg_name=="reload":
+                self._agent.write_info("Request reload Agent.")
                 #WAIT RANDOM TIME BEFORE TO REBOOT AGENT
-                wtime=random.randrange(0, 6*3600)*1000 # 6 ORE
+                wtime=random.randrange(0, 6*3600) # 6 ORE
                 self._agent._reload_agent(wtime)
             elif msg_name=="reloadApps":
+                self._agent.write_info("Request reload Apps: " + msg["appsUpdated"] + ".")
                 self._agent._libs_apps_semaphore.acquire()
                 try:
+                    self._agent._node_files_info=None
                     arAppsUpdated = msg["appsUpdated"].split(";")
                     for appmn in arAppsUpdated:
                         self._agent._apps_to_reload[appmn]=True
                 finally:
                     self._agent._libs_apps_semaphore.release()
             elif msg_name=="reloadLibs":
+                self._agent.write_info("Request reload Libs: " + msg["libsUpdated"] + ".")
                 self._agent._libs_apps_semaphore.acquire()
                 try:
+                    self._agent._node_files_info=None
                     arLibsUpdated = msg["libsUpdated"].split(";")
                     for libmn in arLibsUpdated:
                         self._agent._set_reload_apps_with_lib_deps(libmn)
@@ -2449,36 +2481,46 @@ class WebSocket:
                 if self._on_close is not None:
                     self._on_close()
     
+    def get_send_buffer_size(self):
+        return self._parent.get_send_buffer_size()
     
-    def send_string(self,data):
-        self._send(WebSocket.DATA_STRING,data)
-    
-    def send_bytes(self,data):
-        self._send(WebSocket.DATA_BYTES,data)
-        
-    def _send(self,tpdata,data):
+    def send_list_string(self,data):
         self._parent._set_last_activity_time()
         if not self._bclose:
             dtsend=utils.Bytes()
-            if type(data).__name__ == 'list':
-                for i in range(len(data)):
-                    dt=data[i]
-                    dtsend.append_int(len(dtsend)+1)
-                    dtsend.append_byte(tpdata)
-                    if tpdata==WebSocket.DATA_STRING:
-                        dtsend.append_bytes(utils.Bytes(dt))
-                    else:
-                        dtsend.append_bytes(dt)
-                    
-            else:
-                dtsend.append_int(len(data)+1)
-                dtsend.append_byte(tpdata)
-                if tpdata==WebSocket.DATA_STRING:
-                    dtsend.append_bytes(utils.Bytes(data))
-                else:
-                    dtsend.append_bytes(data)
+            for i in range(len(data)):
+                dt=data[i]
+                dtsend.append_int(len(dt)+1)
+                dtsend.append_byte(WebSocket.DATA_STRING)
+                dtsend.append_bytes(utils.Bytes(dt))                
             self._parent._send_conn(self._conn,dtsend)
-       
+    
+    def send_list_bytes(self,data):
+        self._parent._set_last_activity_time()
+        if not self._bclose:
+            dtsend=utils.Bytes()
+            for i in range(len(data)):
+                dt=data[i]
+                dtsend.append_int(len(dt)+1)
+                dtsend.append_byte(WebSocket.DATA_BYTES)
+                dtsend.append_bytes(dt)
+            self._parent._send_conn(self._conn,dtsend)
+    
+    def send_string(self,data):
+        self._parent._set_last_activity_time()
+        if not self._bclose:
+            dtsend=utils.Bytes(data)
+            dtsend.insert_int(0,len(dtsend)+1)
+            dtsend.insert_byte(4,WebSocket.DATA_STRING)
+            self._parent._send_conn(self._conn,dtsend)
+    
+    def send_bytes(self,data):
+        self._parent._set_last_activity_time()
+        if not self._bclose:
+            data.insert_int(0,len(data)+1)
+            data.insert_byte(4,WebSocket.DATA_BYTES)
+            self._parent._send_conn(self._conn,data)
+    
     def _on_close_conn(self):
         self._destroy(True)
         if self._on_close is not None:
@@ -2502,7 +2544,7 @@ class WebSocket:
 class WebSocketSimulate:
     DATA_STRING = 's'
     DATA_BYTES = 'b';
-    MAX_SEND_SIZE = 32*1024
+    MAX_SEND_SIZE = 65*1024
     
     def __init__(self, parent, conn, props):
         self._parent=parent
@@ -2514,7 +2556,6 @@ class WebSocketSimulate:
         self._bclose=False
         self._on_close=None
         self._on_data=None
-        self._semaphore = threading.Condition()
         
     
     def accept(self, priority, events):
@@ -2528,7 +2569,7 @@ class WebSocketSimulate:
         self._pst_len=-1
         self._pst_data=utils.Bytes()
         self._qry_or_pst="qry"
-        self._send_list=[]
+        self._data_list=[]
         self._baccept=True
     
     def is_accept(self):
@@ -2580,41 +2621,35 @@ class WebSocketSimulate:
                                 prprequest = utils.Bytes(prppst["data_" + str(i)])
                                 if tpdata==WebSocketSimulate.DATA_BYTES:
                                     prprequest.decode_base64()
-                                self._on_data(self, tpdata, utils.Bytes(prprequest))
+                                self._on_data(self, tpdata, prprequest)
                         #Invia risposte
-                        self._semaphore.acquire()
-                        try:
-                            if len(self._send_list)==0 and "destroy" not in prppst:
-                                appwt=250
-                                if "wait" in prppst:
-                                    appwt=int(prppst["wait"])
-                                if appwt==0:
-                                    self._semaphore.wait()
-                                else:
-                                    appwt=appwt/1000.0
-                                    self._semaphore.wait(appwt)
-                            if not self._bclose:
-                                if len(self._send_list)>0:
-                                    arsend = {}
-                                    arcnt = 0
-                                    lensend = 0
-                                    app_send_list=[]
-                                    for i in range(len(self._send_list)):
-                                        if (len(app_send_list)>0) or (i>0 and (lensend + len(self._send_list[i]["data"])) > WebSocketSimulate.MAX_SEND_SIZE):
-                                            app_send_list.append(self._send_list[i])
-                                        else:
-                                            arsend["type_" + str(i)]=self._send_list[i]["type"]
-                                            arsend["data_" + str(i)]=self._send_list[i]["data"]
-                                            lensend += len(self._send_list[i])
-                                            arcnt+=1
-                                    arsend["count"]=arcnt
-                                    arsend["otherdata"]=len(app_send_list)>0
-                                    self._send_response(json.dumps(arsend))
-                                    self._send_list=app_send_list
-                                else:
-                                    self._send_response("")
-                        finally:
-                            self._semaphore.release()
+                        arsend=None
+                        if len(self._data_list)==0 and "destroy" not in prppst:
+                            appwt=250
+                            if "wait" in prppst:
+                                appwt=int(prppst["wait"])
+                            if appwt==0:
+                                while not self._bclose and len(self._data_list)==0:
+                                    time.sleep(0.01)
+                            else:
+                                appwt=appwt/1000.0
+                                time.sleep(appwt)
+                        if not self._bclose:
+                            arsend = {}
+                            arcnt = 0
+                            lensend = 0
+                            while len(self._data_list)>0 and lensend<WebSocketSimulate.MAX_SEND_SIZE:
+                                sdt = self._data_list.pop(0)
+                                arsend["type_" + str(arcnt)]=sdt["type"]
+                                arsend["data_" + str(arcnt)]=sdt["data"]
+                                lensend += len(sdt)
+                                arcnt+=1
+                            if arcnt>0:
+                                arsend["count"]=arcnt
+                                arsend["otherdata"]=len(self._data_list)>0
+                                self._send_response(json.dumps(arsend))
+                            else:
+                                self._send_response("")
                         if "destroy" in prppst:
                             self.close()
                             if self._on_close is not None:
@@ -2658,6 +2693,14 @@ class WebSocketSimulate:
         
         self._parent._send_conn(self._conn,bts)
         
+    def get_send_buffer_size(self):
+        return self._parent.get_send_buffer_size()
+    
+    def send_list_string(self,data):
+        self._send_list(WebSocketSimulate.DATA_STRING,data)
+    
+    def send_list_bytes(self,data):
+        self._send_list(WebSocketSimulate.DATA_BYTES,data)
     
     def send_string(self,data):
         self._send(WebSocketSimulate.DATA_STRING,data)
@@ -2668,25 +2711,24 @@ class WebSocketSimulate:
     def _send(self,tpdata,data): 
         self._parent._set_last_activity_time()
         if not self._bclose:
-            self._semaphore.acquire()
-            try:
-                if type(data).__name__ == 'list':
-                    for i in range(len(data)):
-                        dt=data[i];
-                        if tpdata==WebSocketSimulate.DATA_BYTES:
-                            dt.encode_base64()
-                        #print("LEN: " + str(len(data[i])) + " LEN B64: " + str(len(dt)))
-                        self._send_list.append({"type": tpdata, "data": dt.to_str("utf8")})
-                else:
-                    dt=data;
-                    if tpdata==WebSocketSimulate.DATA_BYTES:
-                        dt.encode_base64()
-                    #print("LEN: " + str(len(data)) + " LEN B64: " + str(len(dt)))
-                    self._send_list.append({"type": tpdata, "data": dt.to_str("utf8")})
-                self._semaphore.notifyAll()
-            finally:
-                self._semaphore.release()
+            dt=data;
+            if tpdata==WebSocketSimulate.DATA_BYTES:
+                dt.encode_base64()
+            #print("LEN: " + str(len(data)) + " LEN B64: " + str(len(dt)))
+            self._data_list.append({"type": tpdata, "data": dt.to_str("utf8")})
+                        
     
+    def _send_list(self,tpdata,data): 
+        self._parent._set_last_activity_time()
+        if not self._bclose:
+            for i in range(len(data)):
+                dt=data[i];
+                if tpdata==WebSocketSimulate.DATA_BYTES:
+                    dt.encode_base64()
+                #print("LEN: " + str(len(data[i])) + " LEN B64: " + str(len(dt)))
+                self._data_list.append({"type": tpdata, "data": dt.to_str("utf8")})
+            
+                
     def _on_close_conn(self):
         self._destroy(True)
         if self._on_close is not None:
@@ -2702,12 +2744,7 @@ class WebSocketSimulate:
     def _destroy(self,bnow):
         if not self._bclose:
             self._bclose=True
-            self._semaphore.acquire()
-            try:
-                self._send_list=[]
-                self._semaphore.notifyAll()
-            finally:
-                self._semaphore.release()
+            self._data_list=[]                
             if self._conn is not None:
                 self._conn.close()
                 self._conn = None

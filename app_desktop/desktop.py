@@ -12,7 +12,6 @@ import json
 import time
 import traceback
 import struct
-import communication
 import sys
 import os
 import stat
@@ -22,16 +21,16 @@ import logging
 import base64
 import utils
 import ctypes
-import native 
-
+import native
 
 VK_SHIFT          = 0x10
 VK_CONTROL        = 0x11
 VK_ALT            = 0x12
 
-CAPTURE_INTERVALL_SLOW_MODE = 10 
-
 _libmap={}
+_struct_h=struct.Struct("!h")
+_struct_i=struct.Struct("!i")
+_struct_I=struct.Struct("!I")
 
 #GESTIONE CALLBACK DEBUG PRINT
 #cb_debug_print_f={"func":None}
@@ -48,7 +47,7 @@ def cb_debug_print(str):
 def cb_difference(sz, pdata):
     cp = _libmap["captureprocess"]
     if cp is not None:
-        cp.cb_difference(sz, pdata)
+        threading.current_thread().cb_difference(sz, pdata)
 
 
 class Desktop():
@@ -57,7 +56,7 @@ class Desktop():
         self._agent_main=agent_main
         self._capture_process = None
         self._list = {}
-        self._list_semaphore = threading.Condition()    
+        self._list_semaphore = threading.Condition()
     
     def destroy(self, bforce):
         lstcopy=None
@@ -70,7 +69,7 @@ class Desktop():
             self._list_semaphore.release()
         for k in lstcopy.keys():
             dm = lstcopy[k]
-            dm.terminate()
+            dm.destroy()
         #Attende chiusura
         cnt=0
         while cnt<10:
@@ -102,7 +101,7 @@ class Desktop():
             dm = lstcopy[k]
             if dm.get_idses()==idses:
                 try:
-                    dm.terminate()
+                    dm.destroy()
                 except Exception as e:
                     self._agent_main.write_except(e,"AppDesktop:: on_conn_close error:")
             
@@ -118,8 +117,9 @@ class Desktop():
                 key = agent.generate_key(10) 
                 if key not in self._list:
                     if self._capture_process is None:
-                        self._capture_process = CaptureProcess(self._agent_main)
-                    itm = Manager(self, cinfo, key, wsock)
+                        self._capture_process = CaptureProcessClient(self._agent_main)
+                        self._capture_process.start()                        
+                    itm = Session(self, cinfo, key, wsock)
                     self._list[key]=itm
                     break
         finally:
@@ -170,140 +170,12 @@ class Desktop():
         return sret
     
     def req_websocket(self, cinfo, wsock):
-        self._add_desktop_manager(cinfo, wsock)
+        self._add_desktop_manager(cinfo, wsock)        
         
-class SpeedManager():
-    
-    def __init__(self, dskmain):
-        self._dskmain=dskmain
-        self._frame_sent=0l
-        self._frame_sent_size=0l
-        self._frame_received=0l
-        self._frame_distance=0l
-        self._fps_counter=None
-        self._fps_frame=0l
-        self._fps=-1
-        self._qa_check_frame=None
-        self._qa_check_frame_size_avg=None
-        self._qa_check_frame_size=None
-        self._qa_check_frame_time=None
-        self._qa_time_wait=0.0
-        self._qa_time_counter=None
-        self._qa_time_bytes=0l
-        self._qa_detect=9
-        
-        
-    def get_frame_sent(self):
-        return self._frame_sent
-    
-    def get_qa_detect(self):
-        return self._qa_detect
-    
-    def update_frame_size(self,w,h):        
-        self._qa_check_frame_size_avg=long(((float(w*h*3)*10.0)/100.0))        
-    
-    def sent(self,fsize):
-        self._frame_sent+=1l
-        self._frame_sent_size=fsize
-        if self._frame_sent==1l:
-            self._qa_time_counter=communication.Counter()            
-            self._qa_check_frame=self._frame_sent        
-            self._qa_check_frame_size=fsize
-            self._qa_check_frame_time=time.time()
-        self._qa_time_bytes+=fsize
-        
-            
-    def received(self, frec):
-        self._frame_received=frec
-        
-        #CALCULATE FPS
-        if self._fps_counter is None:
-            self._fps_counter=communication.Counter()
-            self._fps_frame=self._frame_received
-        elif self._fps_counter.is_elapsed(1000):
-            nf = self._frame_received-self._fps_frame
-            self._fps = int((float(nf) * 1000.0)/float(self._fps_counter.get_value()))
-            self._fps_frame=self._frame_received
-            self._fps_counter.reset()
-        
-        #CALCULATE QA    
-        if self._qa_check_frame is not None and self._qa_check_frame==frec:
-            newqa=None
-            elp=time.time()-self._qa_check_frame_time
-            elp=((elp*(float(self._qa_check_frame_size_avg)/2))/float(self._qa_check_frame_size))
-            if elp>=0:
-                if elp<0.2:
-                    newqa=9
-                elif elp<0.3:
-                    newqa=8
-                elif elp<0.4:
-                    newqa=7
-                elif elp<0.5:
-                    newqa=6
-                elif elp<0.6:
-                    newqa=5
-                elif elp<0.7:
-                    newqa=4
-                elif elp<0.8:
-                    newqa=3
-                elif elp<0.9:
-                    newqa=2
-                elif elp<1.0:
-                    newqa=1
-                else:
-                    newqa=0
-            if newqa is not None:
-                self._qa_detect=newqa
-                #self._dskmain._agent_main.write_info("INITQA: " + str(self._qa_detect) + " - ELAPSED: " + str(elp) + " - FRAMESIZE:" + str(self._qa_check_frame_size))
-            self._qa_check_frame=None
-            self._qa_check_frame_time=None
-            self._qa_time_counter.reset()
-            self._qa_time_bytes=0l            
-            self._qa_time_wait=0.0
-   
-            
-            
-    
-    def wait_time(self, semre):
-        while True:
-            self._frame_distance=self._frame_sent-self._frame_received                        
-            #self._dskmain._agent_main.write_info("DISTANCE: " + str(self._frame_distance) + " - FPS: " + str(self._fps) + " - FRAME: " + str(self._frame_sent) + " - QA: " + str(self._qa_detect))
-            if self._frame_sent==1:
-                bok = self._frame_sent==self._frame_received
-            else:
-                appfps = self._fps
-                if appfps==-1:
-                    appfps=self._qa_detect+3
-                bok = self._frame_distance<=appfps                            
-            if bok:
-                break
-            else:
-                tmw = time.time()
-                semre.wait(0.25)
-                elw = time.time()-tmw
-                if self._frame_sent>1:                                         
-                    if elw>0:
-                        self._qa_time_wait+=elw
-        #DETECT QA                      
-        if self._frame_sent>1 and self._qa_time_counter.is_elapsed(1000):
-            autoqawaitint=int(self._qa_time_wait*1000)
-            autoqawaitperc=int((float(autoqawaitint)/float(self._qa_time_counter.get_value()))*100.0)            
-            if autoqawaitperc>=50.0:
-                if self._qa_detect>0:
-                    self._qa_detect-=1
-                    #self._dskmain._agent_main.write_info("NEWQA: " + str(self._qa_detect) + " - WAIT: " + str(autoqawaitint) + " - PERC: " + str(autoqawaitperc) + " - BYTES: " + str(self._qa_time_bytes))
-            elif self._qa_time_bytes>long(self._qa_check_frame_size_avg*(float(self._qa_time_counter.get_value()) / 1000.0)) and autoqawaitperc<=5.0:
-                if self._qa_detect<9:
-                    self._qa_detect+=1
-                    #self._dskmain._agent_main.write_info("NEWQA: " + str(self._qa_detect) + " - WAIT: " + str(autoqawaitint) + " - PERC: " + str(autoqawaitperc) + " - BYTES: " + str(self._qa_time_bytes))
-            self._qa_time_counter.reset()
-            self._qa_time_bytes=0l
-            self._qa_time_wait=0.0
-
-class Manager(threading.Thread):
+class Session(threading.Thread):
         
     def __init__(self, dskmain, cinfo, sid,  wsock):
-        threading.Thread.__init__(self,  name="DesktopManager")
+        threading.Thread.__init__(self,  name="DesktopSession" + str(sid))
         self._dskmain=dskmain
         self._cinfo=cinfo
         prms = cinfo.get_permissions()
@@ -317,523 +189,691 @@ class Manager(threading.Thread):
                 if "allowScreenInput" in pret:
                     self._allow_inputs=pret["allowScreenInput"]
                 else:
-                    self._allow_inputs=False
+                    self._allow_inputs=False                
         
         self._prop=wsock.get_properties()
         self._idses=cinfo.get_idsession()
         self._id=sid
-        self._bclose=False
+        self._bdestroy=False
         self._websocket=wsock
-        self._artosend=[]
-        self._artosendsize=0
         self._semaphore = threading.Condition()
+        
         self._quality=-1
-        
-        self._frame_sent_size=None
-        self._speed_manager = SpeedManager(self._dskmain)
-        
         self._supported_frame=None
-        self._frame_type=0 # 0=DATA_PALETTE_COMPRESS_V1; 100=DATA_TJPEG"
-        self._send_frame_type=False        
+        self._frame_type=-1 # 0=DATA_PALETTE_COMPRESS_V1; 100=DATA_TJPEG"
+        self._send_frame_type=False
+        self._send_buffer_size = -1
+        self._send_buffer_size_counter = utils.Counter()
+        self._keepalive_counter = None
+        self._keepalive_send = False
         
-        
-        self._distanceFrameMs=10.0/1000.0
-        self._distanceFrameMsCounter=communication.Counter()
-        
-                        
-        self._websocket.accept(10,{"on_close": self._on_close,"on_data":self._on_data})
-        self._semaphore_inputs = threading.Condition()
-        #self._input_click_state=None
-        #self._input_counter=communication.Counter()
-        self._inputs = []
+        self._websocket.accept(10,{"on_close": self._on_websocket_close,"on_data":self._on_websocket_data})
         self._cursor_visible = True
         self._slow_mode = False
-        #self._cursor_last_token = None
         self._monitor = -1 
-        self._monitor_count = 0
-    
+        
+        self._capture_process_recovery=False
+        self._capture_process_id=None
+        self._capture_process_data=[]
+        
+        self._last_copy_text=None        
+        
+            
     def get_id(self):
         return self._id
     
     def get_idses(self):
         return self._idses
     
-    def _on_data(self,websocket,tpdata,data):
-        if not self._bclose:
+    def _set_monitor(self):
+        if self._monitor!=-1:
+            self._dskmain._capture_process.set_monitor(self, self._monitor)
+    
+    def _set_frame_type(self):
+        if self._frame_type!=-1:
+            self._dskmain._capture_process.set_frame_type(self, self._frame_type)
+    
+    def _set_quality(self):
+        self._dskmain._capture_process.set_quality(self, self._quality)
+    
+    def _set_buffer_size(self):
+        if self._send_buffer_size==-1 or self._send_buffer_size_counter.is_elapsed(1):
+            appsbsz = self._websocket.get_send_buffer_size()
+            if self._send_buffer_size!=appsbsz:
+                try:
+                    self._dskmain._capture_process.set_send_buffer_size(self, appsbsz)
+                    self._send_buffer_size=appsbsz
+                except:
+                    None                        
+            self._send_buffer_size_counter.reset()
+    
+    def _set_slow_mode(self):
+        self._dskmain._capture_process.set_slow_mode(self, self._slow_mode)
+    
+    def _on_websocket_data(self,websocket,tpdata,data):
+        if not self._bdestroy:
             try:
+                if self._keepalive_counter is not None:
+                    self._keepalive_counter.reset()                
                 prprequest = json.loads(data.to_str("utf8"))
                 if prprequest is not None and "frametime" in prprequest:
-                    #print "frametime: " + prprequest["frametime"]
-                    self._semaphore.acquire()
-                    try:
-                        self._speed_manager.received(long(prprequest["frametime"]))
-                        self._semaphore.notify_all();
-                    finally:
-                        self._semaphore.release()
+                    #print "frame received. Time: " + prprequest["frametime"]                    
+                    if self._capture_process_recovery==True:
+                        self._capture_process_recovery=False
+                        self._set_frame_type()
+                        self._set_monitor()
+                        self._set_quality()
+                        self._set_slow_mode()                        
+                    else:
+                        tm = float(prprequest["frametime"])
+                        self._dskmain._capture_process.received_frame(self, tm)
+                        self._set_buffer_size()                                            
                 if prprequest is not None and "inputs" in prprequest:
                     if not self._allow_inputs:
                         raise Exception("Permission denied (inputs).")
-                    applist = prprequest["inputs"].split(";")
-                    if len(applist)>0:
-                        self._semaphore_inputs.acquire()
-                        try:
-                            self._inputs.extend(applist)
-                        finally:
-                            self._semaphore_inputs.release()
-                        #print("_inputevents " +  self._id + ": " + str(long(time.time() * 1000)-apptm));                        
+                    self._dskmain._capture_process.inputs(self, prprequest["inputs"])                                            
                 if prprequest is not None and "cursor" in prprequest:
-                    self._semaphore.acquire()
-                    try:
-                        if prprequest["cursor"]=="true":
-                            self._cursor_visible=True
-                        elif prprequest["cursor"]=="false":
-                            self._cursor_visible=False
-                    finally:
-                        self._semaphore.release()
+                    if prprequest["cursor"]=="true":
+                        self._cursor_visible=True
+                    elif prprequest["cursor"]=="false":
+                        self._cursor_visible=False
                 if prprequest is not None and "monitor" in prprequest:
-                    self._semaphore.acquire()
-                    try:
-                        self._monitor = int(prprequest["monitor"])
-                        if prprequest is not None and "acceptFrameType" in prprequest:
-                            arft = prprequest["acceptFrameType"].split(";")
-                            if self._supported_frame is not None:
-                                for f in range (len(self._supported_frame)):
-                                    tf=self._supported_frame[f]                            
-                                    for i in range(len(arft)):
-                                        if int(arft[i])==tf:
-                                            self._frame_type=tf
-                                            self._send_frame_type=True
-                                            break
-                                    if self._send_frame_type==True:
+                    self._monitor = int(prprequest["monitor"])
+                    self._set_monitor()                    
+                    if prprequest is not None and "acceptFrameType" in prprequest:
+                        arft = prprequest["acceptFrameType"].split(";")
+                        if self._supported_frame is not None:
+                            for f in range (len(self._supported_frame)):
+                                tf=self._supported_frame[f]                            
+                                for i in range(len(arft)):
+                                    if int(arft[i])==tf:
+                                        self._frame_type=tf
+                                        self._send_frame_type=True
+                                        self._set_frame_type()
                                         break
+                                if self._send_frame_type==True:
+                                    break
                             
-                    finally:
-                        self._semaphore.release()                        
                 if prprequest is not None and "slow" in prprequest:
-                    self._semaphore.acquire()
-                    try:
-                        if prprequest["slow"]=="true":
-                            self._slow_mode=True
-                        elif prprequest["slow"]=="false":
-                            self._slow_mode=False
-                        self._semaphore.notify_all();
-                    finally:
-                        self._semaphore.release()
+                    self._slow_mode=prprequest["slow"]=="true"
+                    self._set_slow_mode()                    
                 if prprequest is not None and "quality" in prprequest:
-                    self._semaphore.acquire()
-                    try:
-                        self._quality=int(prprequest["quality"])
-                    finally:
-                        self._semaphore.release()
+                    self._quality=int(prprequest["quality"])
+                    self._set_quality()
+                if prprequest is not None and "keepalive" in prprequest:
+                    if self._keepalive_counter is None:
+                        self._keepalive_counter = utils.Counter()
+                    self._keepalive_send = True                
             except Exception as ex:
-                self._bclose=True
-                self._dskmain._agent_main.write_except(ex,"AppDesktop:: capture error" + self._id + " error:" + str(ex))
-        
+                self._dskmain._agent_main.write_err("AppDesktop:: on_websoket_data error. ID: " + self._id + " - Error:" + utils.exception_to_string(ex))            
+            
    
-   
+    def _on_websocket_close(self):
+        self.destroy();
        
-    def _on_token(self,sdata):
-        if self._send_frame_type==True:
-            self._send_frame_type=False
-            self._websocket.send_bytes(utils.Bytes(struct.pack("!hh",801,self._frame_type)))
-        
-        tp = struct.unpack("!h",sdata[0:2])[0]
-        self._semaphore.acquire()
+    def _on_process_data(self,sdata):
         try:
-            if tp==0: #Resolution
-                arsz = struct.unpack("!hh",sdata[2:6])
-                self._speed_manager.update_frame_size(arsz[0],arsz[1])
-            elif tp==10: #TOKEN MONITOR AND SUPPORTED FRAME
-                self._monitor_count = struct.unpack("!h",sdata[2:4])[0]
-            elif tp==11: #SUPPORTED FRAME
-                p=2
-                cnt = struct.unpack("!h",sdata[p:p+2])[0]
-                self._supported_frame=[]
-                for i in range(cnt):
-                    p+=2
-                    self._supported_frame.append(struct.unpack("!h",sdata[p:p+2])[0])
-            elif tp==1: #TOKEN DISTANCE FRAME
-                self._distanceFrameMsCounter.reset()
-                self._distanceFrameMs=struct.unpack("!i",sdata[2:6])[0]
-                sdata=None
-            elif tp==2: #TOKEN FRAME                
-                if self._frame_sent_size==None:
-                    self._frame_sent_size=len(sdata)
-                    #print "inizio TOKEN #########################################"
+            lst=[]
+            if self._send_frame_type==True:
+                self._send_frame_type=False
+                lst.append(utils.Bytes(struct.pack("!hh",801,self._frame_type)))
+            
+            tp = _struct_h.unpack(sdata[0:2])[0]
+            if tp==10: #MONITOR
+                if self._capture_process_recovery==True:
+                    #FORCE RESPONSE FROM CLIENT
+                    lst.append(utils.Bytes(struct.pack("!h",800)+str(time.time())))
+                    lst.append(utils.Bytes(struct.pack("!hB",2,1)))
                 else:
-                    self._frame_sent_size+=len(sdata)
-                
-                #if len(sdata)>=7:
-                #    ar = struct.unpack("!bbbhh", sdata[0:7])
-                #    print "LEN: " + str(len(sdata)) + " " + str(ar[3]) + " " + str(ar[4]) 
-                        
-                if sdata[2]==1:                    
-                    #if self._frame_first_token==False:
-                    #   print "#"
-                    #   print "#"
-                    self._speed_manager.sent(self._frame_sent_size)
-                    self._websocket.send_bytes(utils.Bytes(struct.pack("!h",800)+str(self._speed_manager.get_frame_sent())))
-                    self._frame_sent_size=None
-                        
-        finally:
-            self._semaphore.release()
-        if sdata is not None:
-            self._websocket.send_bytes(sdata)
-        
-                        
-                        
-    def run(self):
-        #last_diff_time=long(time.time() * 1000)
-        cnt_retry=0 ##I tentativi servono quando l'utente si disconnette (Es. in windows)
-        #INVIA ID
-        sdataid=struct.pack("!h",900)+self._id;
-        self._websocket.send_bytes(utils.Bytes(sdataid))
-        lclose=self.is_close()
-        curmon=-1
-        max_retry=3
-        frame_type=0
-        quality_detect=self._speed_manager.get_qa_detect()
-        quality_request=-1
-        while not lclose:
+                    lst.append(sdata)
+            elif tp==11: #SUPPORTED FRAME
+                if self._capture_process_recovery==False:
+                    p=2
+                    cnt = _struct_h.unpack(sdata[p:p+2])[0]
+                    self._supported_frame=[]
+                    for i in range(cnt):
+                        p+=2
+                        self._supported_frame.append(_struct_h.unpack(sdata[p:p+2])[0])                    
+            elif tp==2: #TOKEN FRAME
+                if sdata[2]==1:
+                    tm = time.time()
+                    lst.append(utils.Bytes(struct.pack("!h",800)+str(tm)))
+                    #print "frame sent. Time: " + str(tm)
+                                        
+                lst.append(sdata)                
+            elif tp==805: #COPY
+                self._last_copy_text=unicode(base64.b64decode(sdata.new_buffer(2).to_str("utf8")).decode("utf8"))
+                lst.append(sdata)
+            elif tp==990: #CAPTURE ERROR
+                self.destroy()
+            elif tp==998: #DEBUG
+                #self._dskmain._agent_main.write_debug(sdata.new_buffer(2).to_str("utf8"))
+                self._dskmain._agent_main.write_info(sdata.new_buffer(2).to_str("utf8"))
+            else:
+                lst.append(sdata)
+            self._semaphore.acquire()
             try:
-                #print("_send_token_image WAIT time=" + str(long(time.time() * 1000)-apptmwait));
-                self._inputevents()
-                #last_diff_time=communication.get_time()                
-                self._distanceFrameMsCounter.reset()
-                appqa=quality_detect
-                if quality_request>=0 and quality_request<=9:                    
-                    appqa=quality_request                   
-                self._dskmain._capture_process.difference(self, frame_type, appqa,curmon,self._on_token)
-                max_retry=5;
-                #print("_send_token_image _capture_process time=" + str(communication.get_time()-last_diff_time));
-                
+                self._capture_process_data.extend(lst)
+                if len(self._capture_process_data)>0:
+                    self._semaphore.notify_all()
+            finally:
+                self._semaphore.release()
+        except Exception as e:
+            if not self.is_destroy():
+                self._dskmain._agent_main.write_except(e,"AppDesktop:: capture error id:" + self._id +". (on_process_data)\n")
+                    
+    def _on_process_destroy(self):
+        None        
+    
+    def _on_process_close(self):
+        self._send_buffer_size = -1                       
+        
+    def run(self):
+        process_status_counter=utils.Counter()    
+        bfirst=True
+        err_msg=None
+        try:
+            lst = []
+            #SEND ID        
+            sdataid=struct.pack("!h",900)+self._id;
+            lst.append(utils.Bytes(sdataid))
+            #START KEEP ALIVE MANAGET
+            lst.append(utils.Bytes(struct.pack("!h",901)))            
+            self._websocket.send_list_bytes(lst)
+            
+            while not self.is_destroy() and not self._dskmain._capture_process.is_destroy():
+                lst = None                
+                if self._dskmain._capture_process.get_status()=="started":
+                    if not self._dskmain._capture_process.exists(self):
+                        try:                            
+                            self._capture_process_recovery=not bfirst
+                            self._dskmain._capture_process.add(self)
+                            bfirst=False
+                        except:
+                            None
+                    process_status_counter.reset()
+                elif process_status_counter.is_elapsed(15):
+                    raise Exception("Process not started.")
+                                                    
                 self._semaphore.acquire()
                 try:
-                    if self._bclose:
-                        lclose=True
-                        break                    
-                    self._speed_manager.wait_time(self._semaphore)                    
-                    appwait=0
-                    if self._slow_mode:
-                        appwait=CAPTURE_INTERVALL_SLOW_MODE
-                    else:
-                        if not self._distanceFrameMsCounter.is_elapsed(self._distanceFrameMs):
-                            appwait=float(self._distanceFrameMs-self._distanceFrameMsCounter.get_value()) / 1000.0                                                                    
-                    if appwait>0.0:
-                        #print("WAIT: " + str(appwait))
-                        self._semaphore.wait(appwait)                                 
-                    if self._monitor_count>0:                               
-                        curmon=self._monitor
-                    else:
-                        curmon=-1
-                    quality_request=self._quality
-                    frame_type=self._frame_type
-                    quality_detect = self._speed_manager.get_qa_detect()
+                    if len(self._capture_process_data)==0 and not self._keepalive_send:
+                        self._semaphore.wait(1)
+                    if len(self._capture_process_data)>0:
+                        lst=self._capture_process_data
+                        self._capture_process_data=[]
                 finally:
                     self._semaphore.release()
-                cnt_retry=0
-            except Exception as e:
-                if not self.is_close():
-                    if cnt_retry>=max_retry: #NUMERO TENTATITVI
-                        try:
-                            self._websocket.send_bytes(utils.Bytes(struct.pack("!h",999) + str(e)))
-                            #TOKEN MONITOR = 0 NOT DETECTED
-                            #self._websocket.send_bytes(struct.pack("!hh",10,0))
-                        except Exception as ex:
-                            None
-                        self.terminate()
-                        lclose=True
-                        self._dskmain._agent_main.write_except(e,"Desktop capture error id:" + self._id)
-                    else:
-                        #token_empty=True
-                        cnt_retry+=1
-                        time.sleep(1)
-                        self._dskmain._agent_main.write_err("Desktop capture retry " + str(cnt_retry) + " id:" + self._id + " error:" + str(e))
-                        self._dskmain._agent_main.write_debug(str(e) + "\n" + traceback.format_exc());
-                else:
-                    lclose=True        
-        if not self.is_close():
-            self.terminate()
-        self._destroy();
-    
-    '''   
-    def _inputevents_is_valid_click_state(self,ar):
-        if self._input_click_state is not None:
-            x = int(ar[1]);
-            y = int(ar[2]);
-            time = long(ar[8])
-            arstate=self._input_click_state["args"]
-            xstate = int(arstate[1])
-            ystate = int(arstate[2])
-            timestate = int(arstate[8])
-            elapsed=time-timestate
-            return (x==xstate) and (y==ystate) and (elapsed>=0) and (elapsed<=200) 
-        
-        return False
-    
-    def _inputevents_fire_click_state_if_need(self):
-        if self._input_click_state is not None:
-            elapsed = long(time.time() * 1000)-self._input_click_state["time"]
-            if (elapsed<0) or (elapsed>200):
-                self._inputevents_fire_click_state()
-    
-    def _inputevents_fire_click_state(self):
-        if self._input_click_state is not None:
-            ar=self._input_click_state["args"]
-            x = int(ar[1]);
-            y = int(ar[2]);
-            btn = int(ar[3])
-            whl = int(ar[4])
-            sctrl = ar[5]
-            salt = ar[6]
-            sshift = ar[7]
-            self._dskmain._capture_process.mouse(self, x, y, btn, whl, sctrl=="true",salt=="true",sshift=="true")
-            if ar[3]=="64":
-                if self._input_click_state["state"]=="DOWN":
-                    self._dskmain._capture_process.mouse(self, x, y, 1, whl, sctrl=="true",salt=="true",sshift=="true")
-            self._input_click_state=None
-    
-    '''
-    
-    def _inputevents(self):
-        bret=True
-        try:
-            applist = []
-            self._semaphore_inputs.acquire()
-            try:
-                if len(self._inputs)>0:
-                    applist=self._inputs
-                    self._inputs=[]
-            finally:
-                self._semaphore_inputs.release()
-                        
-            bret=len(applist)>0
-            
-            '''
-            if len(applist)>0:
-                print("**********************************************")
-                appl=long(time.time() * 1000)
-                for i in range(len(applist)):
-                    s = applist[i]
-                    ar = s.split(",")
-                    print("_inputevents " +  ar[0] + ": " + str(appl - long(ar[len(ar)-1])));
-                print("**********************************************")
-            applist=[]
-            '''
-            
-            
-            #INVIA EVENTI
-            '''
-            if len(applist)==0:
-                bret=False
-                self._inputevents_fire_click_state_if_need()
-            '''
-            for i in range(len(applist)):
-                s = applist[i]
-                ar = s.split(",")
-                if ar[0]=='MOUSE':
-                    x = int(ar[1]);
-                    y = int(ar[2]);
-                    btn = int(ar[3])
-                    whl = int(ar[4])
-                    sctrl = ar[5]
-                    salt = ar[6]
-                    sshift = ar[7]
-                    scommand = "false"
-                    if len(ar)==9:
-                        scommand = ar[8]
-                    
-                    '''
-                    #GESTIONE DOPPIO CLICK
-                    bfireev=True
-                    if (self._input_click_state==None):
-                        if (btn==1):
-                            self._input_click_state={}
-                            self._input_click_state["state"]="DOWN"
-                            self._input_click_state["args"]=ar
-                            self._input_click_state["time"]=long(time.time() * 1000)
-                            bfireev=False
-                    else:
-                        if self._input_click_state["state"]=='DOWN' and (btn==0) and self._inputevents_is_valid_click_state(ar):
-                            if self._input_click_state["args"][3]=="1":
-                                self._input_click_state["state"]="UP"
-                                self._input_click_state["args"][3]="64"; #CLICK
-                                self._input_click_state["args"][8]=ar[8]
-                                self._input_click_state["time"]=long(time.time() * 1000)
-                                bfireev=False
-                            elif self._input_click_state["args"][3]=="64":
-                                self._input_click_state["state"]="UP"
-                                self._input_click_state["args"][3]="128"; #DBLCLICK
-                                self._input_click_state["args"][8]=ar[8]
-                                self._input_click_state["time"]=long(time.time() * 1000)
-                                self._inputevents_fire_click_state();
-                                bfireev=False
-                            else:
-                                self._inputevents_fire_click_state();
-                        elif self._input_click_state["state"]=='UP' and (btn==1) and self._inputevents_is_valid_click_state(ar):
-                            if self._input_click_state["args"][3]=="64":
-                                self._input_click_state["state"]="DOWN"
-                                self._input_click_state["args"][8]=ar[8]
-                                self._input_click_state["time"]=long(time.time() * 1000)
-                                bfireev=False
-                            else:
-                                self._inputevents_fire_click_state();
-                        else:
-                            self._inputevents_fire_click_state();
-                    '''
-                    
-                    #print("_inputevents " + str(btn) + "  " + str(long(time.time() * 1000) - long(ar[len(ar)-1])))
-                    
-                    #if bfireev:
-                    self._dskmain._capture_process.mouse(self, x, y, btn, whl, sctrl=="true",salt=="true",sshift=="true",scommand=="true")
-                       
-                     
-                elif ar[0]=='KEYBOARD':
-                    #self._inputevents_fire_click_state();
-                    tp = ar[1]
-                    code = ar[2]
-                    sctrl = ar[3]
-                    salt = ar[4]
-                    sshift = ar[5]
-                    scommand = "false"
-                    if len(ar)==7:
-                        scommand = ar[6]
-                    self._dskmain._capture_process.keyboard(self, tp, code, sctrl=="true",salt=="true",sshift=="true",scommand=="true")
-        except Exception as e:
-            self._dskmain._agent_main.write_except(e,"AppDesktop:: inputevents error " + self._id + ":")
-        return bret
                 
-    def _on_close(self):
-        self.terminate();
+                
+                if self._keepalive_counter is not None and self._keepalive_counter.is_elapsed(10.0):
+                    self.destroy()
+                else:
+                    if self._keepalive_send:
+                        self._keepalive_send=False
+                        bts=utils.Bytes(struct.pack("!h",901))
+                        if lst is None:
+                            lst=[]
+                        lst.append(bts)
+                    if lst is not None:
+                        self._websocket.send_list_bytes(lst)
+                
+                
+        except Exception as e:
+            if not self.is_destroy():
+                appmsg = self._dskmain._capture_process.get_last_error()
+                if appmsg is None:
+                    appmsg = utils.exception_to_string(e)
+                self._dskmain._agent_main.write_err("AppDesktop:: capture process id: " + self._id + " error: "  + appmsg)
+                
+        
+        if not self.is_destroy():
+            if err_msg is None:
+                appmsg = self._dskmain._capture_process.get_last_error()
+                if appmsg is None:
+                    appmsg="Process not started."
+                err_msg=appmsg
+            try:
+                self._websocket.send_bytes(utils.Bytes(struct.pack("!h",999) + err_msg))
+            except:
+                None
+            self.destroy()
     
     def copy_text(self):
         if not self._allow_inputs:
             raise Exception("Permission denied (inputs).")
-        return self._dskmain._capture_process.copy_text(self);
+        self._last_copy_text = None
+        self._dskmain._capture_process.copy_text(self);
+        cnt = utils.Counter()
+        while self._last_copy_text is None:
+            time.sleep(0.5)
+            if self.is_destroy() or cnt.is_elapsed(10):
+                return ""
+        return self._last_copy_text
+         
     
     def paste_text(self,s):
         if not self._allow_inputs:
             raise Exception("Permission denied (inputs).")
         return self._dskmain._capture_process.paste_text(self,s);
     
-    def terminate(self):
+    def destroy(self):
+        bok=False
         self._semaphore.acquire()
         try:
-            self._bclose=True
+            if not self._bdestroy:
+                bok=True
+            self._bdestroy=True
             self._semaphore.notify_all()
         finally:
             self._semaphore.release()
-    
-    def _destroy(self):
-        if self._id is not None:
-            if self._websocket is not None:
-                self._websocket.close()
-                self._websocket=None
-            try:
-                self._dskmain._capture_process.remove(self)
-            except Exception as e:
-                self._dskmain._agent_main.write_except(e,"AppDesktop:: captureprocess remove error " + self._id + ":")
+        if bok:
             if self._id is not None:
-                self._dskmain._rem_desktop_manager(self._id)
-            self._id=None
+                if self._websocket is not None:
+                    self._websocket.close()
+                    self._websocket=None
+                try:
+                    self._dskmain._capture_process.remove(self)
+                except Exception as e:
+                    self._dskmain._agent_main.write_except(e,"AppDesktop:: captureprocess remove error " + self._id + ":")
+                if self._id is not None:
+                    self._dskmain._rem_desktop_manager(self._id)
+                self._id=None
     
-    def is_close(self):
-        ret = True
-        self._semaphore.acquire()
-        try:
-            ret=self._bclose
-        finally:
-            self._semaphore.release()
-        return ret
+    def is_destroy(self):
+        return self._bdestroy
                
-       
-class CaptureProcessStdRedirect(object):
+class CaptureProcessClientDestroy(threading.Thread):
     
-    def __init__(self,lg,lv):
-        self._logger = lg;
-        self._level = lv;
+    def __init__(self, agent_main, ppid, pprc):
+        threading.Thread.__init__(self,  name="DesktopCaptureProcessDestroy")
+        self._agent_main=agent_main
+        self._ppid=ppid
+        self._process=pprc
         
-    def write(self, data):
-        for line in data.rstrip().splitlines():
-            self._logger.log(self._level, line.rstrip())
-
-
-
-class CaptureProcess():
     
-    def __init__(self,agent_main):
-        _libmap["captureprocess"]=self
+    def _is_process_running(self):
+        if self._process!=None:
+            if self._process.poll() == None:
+                return True
+        elif self._ppid!=None:
+            if self._agent_main.get_osmodule().is_task_running(self._ppid):
+                return True
+        return False
+    
+    def run(self):
+        try:
+            #Attende chiusura processo
+            bok=False
+            if self._process is not None or self._ppid is not None:
+                r=20
+                for i in range(r):
+                    if not self._is_process_running():
+                        bok=True
+                        break
+                    time.sleep(0.5)
+            if not bok:
+                if self._process!=None:
+                    self._process.kill()
+                elif self._ppid!=None:
+                    self._agent_main.get_osmodule().task_kill(self._ppid)
+        except Exception as e:
+            self._agent_main.write_except(e)
+    
+class CaptureProcessClient(threading.Thread):
+    
+    def __init__(self, agent_main):
+        threading.Thread.__init__(self,  name="DesktopCaptureProcessClient")
         self._lastid=0
         self._bdestroy=False
         self._agent_main=agent_main
-        self._osmodule=None
-        self._listlibs=None
+        self._screen_module=None
+        self._screen_listlibs=None
         self._semaphore = threading.Condition()
         self._sharedmem=None
+        self._sharedmem_bw=None
+        self._sharedmem_br=None
         self._process=None
+        self._process_init=False
+        self._process_status="stopped"
+        self._process_last_error=None
         self._ppid=None
-        self._currentconsoleid=None
+        self._currentconsole=None
+        self._currentconsolecounter=utils.Counter()
         self._listdm={}
-        self._last_copy_text=""
+        self._debug_inprocess=False
+        try:
+            self._debug_inprocess=self._agent_main.get_config("desktop.debug_inprocess",False)
+        except:
+            None
+        
+    def is_destroy(self):
+        return self._bdestroy
     
     def destroy(self):
+        self._bdestroy=True
+    
+    def get_last_error(self):
+        return self._process_last_error;
+        
+    def _get_screen_module(self):
+        if self._screen_module is None:
+            self._screen_module = self._agent_main.load_lib("screencapture")
+        return self._screen_module
+    
+    def _set_process_status_updating(self,checkv):
+        appldm={}
+        self._semaphore.acquire()
+        self._process_init=True
+        bdry=False
+        try:
+            while self._process_status=="updating":
+                self._semaphore.wait(0.5)
+                if self._bdestroy:
+                    break
+            bdry=self._bdestroy
+            if self._process_status==checkv:
+                return False
+            self._process_status="updating"
+            if checkv=="stopped":
+                #self._write_list=[]
+                appldm=self._listdm
+                self._listdm={}                                
+        finally:
+            self._semaphore.release()
+        if checkv=="stopped":
+            for sid in appldm:
+                dm = appldm[sid]
+                try:
+                    if bdry:
+                        dm._on_process_destroy()
+                    else:
+                        dm._on_process_close()
+                except Exception as e:
+                    self._agent_main.write_except(e,"AppDesktop:: Stop capture process error:\n")            
+            return True
+        else:
+            return not bdry
+    
+    def get_status(self):
+        return self._process_status
+    
+    def _get_process_status(self):
         self._semaphore.acquire()
         try:
-            self._bdestroy=True
-            if self._sharedmem!=None:
-                self._destroy_internal()
+            while self._process_init==False or self._process_status=="updating":
+                self._semaphore.wait(0.5)
+                if self._bdestroy:
+                    raise Exception("Process destroyed.")
+            return self._process_status
         finally:
-            self._semaphore.release() 
-        #UNLOAD DLL
-        if self._osmodule is not None:
-            if self._agent_main is not None:
-                self._agent_main.unload_lib("screencapture")
-            else:
-                native.unload_libraries(self._listlibs)
-            self._osmodule=None;
+            self._semaphore.release()
     
-    def _get_osmodule(self):
-        if self._osmodule is None:
-            if self._agent_main is not None:
-                self._osmodule = self._agent_main.load_lib("screencapture")
+    def _set_process_status(self,v):
+        self._semaphore.acquire()
+        try:
+            self._process_status=v
+        finally:
+            self._semaphore.release()        
+    
+    def _is_process_running(self):
+        if self._process!=None:
+            if self._process.poll() == None:
+                return True
+        elif self._ppid!=None:
+            if self._agent_main.get_osmodule().is_task_running(self._ppid):
+                return True
+        return False
+    
+    def _get_linux_envirionment(self,uid,tty):
+        bwaylanderr=False
+        lstret={} 
+        if uid!=-1:
+            lst = native.get_instance().get_process_ids()
+            try:
+                bok=False
+                cnt = utils.Counter()
+                while not bok and cnt.get_value()<=2:
+                    for pid in lst:
+                        if native.get_instance().get_process_uid(pid)==uid:
+                            lstret={}
+                            arenv = native.get_instance().get_process_environ(pid)
+                            for apps in arenv:                        
+                                if apps=="XAUTHORITY" or apps=="DISPLAY" or apps.startswith("WAYLAND_") or apps.startswith("XDG_") or apps.startswith("LC_"):
+                                    lstret[apps]=arenv[apps]
+                            if ("DISPLAY" in lstret and "XAUTHORITY" in lstret):
+                                bok=True
+                                break
+                            lstret={}
+                    time.sleep(0.5)
+            except:
+                lstret={}
+        
+        #check cmdline
+        try:
+            if tty is not None:
+                st = os.stat("/dev/" + tty)
+            lst = native.get_instance().get_process_ids()
+            for pid in lst:
+                sst = native.get_instance().get_process_stat(pid)
+                if (tty is None or sst["tty"]==st.st_rdev) and (uid==-1 or native.get_instance().get_process_uid(pid)==uid):
+                    lret = native.get_instance().get_process_cmdline(pid)
+                    bok=False
+                    sxauth=None
+                    sdsp=None
+                    for i in range(len(lret)):
+                        if i==0:
+                            scmd = lret[i]
+                            arcmd = scmd.split("/")
+                            if len(arcmd)>0:
+                                scmd=arcmd[len(arcmd)-1]
+                                if scmd.upper()=="X" or scmd.upper()=="XORG": 
+                                    bok=True
+                                elif scmd.upper()=="XWAYLAND":
+                                    bwaylanderr=True
+                        if bok:
+                            sitm = lret[i]
+                            if i>0 and lret[i-1]=="-auth":
+                                sxauth=sitm
+                            elif len(sitm)==2:
+                                if sitm[0]==":" and sitm[1].isdigit():
+                                    sdsp=sitm
+                            elif len(sitm)==4:
+                                if sitm[0]==":" and sitm[1].isdigit() and sitm[2]=="." and sitm[3].isdigit():
+                                    sdsp=sitm
+                    if sxauth is not None:
+                        lstret["XAUTHORITY"] = sxauth
+                    if sdsp is not None:
+                        lstret["DISPLAY"] = sdsp
+                    if bok:
+                        bwaylanderr=False
+                        break
+            
+        except:
+            None
+        
+        if bwaylanderr:
+            self._process_last_error="XWayland is not supported."
+            self.destroy()
+            raise Exception(self._process_last_error)
+        
+        if "DISPLAY" not in lstret:
+            lstret["DISPLAY"]=":0"
+            
+        if "XAUTHORITY" in lstret:
+            sxauth = lstret["XAUTHORITY"]
+            if not os.path.exists(sxauth):
+                try:
+                    p = sxauth.rindex("/")
+                    if p>=0:
+                        sxauthdir = sxauth[0:p]
+                        os.makedirs(sxauthdir, 0700)
+                        fd = os.open(sxauth,os.O_RDWR|os.O_CREAT, 0600)
+                        os.close(fd)                                                        
+                except:
+                    None
+        '''
+        if "DISPLAY" in lstret:
+            self._agent_main.write_info("DISPLAY: " + lstret["DISPLAY"])
+        if "XAUTHORITY" in lstret:
+            self._agent_main.write_info("XAUTHORITY: " + lstret["XAUTHORITY"])
+        '''
+        return lstret        
+    
+    def _load_linux_console_info(self,appconsole):
+        if appconsole is not None:
+            stty=appconsole["id"]
+            #self._agent_main.write_info("\n\n")
+            #self._agent_main.write_info("TTY: " + stty)
+            pwinfo=None            
+            try:
+                import pwd
+                if os.getuid()==0:
+                    data = subprocess.Popen(["who"], stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+                    so, se = data.communicate()
+                    if so is not None and len(so)>0:
+                        ar = so.split("\n")
+                        for s in ar:
+                            if " " + stty + " " in s:
+                                try:
+                                    pwinfo=pwd.getpwnam(s.split(" ")[0].rstrip(" "))
+                                    if pwinfo is not None:
+                                        break
+                                except:
+                                    None
+                    if pwinfo is None:
+                        st = os.stat("/dev/" + stty)
+                        pwinfo=pwd.getpwuid(st.st_uid)
+                else:
+                    pwinfo=pwd.getpwuid(os.getuid())
+            except:
+                None
+            
+            appuid=-1
+            libenv={}
+            if pwinfo is not None:                
+                #self._agent_main.write_info("USER: " + pwinfo.pw_name)                
+                appconsole["user"] = pwinfo.pw_name
+                appconsole["uid"] = pwinfo.pw_uid
+                appconsole["gid"] = pwinfo.pw_gid
+                appconsole["home"] = pwinfo.pw_dir
+                appuid=pwinfo.pw_uid
             else:
-                self._listlibs = native.load_libraries_with_deps("screencapture")
-                self._osmodule = self._listlibs[0] 
-        return self._osmodule
+                libenv = os.environ
+            
+            lstret = self._get_linux_envirionment(appuid, self._appconsole["id"])
+            for k in lstret:
+                libenv[k]=lstret[k]
+            if pwinfo is not None:
+                libenv['HOME'] = appconsole["home"]
+                libenv['LOGNAME'] = appconsole["user"]
+                libenv['USER'] = appconsole["user"]
+            appconsole["env"]=libenv
+            
+    
+    def _get_console(self):
+        if agent.is_windows():
+            return {"id": self._get_screen_module().consoleSessionId()}
+        elif agent.is_mac():
+            return {"id": self._get_screen_module().consoleUserId()}
+        elif agent.is_linux():
+            try:
+                stty=native.get_instance().get_tty_active()
+                if stty is not None:
+                    return {"id": stty}                    
+            except:
+                None 
+            
+        return None
+    
+    def _is_change_console(self):
+        if self._currentconsole is not None and self._currentconsolecounter.is_elapsed(1):
+            self._currentconsolecounter.reset()
+            appc=self._get_console()
+            appcid=appc["id"]
+            if agent.is_windows():
+                if (self._get_screen_module().isWinXP()==1 or self._get_screen_module().isWin2003Server()==1) and appcid>0:
+                    self._get_screen_module().winStationConnectW()
+                    time.sleep(1)
+                    self._destroy_process()
+                    return True
+                elif appcid!=self._currentconsole["id"]:
+                    self._destroy_process()
+                    return True
+            elif agent.is_mac():
+                if appcid!=self._currentconsole["id"]:
+                    self._destroy_process()
+                    time.sleep(1)
+                    return True
+            elif agent.is_linux():
+                if appcid!=self._currentconsole["id"]:
+                    self._destroy_process()
+                    return True
+        return False
+    
+    def _sharedmem_read_timeout(self):
+        if self._is_change_console():
+            return True
+        return self.is_destroy() 
+    
+    def _init_sharedmem(self):
+        self._sharedmem=sharedmem.Stream()        
+        self._sharedmem_bw=self._sharedmem.get_buffer_writer()
+        self._sharedmem_bw.set_autoflush_time(0)        
+        self._sharedmem_br=self._sharedmem.get_buffer_reader()
+        self._sharedmem_br.set_timeout_function(self._sharedmem_read_timeout)
     
     def _init_process_demote(self,user_uid, user_gid):
         def set_ids():
             os.setgid(user_gid)
-            os.setuid(user_uid)    
+            os.setuid(user_uid)
         return set_ids
     
+    
     def _init_process(self):
-        if self._bdestroy:
-            raise Exception("Process destroyed.")
-        iretry=0;
+        if self._sharedmem is not None and self._sharedmem.is_closed():
+            self._destroy_process()
+        else:
+            self._is_change_console()
+        if not self._set_process_status_updating("started"):
+            return
+        
+        ### DEBUG PURPOSE        
+        if self._debug_inprocess:
+            if self._sharedmem==None:
+                self._appconsole=self._get_console()
+                self._init_sharedmem()
+                def fix_perm(fn):
+                    if agent.is_mac() and self._appconsole!=None:
+                        utils.path_change_owner(fn, self._appconsole["id"], -1)
+                        utils.path_change_permissions(fn, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP)
+                    elif agent.is_linux() and self._appconsole!=None and "uid" in self._appconsole:
+                        utils.path_change_owner(fn, self._appconsole["uid"], self._appconsole["gid"])
+                        utils.path_change_permissions(fn, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP)                    
+                fname = self._sharedmem.create(fixperm=fix_perm)
+                
+                self._cpdebug = CaptureProcessDebug(fname)
+                self._cpdebug.start()
+                self._set_process_status("started")
+            return
+        ###############################
+        
         while True:
             try:
-                self._appconsoleid=None
-                iretry+=1
-                if agent.is_windows():
-                    self._appconsoleid=self._get_osmodule().consoleSessionId();
-                    if (self._get_osmodule().isWinXP()==1 or self._get_osmodule().isWin2003Server()==1) and self._appconsoleid>0:
-                        self._get_osmodule().winStationConnectW()
-                        time.sleep(1)
-                        self._destroy_internal()
-                    elif self._currentconsoleid!=None and self._appconsoleid!=self._currentconsoleid:
-                        self._destroy_internal()
-                elif agent.is_mac():
-                    self._appconsoleid=self._get_osmodule().consoleUserId();
-                    if self._currentconsoleid!=None and self._appconsoleid!=self._currentconsoleid:
-                        self._destroy_internal()
-                        time.sleep(1)
-                
+                self._appconsole=self._get_console()
+                self._currentconsole=None
                 if self._sharedmem==None:
-                    self._sharedmem=sharedmem.Stream()
+                    
+                    if agent.is_linux():
+                        self._load_linux_console_info(self._appconsole)
+                    
+                    self._init_sharedmem()
                     def fix_perm(fn):
-                        if agent.is_mac() and self._appconsoleid!=None:
-                            utils.path_change_owner(fn, self._appconsoleid, -1)
+                        if agent.is_mac() and self._appconsole!=None:
+                            utils.path_change_owner(fn, self._appconsole["id"], -1)
+                            utils.path_change_permissions(fn, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP)
+                        elif agent.is_linux() and self._appconsole!=None and "uid" in self._appconsole:
+                            utils.path_change_owner(fn, self._appconsole["uid"], self._appconsole["gid"])
                             utils.path_change_permissions(fn, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP)
                     fname = self._sharedmem.create(fixperm=fix_perm)
                     #RUN PROCESS
@@ -842,9 +882,9 @@ class CaptureProcess():
                     #    compileall.compile_file("apps" + utils.path_sep + "desktop.py")
                     if agent.is_windows():
                         runaselevatore=u"False"
-                        if self._get_osmodule().isUserInAdminGroup()==1:
-                            if self._get_osmodule().isRunAsAdmin()==1:
-                                if self._get_osmodule().isProcessElevated()==1:
+                        if self._get_screen_module().isUserInAdminGroup()==1:
+                            if self._get_screen_module().isRunAsAdmin()==1:
+                                if self._get_screen_module().isProcessElevated()==1:
                                     runaselevatore=u"True"
                         #Gestito cosi perche' sys.executable creave problemi con percorsi unicode
                         exep=sys.executable
@@ -863,63 +903,58 @@ class CaptureProcess():
                           
                         appcmd=u"\"" + exep + u"\" -S -m agent app=desktop " + unicode(fname) + u" " + unicode(str(self._agent_main._agent_debug_mode)) + u" windows " + runaselevatore
                         #appcmd=u"\"" + exep + u"\" -S -m agent app=desktop " + unicode(fname) + u" " + unicode(str(False)) + u" windows " + runaselevatore
-                        self._ppid = self._get_osmodule().startProcessAsUser(appcmd,pyhome)
-                        self._currentconsoleid=self._get_osmodule().consoleSessionId();                        
+                        self._ppid = self._get_screen_module().startProcessAsUser(appcmd,pyhome)
+                        self._currentconsole=self._appconsole                        
                     elif agent.is_linux():
-                        libenv = os.environ
-                        if utils.path_exists("runtime"):
-                            libenv["LD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
-                        #for some distro linux command below don't works because missing runpy
-                        #self._process=subprocess.Popen([sys.executable, u'-S', u'-m', u'agent' , u'app=desktop', unicode(fname), unicode(str(self._agent_main._agent_debug_mode)),u'linux'], env=libenv)
-                        self._process=subprocess.Popen([sys.executable, u'agent.pyc', u'app=desktop', fname, str(self._agent_main._agent_debug_mode),u'linux'], env=libenv)
-                        '''
-                        stat -c%U /dev/tty2                        
-                        if my_args is None: my_args = sys.argv[1:]
-                        user_name, cwd = my_args[:2]
-                        args = my_args[2:]
-                        pw_record = pwd.getpwnam(user_name)
-                        user_name      = pw_record.pw_name
-                        user_home_dir  = pw_record.pw_dir
-                        user_uid       = pw_record.pw_uid
-                        user_gid       = pw_record.pw_gid
-                        env = os.environ.copy()
-                        env[ 'HOME'     ]  = user_home_dir
-                        env[ 'LOGNAME'  ]  = user_name
-                        env[ 'PWD'      ]  = cwd
-                        env[ 'USER'     ]  = user_name
-                        self._process=subprocess.Popen([sys.executable, u'agent.pyc', u'app=desktop', fname, str(self._agent_main._agent_debug_mode),u'linux'], env=libenv, preexec_fn=self._init_process_demote(1000, 1000))
-                        '''
                         #GESTIRE IL RENICE
+                        agfn=u'agent.pyc'
+                        if self._agent_main._agent_debug_mode and utils.path_exists("agent.py"):
+                            agfn=u'agent.py'                        
+                        if self._appconsole!=None and "env" in self._appconsole:
+                            libenv=self._appconsole["env"]
+                            if utils.path_exists("runtime"):
+                                libenv["LD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
+                            elif "LD_LIBRARY_PATH" in os.environ:
+                                libenv["LD_LIBRARY_PATH"]=os.environ["LD_LIBRARY_PATH"]
+                            
+                            self._process=subprocess.Popen([sys.executable, agfn, u'app=desktop', fname, str(self._agent_main._agent_debug_mode),u'linux'], env=libenv, preexec_fn=self._init_process_demote(self._appconsole["uid"], self._appconsole["gid"]))
+                        else:
+                            libenv = os.environ
+                            lstret = self._get_linux_envirionment(-1, None)
+                            for k in lstret:
+                                libenv[k]=lstret[k]
+                            if utils.path_exists("runtime"):
+                                libenv["LD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
+                            elif "LD_LIBRARY_PATH" in os.environ:
+                                libenv["LD_LIBRARY_PATH"]=os.environ["LD_LIBRARY_PATH"]
+                            self._process=subprocess.Popen([sys.executable, agfn , u'app=desktop', fname, str(self._agent_main._agent_debug_mode),u'linux'], env=libenv)
+                        self._currentconsole=self._appconsole
                     elif agent.is_mac():
-                        self._ppid = self._agent_main.get_osmodule().exec_guilnc(self._appconsoleid,"desktop",[fname, str(self._agent_main._agent_debug_mode),u'mac'])
+                        self._ppid = self._agent_main.get_osmodule().exec_guilnc(self._appconsole["id"],"desktop",[fname, str(self._agent_main._agent_debug_mode),u'mac'])
                         if self._ppid is not None:
-                            self._currentconsoleid=self._appconsoleid
+                            self._currentconsole=self._appconsole
                             self._process = None
                         else:
-                            self._currentconsoleid=None
+                            self._currentconsole=None
                             libenv = os.environ
                             if utils.path_exists("runtime"):
                                 libenv["DYLD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
                             #self._process=subprocess.Popen([sys.executable, u'agent.pyc', u'app=desktop', fname, str(self._agent_main._agent_debug_mode),u'mac'], env=libenv)
                             self._process=subprocess.Popen([sys.executable, u'-S', u'-m', u'agent' , u'app=desktop', unicode(fname), unicode(str(self._agent_main._agent_debug_mode)),u'mac'], env=libenv)
                             #GESTIRE IL RENICE
-                    self._appconsoleid=None
-                       
+                    self._appconsole=None
                     #Attende che il processo si attiva
-                    bok=False
-                    for i in range(10):
-                        time.sleep(0.5)
-                        if self._process!=None:
-                            if self._process.poll() == None:
+                    bok=False                    
+                    if self._process is not None or self._ppid is not None:
+                        cnt = utils.Counter()
+                        while not cnt.is_elapsed(5):
+                            time.sleep(0.5)
+                            if self._is_process_running():
                                 bok=True
                                 break
-                        elif self._ppid!=None:
-                            if self._agent_main.get_osmodule().is_task_running(self._ppid):
-                                bok=True
-                                break
-                        else:
-                            break
                     if bok:
+                        self._process_last_error=None
+                        self._set_process_status("started")
                         break
                     else:
                         raise Exception("Process not started.")
@@ -927,347 +962,689 @@ class CaptureProcess():
                     break
              
             except Exception as e:
-                time.sleep(1)
-                self._destroy_internal()
-                if iretry>=3:
+                time.sleep(2)
+                self._destroy_process_internal()
+                if self.is_destroy():
+                    self._process_last_error=str(e)
+                    self._set_process_status("stopped")
                     raise e
     
-    def _destroy_internal(self):
+    def _destroy_process_internal(self):
         try:
             if self._sharedmem!=None:
                 self._sharedmem.close()
-        except Exception as e:
+        except Exception as e:            
             self._agent_main.write_except(e)
-        try:
-            #Attende chiusura processo
-            bok=False
-            for i in range(6):
-                if self._process!=None:
-                    if not self._process.poll() == None:
-                        bok=True
-                        break
-                elif self._ppid!=None:
-                    if not self._agent_main.get_osmodule().is_task_running(self._ppid):
-                        bok=True
-                        break                
-                else:
-                    break
-                time.sleep(0.5)
-            if not bok:
-                if self._process!=None:
-                    self._process.kill()
-                elif self._ppid!=None:
-                    self._agent_main.get_osmodule().task_kill(self._ppid)
-        except Exception as e:
-            self._agent_main.write_except(e)
+        
+        cpd = CaptureProcessClientDestroy(self._agent_main,self._ppid,self._process)
+        cpd.start()
         self._sharedmem=None
         self._process=None
         self._ppid=None
-        self._currentconsoleid=None
-        self._listdm={}
-        
+        self._currentconsole=None
+        self._listdm={}        
     
-    '''def _request(self,req,bdestroy=False):
+    def _destroy_process(self):
+        if not self._set_process_status_updating("stopped"):
+            return
+        self._destroy_process_internal()        
+        self._set_process_status("stopped")
+    
+    
+    def _write_data(self,s):
+        st = self.get_status()
+        if st=="started":
+            self._sharedmem_bw.add_str(s)
+        else:
+            raise Exception("Process not started.")
+    
+    def _fire_on_process_data(self,sid,bts):
+        try:
+            self._listdm[sid]._on_process_data(bts)
+        except:
+            None
+        
+    def run(self):
+        try:
+            while not self.is_destroy():
+                self._init_process()                
+                try:
+                    sid,bts = self._sharedmem_br.get_pack(["int","bytes"])
+                    self._fire_on_process_data(str(sid),bts)                    
+                except Exception as e:
+                    if not self.is_destroy():
+                        self._destroy_process()
+                        time.sleep(1)                
+        except Exception as e:
+            try:
+                self._process_last_error=str(e)
+            except:
+                self._process_last_error="Process not started."
+        self.destroy()
+        self._destroy_process()
+        #UNLOAD DLL        
+        if self._screen_module is not None:
+            self._agent_main.unload_lib("screencapture")
+            self._screen_module=None;        
+        
+    def exists(self, dm):
         self._semaphore.acquire()
         try:
-            try:
-                self._init_process()
-                self._sharedmem.write_token(req)
-                resp = self._sharedmem.read_token()
-                if resp==None:
-                    raise Exception("Capture process closed.")
-            except Exception as e:
-                self._destroy_internal()
-                raise e
-            if bdestroy:
-                self._destroy_internal()
-            if resp=="K":
-                return None
-            if resp[0]=="K":
-                return resp[1:]
-            else:
-                raise Exception(resp[1:])
-        finally:
-            self._semaphore.release() 
-    '''
-        
-    def write_token(self,s):
-        bts=utils.Bytes();
-        bts.append_str(s, "utf8")
-        self._sharedmem.write_token(bts)
-        #self._sharedmem.write_token(s)
-        
-    def read_token(self):        
-        return self._sharedmem.read_token()        
-    
-    def _request_async(self,req,bdestroy=False):
-        self._semaphore.acquire()
-        try:
-            try:
-                self._init_process()
-                self.write_token(req)
-                if bdestroy:
-                    self._destroy_internal()
-            except Exception as e:
-                self._destroy_internal()
-                raise e
+            appid=dm._capture_process_id
+            return appid is not None and appid in self._listdm
         finally:
             self._semaphore.release()
-     
-    def _request(self,req,ontoken,bdestroy=False):
+            
+    def add(self, dm):
+        appid=None
         self._semaphore.acquire()
         try:
-            try:
-                self._init_process()
-                self.write_token(req)
-                while True:
-                    resp = self.read_token()
-                    if self._bdestroy:
-                        raise Exception("Process destroyed.")
-                    if resp==None:
-                        raise Exception("Capture process closed.")
-                    if bdestroy:
-                        self._destroy_internal()
-                    if resp[0]==ord("K") or resp[0]==ord("T"):
-                        apps = resp.new_buffer(1)
-                        if len(apps)>0:
-                            ontoken(apps)
-                        if resp[0]==ord("T"):
-                            break
-                    else:
-                        raise Exception(resp.new_buffer(1).to_str("utf8"))
-            except Exception as e:
-                self._destroy_internal()
-                raise e
+            if self._bdestroy:
+                raise Exception("Process destroyed.")            
+            appid=dm._capture_process_id
+            if appid is None:
+                self._lastid+=1;
+                appid=str(self._lastid)
+                dm._capture_process_id=appid
+            self._listdm[appid]=dm
+            self._dm=dm
+            if appid is not None:
+                self._write_data(u"INITIALIZE:"+appid)                
         finally:
-            self._semaphore.release()
+            self._semaphore.release()                    
         
     def remove(self, dm):
-        if dm in self._listdm:
-            sid=self._listdm[dm]
-            del self._listdm[dm] 
-            self._request_async(u"TERMINATE:"+sid,len(self._listdm)==0)
+        appid=None
+        self._semaphore.acquire()
+        try:
+            appid=dm._capture_process_id
+            if appid is not None and appid in self._listdm:
+                del self._listdm[appid]                
+            else:
+                appid=None 
+            if appid is not None:
+                self._write_data(u"TERMINATE:"+appid)
+        finally:
+            self._semaphore.release()        
     
     def get_id(self,dm):
-        if dm not in self._listdm:
-            self._lastid+=1;
-            appid=str(self._lastid)
-            #self._request("INITIALIZE:" + appid)
-            self._listdm[dm]=appid
-            #self._listdm[dm]=str(self._get_osmodule().initialize())
-        return self._listdm[dm]
+        return dm._capture_process_id
     
-    def difference(self, dm, tp, qa, monitor, ontoken):
+    def set_send_buffer_size(self, dm, sz):
         sid=self.get_id(dm)
-        sreq=[]
-        sreq.append(u"DIFFERENCE:")
-        sreq.append(sid)
-        sreq.append(u";")
-        sreq.append(str(tp))
-        sreq.append(u";")
-        sreq.append(str(qa))
-        sreq.append(u";")
-        sreq.append(str(monitor))
-        self._request(u"".join(sreq),ontoken)
-        '''
-        sret = self._request("DIFFERENCE:" + sid + ";" + str(bps) + ";" + str(monitor))
-        if sret==None:
-            sret=""
-        return sret
-        '''
+        apps=u"SET_SEND_BUFFER_SIZE:"+unicode(sid)+u";"+unicode(sz)
+        self._write_data(apps)
     
-    def keyboard(self, dm, tp, code, ctrl, alt, shift, cmdkey) :
+    def received_frame(self, dm, tm):
         sid=self.get_id(dm)
+        apps=u"RECEIVED_FRAME:"+unicode(sid)+u";"+unicode(tm)
+        self._write_data(apps)        
+    
+    def set_quality(self, dm, q):
+        sid=self.get_id(dm)
+        apps=u"SET_QUALITY:"+unicode(sid)+u";"+unicode(q)
+        self._write_data(apps)
+    
+    def set_monitor(self, dm, m):
+        sid=self.get_id(dm)
+        apps=u"SET_MONITOR:"+unicode(sid)+u";"+unicode(m)
+        self._write_data(apps)
+    
+    def set_frame_type(self, dm, tp):
+        sid=self.get_id(dm)
+        apps=u"SET_FRAME_TYPE:"+unicode(sid)+u";"+unicode(tp)
+        self._write_data(apps)
+    
+    def set_slow_mode(self, dm, b):
+        sid=self.get_id(dm)
+        apps=u"SET_SLOW_MODE:"+unicode(sid)+u";"+unicode(b)
+        self._write_data(apps)
+    
+    def inputs(self, dm, sinps):
         bok = True;
-        if agent.is_windows() and tp=="CTRLALTCANC":
-            if self._get_osmodule().sas():
+        if agent.is_windows() and "CTRLALTCANC" in sinps:
+            if self._get_screen_module().sas():
                 bok = False
-        if bok:
-            apps=u"KEYBOARD:"+unicode(sid)+u";"+ unicode(tp) +u";"+unicode(code)+u";"+unicode(ctrl)+u";"+unicode(alt)+u";"+unicode(shift)+u";"+unicode(cmdkey)
-            #print(apps)
-            self._request_async(apps)
-        
+        if bok: 
+            sid=self.get_id(dm)
+            apps=u"INPUTS:"+unicode(sid)+";"+unicode(sinps)
+            self._write_data(apps)
     
-    def mouse(self, dm, x, y , btn, whl, ctrl, alt, shift, cmdkey) :
-        sid=self.get_id(dm)
-        apps=u"MOUSE:"+unicode(sid)+u";"+unicode(x)+u";"+unicode(y)+u";"+unicode(btn)+u";"+unicode(whl)+u";"+unicode(ctrl)+u";"+unicode(alt)+u";"+unicode(shift)+u";"+unicode(cmdkey)
-        #print(apps)
-        self._request_async(apps)
-    
-    
-    def _on_token_copy_text(self,sdata):
-        self._last_copy_text=unicode(base64.b64decode(sdata.to_str("utf8")).decode("utf8"))
-        
     def copy_text(self, dm) :
         sid=self.get_id(dm)
-        self._last_copy_text=""
-        self._request(u"COPYTEXT:"+str(sid),self._on_token_copy_text)
-        return self._last_copy_text
+        self._write_data(u"COPY_TEXT:"+str(sid))
     
     def paste_text(self, dm, s) :
         sid=self.get_id(dm)
         if s is not None:
-            self._request_async(u"PASTETEXT:"+str(sid)+u";"+base64.b64encode(s.encode("utf8")))
-        
+            self._write_data(u"PASTE_TEXT:"+str(sid)+u";"+base64.b64encode(s.encode("utf8")))
+
+
+class CaptureProcessStdRedirect(object):
     
+    def __init__(self,lg,lv):
+        self._logger = lg;
+        self._level = lv;
+        
+    def write(self, data):
+        for line in data.rstrip().splitlines():
+            self._logger.log(self._level, line.rstrip())
+
+
+class CaptureProcessSessionSpeedCalculator():
+    
+    def __init__(self, prt):
+        self._parent=prt        
+        self._to_reset=False
+        self._quality_inc_dec=0
+        self._quality = 9
+        self._quality_request = -1
+        self._quality_counter = utils.Counter()
+        self._fps_counter = utils.Counter()
+        self._fps = 0
+        self._min_wait_counter = utils.Counter()
+        self._min_distance = 0
+        self._min_wait_1 = 0.1
+        self._min_wait_2 = None        
+        self._frame_count=0
+            
+    def _calc_fps(self):
+        if self._fps_counter.is_elapsed(1):            
+            self._fps=int(float(self._frame_count)/self._fps_counter.get_value())
+            self._min_distance=self._fps
+            if self._min_distance<5:
+                self._min_distance=5            
+            if self._fps>5:
+                self._min_wait_1=1.0/(float(self._fps)+5.0)
+            else:
+                self._min_wait_1=0.1            
+            self._frame_count=0
+            self._fps_counter.reset()
+    
+    def get_fps(self):
+        self._calc_fps()
+        return self._fps
+
+    def get_min_distance(self):
+        self._calc_fps()
+        return self._min_distance        
+    
+    def get_min_wait(self):
+        self._calc_fps()
+        if self._min_wait_2 is not None:
+            return self._min_wait_2
+        else:
+            return self._min_wait_1
+    
+    def set_quality_request(self, q):
+        self._quality_request=q
+        self.reset()
+    
+    def get_quality(self):
+        if self._quality_request==-1:
+            return self._quality
+        else:
+            return self._quality_request
+    
+    def reset(self):
+        self._to_reset=True
+        self._min_wait_2=None
+    
+    def received_frame(self,tm):
+        self._frame_count+=1
+        if not self._to_reset:
+            if self._min_wait_counter.is_elapsed(1):
+                self._min_wait_counter.reset()
+                if self._fps<5:
+                    self._min_wait_2=1.0/(float(self._fps)+2.0)                
+                    #self._parent._send_debug("self._min_wait_2: " + str(self._min_wait_2))
+            
+            elp = (time.time()-tm)-self._parent._ping
+            if elp>0.3:
+                if self._quality_inc_dec==0:
+                    self._quality_inc_dec=-1
+                elif self._quality_inc_dec==1:
+                    self._to_reset=True                    
+            elif elp<0.2 and elp>0.0:
+                if self._quality_inc_dec==0:
+                    self._quality_inc_dec=+1   
+                elif self._quality_inc_dec==-1:
+                    self._to_reset=True                    
+            if self._quality_counter.is_elapsed(2):
+                if self._quality_request==-1:
+                    if self._quality_inc_dec<0 and self._quality>0:
+                        self._quality-=1
+                    elif self._quality_inc_dec>0 and self._quality<9:
+                        self._quality+=1  
+                #self._parent._send_debug("self._quality: " + str(self._quality))
+                self._to_reset=True
+                
+                        
+        if self._to_reset:
+            self._quality_counter.reset()
+            self._min_wait_counter.reset()            
+            self._quality_inc_dec=0           
+            self._to_reset=False
+        
+class CaptureProcessSession(threading.Thread):
+        
+    def __init__(self, cprc, sid):
+        threading.Thread.__init__(self,  name="CaptureProcessSession")
+        self._capture_process = cprc
+        self._scrinv = self._capture_process._screen_thread
+        self._difference_inprogress = False        
+        self._id=sid
+        self._monitor=-1
+        self._frame_type=-1
+        self._frame_intervall_time=10.0/1000.0
+        self._frame_intervall_time_counter=utils.Counter()
+        self._frame_distance_lock=threading.Lock()
+        self._frame_distance=0
+        self._frame_size=0l
+        self._slow_mode=False
+        self._slow_mode_counter=utils.Counter()
+        self._ping=-1
+        self._ping_counter=None
+        self._speed_calculator=CaptureProcessSessionSpeedCalculator(self)
+        self._bdestroy = False
+        
+    def _send_debug(self, s):
+        bts = utils.Bytes(struct.pack("!h",998))
+        bts.append_str(s, "utf8")
+        self._capture_process.write_data(self._id, bts);
+    
+    def cb_difference(self, sz, pdata):
+        if sz>0:
+            sdata = utils.Bytes(pdata[0:sz])
+            tp = _struct_h.unpack(sdata[0:2])[0]
+            if tp==1: #TOKEN DISTANCE FRAME
+                self._frame_intervall_time_counter.reset()
+                self._frame_intervall_time=float(_struct_i.unpack(sdata[2:6])[0])/1000.0                                
+            elif tp==2: #TOKEN FRAME
+                #CALCULATE PING
+                if self._ping_counter is None:
+                    self._ping_counter = utils.Counter()
+                    self._capture_process.write_data(self._id, utils.Bytes(struct.pack("!hb",2,1)))
+                
+                self._frame_size+=long(len(sdata))
+                if sdata[2]==1:
+                    if self._frame_size==3:
+                        self._speed_calculator.reset()
+                        self._frame_size=0
+                        return                        
+                    with self._frame_distance_lock:
+                        self._frame_distance+=1
+                    self._frame_size=0
+                self._capture_process.write_data(self._id, sdata)                    
+            else:
+                self._capture_process.write_data(self._id, sdata)
+    
+    def received_frame(self,tm): 
+        #CALCULATE PING
+        if self._ping==-1:
+            self._ping=self._ping_counter.get_value()
+            self._speed_calculator.reset()
+            return
+        with self._frame_distance_lock:
+            self._frame_distance-=1        
+        self._speed_calculator.received_frame(tm)        
+    
+    def set_send_buffer_size(self,sz):
+        if self._capture_process._scr_libver>=2:
+            self._scrinv.add(self, self._scrinv.setBufferSendSize, [sz])                
+    
+    def copy_text(self):
+        self._scrinv.add(self, self._scrinv.copyText, [self._id])
+    
+    def paste_text(self, s):
+        self._scrinv.add(self, self._scrinv.pasteText, [self._id, s])
+    
+    def set_frame_type(self,t):
+        self._frame_type=t        
+    
+    def set_slow_mode(self,b):
+        self._slow_mode=b
+        
+    def set_quality(self,q):
+        self._speed_calculator.set_quality_request(q)       
+    
+    def set_monitor(self,m):
+        if self._monitor!=m:
+            self._monitor=m
+            self._scrinv.add(self, self._scrinv.monitor, [self._id, m])
+    
+    def add_inputs(self,ips):
+        for i in range(len(ips)):
+            if i>=1:
+                try:
+                    prms=ips[i].split(",")
+                    if prms[0]==u"MOUSE":
+                        bcommand=False
+                        if len(prms)==9:
+                            bcommand=(prms[8]=="true")
+                        self._scrinv.add(self, self._scrinv.inputMouse, [self._id, int(prms[1]), int(prms[2]), int(prms[3]), int(prms[4]), prms[5]=="true", prms[6]=="true", prms[7]=="true", bcommand])
+                    elif prms[0]==u"KEYBOARD":                    
+                        bcommand=False
+                        if len(prms)==7:
+                            bcommand=(prms[6]=="true")
+                        self._scrinv.add(self, self._scrinv.inputKeyboard, [self._id, str(prms[1]), str(prms[2]), prms[3]=="true", prms[4]=="true", prms[5]=="true", bcommand])
+                except Exception as ex:
+                    self._capture_process._debug_print(utils.exception_to_string(ex) + "\n" + traceback.format_exc())
+    
+    def set_difference_inprogress(self, b):
+        self._difference_inprogress=b
+    
+    def wait_difference_inprogress(self):
+        while self._difference_inprogress:
+            time.sleep(0.005)
+    
+    def wait_time(self,tm):
+        time.sleep(tm)
+                        
+    def run(self):
+        self._scrinv.add(self, self._scrinv.init,[self._id])
+        try:
+            appcnt=utils.Counter() 
+            while not self._bdestroy:
+                mdis=self._speed_calculator.get_min_distance()
+                mwait=self._speed_calculator.get_min_wait()                
+                if self._frame_distance<=mdis and (self._slow_mode==False or self._slow_mode_counter.is_elapsed(4)):
+                    self._frame_intervall_time_counter.reset()
+                    self._scrinv.add(self, self._scrinv.difference, [self._id,self._frame_type,self._speed_calculator.get_quality(),cb_difference])                    
+                    while self._frame_type==-1:
+                        self.wait_time(0.1)
+                        if self._bdestroy:
+                            return
+                    
+                    df = self._frame_intervall_time
+                    w=mwait
+                    if w>df:
+                        df=w                                                
+                    if not self._frame_intervall_time_counter.is_elapsed(df):
+                        appwait=df-self._frame_intervall_time_counter.get_value()
+                        appcnt.reset()
+                        #self._send_debug("APPWAIT " + str(appwait) + "  df:" + str(df) + "  self._frame_intervall_time:" + str(self._frame_intervall_time))                        
+                        while not appcnt.is_elapsed(appwait):
+                            self.wait_time(0.005)                    
+                    self.wait_difference_inprogress()                        
+                    self._slow_mode_counter.reset()
+                else:
+                    if self._slow_mode:
+                        self.wait_time(0.25)
+                        self._speed_calculator.reset()
+                    else:
+                        self.wait_time(0.005)
+                
+        except Exception as ex:
+            try:
+                self._capture_process.write_data(self._id, utils.Bytes(struct.pack("!h",990)))
+            except:
+                None            
+            self._capture_process._debug_print(utils.exception_to_string(ex) + "\n" + traceback.format_exc())            
+        self._scrinv.add(self, self._scrinv.term,[self._id])
+
+    def destroy(self,bwait=False):
+        self._bdestroy=True
+        if bwait:
+            self.join(2)        
+    
+class CaptureProcessScreen(threading.Thread):
+        
+    def __init__(self, cprc):
+        threading.Thread.__init__(self,  name="CaptureProcessScreen")
+        self._capture_process = cprc
+        self._scrmdl = self._capture_process._get_screen_module()
+        self._list = []
+        self._currentscr=None
+    
+    def init(self, args):
+        self._scrmdl.init(args[0])
+    
+    def term(self, args):
+        self._scrmdl.term(args[0])
+    
+    def cb_difference(self, sz, pdata):
+        self._currentscr.cb_difference(sz, pdata)
+    
+    def difference(self, args):
+        self._currentscr.set_difference_inprogress(True)
+        self._scrmdl.difference(args[0],args[1],args[2],args[3])
+        self._currentscr.set_difference_inprogress(False)
+    
+    def monitor(self, args):
+        self._scrmdl.monitor(args[0],args[1])
+    
+    def inputMouse(self, args):
+        self._scrmdl.inputMouse(args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8])
+    
+    def inputKeyboard(self, args):
+        self._scrmdl.inputKeyboard(args[0],args[1],args[2],args[3],args[4],args[5],args[6])
+    
+    def pasteText(self, args):
+        self._scrmdl.pasteText(args[0],ctypes.c_wchar_p(unicode(args[1])))
+    
+    def copyText(self, args):        
+        apps=None
+        pi=None
+        try:
+            pi=self._scrmdl.copyText(args[0])
+            if pi:
+                apps = ctypes.wstring_at(pi)
+        finally:
+            if pi: # and ln>0:
+                self._scrmdl.freeMemory(pi)
+        if apps is None:
+            apps = ""
+        bts = utils.Bytes(struct.pack("!h",805))
+        bts.append_str(base64.b64encode(apps.encode("utf8")), "utf8")
+        self._capture_process.write_data(args[0], bts)
+    
+    def setBufferSendSize(self, args):
+        self._scrmdl.setBufferSendSize(args[0]);
+       
+    def add(self, scr, fnc, args):
+        self._list.append([scr, fnc, args])
+        
+    def run(self):
+        while not self._capture_process.is_destroy():
+            while len(self._list)>0:
+                ar = self._list.pop(0)
+                self._currentscr=ar[0]
+                ar[1](ar[2])
+                self._currentscr=None                
+            time.sleep(0.005)
+
+
+class CaptureProcessDebug(threading.Thread):
+        
+    def __init__(self, nm):
+        threading.Thread.__init__(self,  name="CaptureProcessDebug")
+        self._name=nm
+        self._capture_process = CaptureProcess()
+
+    def run(self):
+        self._capture_process.listen(self._name,"True")        
+        self._capture_process.destroy()
+        
+    def write(self, sdata):
+        self._capture_process._on_request(sdata)
+
+class CaptureProcess():
+    
+    def __init__(self):
+        _libmap["captureprocess"]=self
+        self._bdestroy=False
+        self._screen_thread=None
+        self._screen_module=None
+        self._screen_listlibs=None
+        self._sharedmem=None
+        self._sharedmem_bw=None
+        self._sharedmem_br=None        
+        self._listids={}        
+        self._scr_libver = 0        
+        self._last_copy_text=""
+        self._debug_logprocess=False
+        try:
+            c = agent.read_config_file()
+            if "desktop.debug_logprocess" in c:
+                self._debug_logprocess=c["desktop.debug_logprocess"]
+        except:
+            None
+    
+    def is_destroy(self):
+        return self._bdestroy        
+    
+    def destroy(self):
+        self._bdestroy=True
+    
+    def _get_screen_module(self):        
+        if self._screen_module is None:
+            self._screen_listlibs = native.load_libraries_with_deps("screencapture")
+            self._screen_module = self._screen_listlibs[0] 
+        return self._screen_module
+    
+    def write_data(self, sid, bts):
+        self._sharedmem_bw.add_pack(["int","bytes"],[sid,bts])        
+                  
     def _enable_debug(self):
-        self._get_osmodule().setCallbackDebug(cb_debug_print)
+        self._get_screen_module().setCallbackDebug(cb_debug_print)
     
     def _debug_print(self,s):
         if self._dbgenable:
             print(s)
-    
-    '''
-    def _difference(self, sid, bps):
-        s=None
-        pi=None
-        ln=0
+                
+    def cb_debug_print(self, s):
+        self._debug_print("DESKTOPNATIVE@" + s)
+
+    def _on_request(self, srequest):
+        #self._debug_print("Richiesta: " + srequest)
+        ar = srequest.split(":")
         try:
-            pi=ctypes.POINTER(ctypes.c_char)()
-            ln = self._get_osmodule().difference(sid,bps,ctypes.byref(pi))
-            if ln>0:
-                s=pi[0:ln];
-            elif ln<0:
-                raise Exception("Capture difference error.")
-        finally:
-            if pi: # and ln>0:
-                self._get_osmodule().freeMemory(pi)
-        return s        
-    '''
-            
-    def _copy_text(self, sid):
-        s=None
-        pi=None
-        try:
-            pi=self._get_osmodule().copyText(sid)
-            if pi:
-                s = ctypes.wstring_at(pi)
-        finally:
-            if pi: # and ln>0:
-                self._get_osmodule().freeMemory(pi)
-        return s
+            if len(ar)==1 or len(ar)==2:
+                if len(ar)==2:
+                    prms=ar[1].split(";")
+                if ar[0]==u"INITIALIZE":
+                    appid=int(prms[0]);
+                    if appid in self._listids:
+                        apparid = self._listids[appid]                                
+                        apparid["screenThread"].destroy()
+                    self._listids[appid]={"id": appid, "monitor": -1}
+                    self._listids[appid]["screenThread"]=CaptureProcessSession(self, appid)
+                    self._listids[appid]["screenThread"].start()                        
+                if ar[0]==u"TERMINATE":
+                    appid=int(prms[0]);
+                    if appid in self._listids:
+                        apparid = self._listids[appid]
+                        if "screenThread" in apparid:                                
+                            apparid["screenThread"].destroy()
+                        del self._listids[appid]  
+                elif ar[0]==u"RECEIVED_FRAME":
+                    appid=int(prms[0]);
+                    tm=float(prms[1])
+                    if appid in self._listids:
+                        self._listids[appid]["screenThread"].received_frame(tm)
+                elif ar[0]==u"SET_SEND_BUFFER_SIZE":
+                    appid=int(prms[0]);
+                    sz=int(prms[1])
+                    if appid in self._listids:
+                        self._listids[appid]["screenThread"].set_send_buffer_size(sz)
+                elif ar[0]==u"SET_MONITOR":
+                    appid=int(prms[0]);
+                    monidx=int(prms[1])
+                    if appid in self._listids:
+                        self._listids[appid]["screenThread"].set_monitor(monidx)
+                elif ar[0]==u"SET_FRAME_TYPE":
+                    appid=int(prms[0]);
+                    frmtp=int(prms[1])
+                    if appid in self._listids:
+                        self._listids[appid]["screenThread"].set_frame_type(frmtp)
+                elif ar[0]==u"SET_QUALITY":
+                    appid=int(prms[0]);
+                    qa=int(prms[1])
+                    if appid in self._listids:
+                        self._listids[appid]["screenThread"].set_quality(qa)
+                elif ar[0]==u"SET_SLOW_MODE":
+                    appid=int(prms[0]);
+                    b=prms[1]=="True"
+                    if appid in self._listids:
+                        self._listids[appid]["screenThread"].set_slow_mode(b)
+                elif ar[0]==u"COPY_TEXT":
+                    appid=int(prms[0]);
+                    if appid in self._listids:
+                        self._listids[appid]["screenThread"].copy_text()                                                            
+                elif ar[0]==u"PASTE_TEXT":
+                    appid=int(prms[0]);
+                    s=base64.b64decode(prms[1]).decode("utf8")
+                    if appid in self._listids:
+                        self._listids[appid]["screenThread"].paste_text(s)
+                elif ar[0]==u"INPUTS":
+                    appid=int(prms[0]);
+                    if appid in self._listids:
+                        self._listids[appid]["screenThread"].add_inputs(prms)                
+            else:
+                raise Exception(u"Request '" + srequest + u"' is not valid.")
+        except Exception as ex:
+            self._debug_print(traceback.format_exc())
 
-    def _paste_text(self, sid,s):
-        self._get_osmodule().pasteText(sid,ctypes.c_wchar_p(unicode(s)))
-
-    def write_res_token(self, t, bts):
-        if bts is not None:
-            bts.insert_byte(0,ord(t))
-        else:
-            bts=utils.Bytes()
-            bts.append_byte(ord(t))        
-        self._sharedmem.write_token(bts)                
-
-    def cb_debug_print(self, str):
-        self._debug_print("DESKTOPNATIVE@" + str)
-
-    def cb_difference(self, sz, pdata):
-        if sz>0:
-            self.write_res_token("K", utils.Bytes(pdata[0:sz]))
+    def _sharedmem_read_timeout(self):
+        return self.is_destroy() 
     
     def listen(self,fname,dbgenable):
         try:
             self._dbgenable=(dbgenable.upper()=="TRUE")
             if self._dbgenable==True:
-                self._logger = logging.getLogger()
-                hdlr = logging.handlers.RotatingFileHandler(u'captureprocess.log', 'a', 10000000, 3)
-                formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-                hdlr.setFormatter(formatter)
-                self._logger.addHandler(hdlr) 
-                self._logger.setLevel(logging.DEBUG)
-                sys.stdout=CaptureProcessStdRedirect(self._logger,logging.DEBUG);
-                sys.stderr=CaptureProcessStdRedirect(self._logger,logging.ERROR);
-                self._enable_debug()        
+                if self._debug_logprocess:
+                    self._logger = logging.getLogger()
+                    hdlr = logging.handlers.RotatingFileHandler(u'captureprocess.log', 'a', 10000000, 3, None, True)
+                    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+                    hdlr.setFormatter(formatter)
+                    self._logger.addHandler(hdlr) 
+                    self._logger.setLevel(logging.DEBUG)
+                    sys.stdout=CaptureProcessStdRedirect(self._logger,logging.DEBUG);
+                    sys.stderr=CaptureProcessStdRedirect(self._logger,logging.ERROR);
+                    self._enable_debug()        
         except Exception as ex:
             self._debug_print(str(ex) + "\n" + traceback.format_exc());
-            return
-        
-        libver = 0
+            return        
         try:
-            libver = self._get_osmodule().version()
+            self._scr_libver = self._get_screen_module().version()
         except:
             None            
-        self._debug_print("Init capture process. (" + fname + ")")
-        listids={}
+        self._debug_print("Init capture process. (" + fname + ")")        
         try:
+            
             self._sharedmem=sharedmem.Stream()
-            self._sharedmem.connect(fname)
-            self._debug_print("Pronto ad accettare richieste")
+            self._sharedmem.connect(fname)            
+            self._sharedmem_bw=self._sharedmem.get_buffer_writer()
+            self._sharedmem_bw.set_autoflush_time(0.02)
+            #self._sharedmem_bw.set_autoflush_size(56*1024)            
+            self._sharedmem_br=self._sharedmem.get_buffer_reader()
+            self._sharedmem_br.set_timeout_function(self._sharedmem_read_timeout)
+            
+            self._screen_thread = CaptureProcessScreen(self)
+            self._screen_thread.start()
+            
+            self._debug_print("Ready to accept requests")            
             while not self._sharedmem.is_closed():
-                bts = self.read_token()
-                if bts==None:
+                srequest = self._sharedmem_br.get_str()
+                if srequest==None:
                     #self._debug_print("########## Richiesta: NONE")
                     break
-                srequest=bts.to_str('utf8')
-                self._debug_print("Richiesta: " + srequest)
-                ar = srequest.split(":")
-                try:
-                    if len(ar)==1 or len(ar)==2:
-                        if len(ar)==2:
-                            prms=ar[1].split(";")
-                        if ar[0]==u"TERMINATE":
-                            appid=int(prms[0]);
-                            if appid in listids:
-                                del listids[appid]
-                                self._get_osmodule().term(appid)
-                        elif ar[0]==u"DIFFERENCE":
-                            appid=int(prms[0]);
-                            tp=int(prms[1]);
-                            qa=int(prms[2]);
-                            monidx=int(prms[3]);
-                            if appid not in listids:
-                                self._get_osmodule().init(appid);
-                                listids[appid]={"monitor": monidx};
-                                self._get_osmodule().monitor(appid,monidx)
-                            elif listids[appid]["monitor"]!=monidx:
-                                self._get_osmodule().monitor(appid,monidx)
-                            
-                            self._get_osmodule().difference(appid,tp,qa,cb_difference)
-                            self.write_res_token("T", None)
-                        elif ar[0]==u"COPYTEXT":
-                            apps = self._copy_text(int(prms[0]))
-                            if apps is None:
-                                self.write_res_token("T", None)
-                            else:
-                                bts = utils.Bytes()
-                                bts.append_str(base64.b64encode(apps.encode("utf8")), "utf8")
-                                self.write_res_token("T", bts)
-                        elif ar[0]==u"PASTETEXT":
-                            self._paste_text(int(prms[0]),base64.b64decode(prms[1]).decode("utf8"))
-                        elif ar[0]==u"MOUSE":
-                            if libver==0:
-                                self._get_osmodule().inputMouse(int(prms[0]),int(prms[1]), int(prms[2]), int(prms[3]), int(prms[4]), prms[5]=="True", prms[6]=="True",prms[7]=="True")
-                            else:
-                                bcommand=False
-                                if len(prms)==9:
-                                    bcommand=(prms[8]=="True")
-                                self._get_osmodule().inputMouse(int(prms[0]),int(prms[1]), int(prms[2]), int(prms[3]), int(prms[4]), prms[5]=="True", prms[6]=="True",prms[7]=="True",bcommand)
-                        elif ar[0]==u"KEYBOARD":
-                            if libver==0:
-                                self._get_osmodule().inputKeyboard(int(prms[0]), str(prms[1]), str(prms[2]), prms[3]=="True", prms[4]=="True",prms[5]=="True")
-                            else:
-                                bcommand=False
-                                if len(prms)==7:
-                                    bcommand=(prms[6]=="True")
-                                self._get_osmodule().inputKeyboard(int(prms[0]), str(prms[1]), str(prms[2]), prms[3]=="True", prms[4]=="True",prms[5]=="True",bcommand)
-                        else:
-                            bts = utils.Bytes()
-                            bts.append_str(u"Request '" + srequest + u"' not found.", "utf8")
-                            self.write_res_token("E", bts)
-                    else:
-                        raise Exception(u"Request '" + srequest + u"' is not valid.")
-                except Exception as ex:
-                    self._debug_print(traceback.format_exc());
-                    bts = utils.Bytes()
-                    bts.append_str(unicode(ex), "utf8")
-                    self.write_res_token("E", bts )
+                self._on_request(srequest)
         except Exception as ex:
-            self._debug_print(traceback.format_exc());
-        
+            if not self.is_destroy():
+                self._debug_print(traceback.format_exc());
+        self._bdestroy=True
         if self._sharedmem is not None:
             self._sharedmem.close()
-        for appid in listids.keys():
-            self._get_osmodule().term(appid)
+        for appid in self._listids.keys():
+            apparid = self._listids[appid]
+            if "screenThread" in apparid:
+                apparid["screenThread"].destroy(True)                
+        #UNLOAD DLL
+        if self._screen_module is not None:
+            native.unload_libraries(self._screen_listlibs)
+            self._screen_module=None;
         self._debug_print("Term capture process.")
 
 

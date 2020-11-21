@@ -36,14 +36,17 @@ public:
 	void inputMouse(int id, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command);
 	wchar_t* copyText(int id);
 	void pasteText(int id,wchar_t* str);
+	void setBufferSendSize(int id, int sz);
 	ScreenCaptureNative getNative();
 
 
 private:
 	#define TYPE_FRAME_PALETTE_V1 0
 	#define TYPE_FRAME_TJPEG_V1 100
+	#define TYPE_FRAME_TJPEG_V2 101
 
 	#define TJPEG_SPLIT_SIZE 1*1024*1024
+	//#define TJPEG_SPLIT_SIZE 256*1024
 	#define BUFFER_DIFF_SIZE 56*1024
 	#define MOUSE_INTERVAL 50
 
@@ -85,6 +88,8 @@ private:
 		int monitor;
 		int quality;
 		int typeFrame;
+
+		int sendBufferSendSize;
 
 	} SESSION;
 

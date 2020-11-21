@@ -18,7 +18,7 @@ import math
 import utils
 from Queue import Queue
 
-BUFFER_SIZE_MAX = 32*1024
+BUFFER_SIZE_MAX = 65536-10
 BUFFER_SIZE_MIN = 1024
 
 
@@ -34,16 +34,6 @@ _proxy_detected = {}
 _proxy_detected["semaphore"]=threading.Condition()
 _proxy_detected["check"] = False
 _proxy_detected["info"] = None
-
-def calculate_buffer_size(bps,szmin=BUFFER_SIZE_MIN,szmax=BUFFER_SIZE_MAX):
-    buffsz=int(0.1*float(bps))
-    if buffsz<szmin:
-        buffsz=szmin
-    elif buffsz>szmax:
-        buffsz=szmax
-    else:
-        buffsz=int((float(buffsz)/512.0)*512.0)
-    return buffsz
 
 def is_windows():
     return utils.is_windows()
@@ -299,7 +289,7 @@ def set_cacerts_path(path):
 def _connect_socket(host, port, proxy_info):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        #sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         sock.settimeout(_SOCKET_TIMEOUT_READ)
         bprxdet=False
         prxi=proxy_info
@@ -355,7 +345,7 @@ def _connect_socket(host, port, proxy_info):
                     release_detected_proxy()
                     sock.close()
                     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                    #sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                     sock.settimeout(_SOCKET_TIMEOUT_READ)
                     sock.connect((host, port)) #PROVA A COLLEGARSI SENZA PROXY
                     _set_detected_proxy_none()
@@ -396,7 +386,7 @@ def _connect_socket(host, port, proxy_info):
                             release_detected_proxy()
                             sock.close()
                             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                            #sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                             sock.settimeout(_SOCKET_TIMEOUT_READ)
                             sock.connect((host, port)) #PROVA A COLLEGARSI SENZA PROXY
                             _set_detected_proxy_none()
@@ -678,40 +668,6 @@ class Response:
         return self._body
 
 
-class Counter:
-    
-    def __init__(self, ms=None):
-        self._semaphore = threading.Condition()
-        self._current_elapsed = 0
-        self._current_time = long(get_time() * 1000)
-        self._time_to_elapsed=ms
-
-    def reset(self):
-        self._current_elapsed = 0
-        self._current_time = long(get_time() * 1000)
-    
-    def is_elapsed(self, ms=None):
-        if ms is None:
-            ms=self._time_to_elapsed
-        return self.get_value()>=ms
-   
-    def get_value(self):
-        self._semaphore.acquire()
-        try:
-            apptm=long(get_time() * 1000)
-            elp=apptm-self._current_time
-            if elp>=0:
-                self._current_elapsed+=elp
-                self._current_time=apptm
-            else:
-                self._current_time=long(get_time() * 1000)
-            #print "self._current_elapsed(" + str(self) + "): " +  str(self._current_elapsed)
-            return self._current_elapsed
-        finally:
-            self._semaphore.release()
-    
-
-
 class Worker(threading.Thread):
     
     def __init__(self, parent,  queue, i):
@@ -805,6 +761,7 @@ class BandwidthCalculator:
         self._last_byte_transfered=0
         self._last_time=0
         self._bps=0
+        self._buffer_size=BUFFER_SIZE_MIN
         self._check_intervall=ckint
         self._calc_intervall=ccint
         self._calc_ar=[]
@@ -829,32 +786,45 @@ class BandwidthCalculator:
         self._semaphore.acquire()
         try:
             self._current_byte_transfered += c
+            self._calculate()
         finally:
             self._semaphore.release()
     
+    def _calculate(self):
+        tm=get_time() 
+        transfered=self._current_byte_transfered-self._last_byte_transfered
+        elapsed = (tm - self._last_time)
+        if elapsed<0:
+            elapsed=0
+            self._last_time=tm
+        if elapsed>self._check_intervall:
+            self._calc_ar.append({"elapsed":elapsed, "transfered":transfered})
+            self._calc_elapsed+=elapsed
+            self._calc_transfered+=transfered
+            while len(self._calc_ar)>1 and self._calc_elapsed>self._calc_intervall:
+                ar = self._calc_ar.pop(0)
+                self._calc_elapsed-=ar["elapsed"]
+                self._calc_transfered-=ar["transfered"]
+            self._bps=int(float(self._calc_transfered)*(1.0/self._calc_elapsed))
+            self._calculate_buffer_size()
+            self._last_time=tm
+            self._last_byte_transfered=self._current_byte_transfered        
+    
     def get_bps(self):
-        self._semaphore.acquire()
-        try:
-            tm=get_time() 
-            transfered=self._current_byte_transfered-self._last_byte_transfered
-            elapsed = (tm - self._last_time)
-            if elapsed<0:
-                elapsed=0
-                self._last_time=tm
-            if elapsed>self._check_intervall:
-                self._calc_ar.append({"elapsed":elapsed, "transfered":transfered})
-                self._calc_elapsed+=elapsed
-                self._calc_transfered+=transfered
-                while len(self._calc_ar)>1 and self._calc_elapsed>self._calc_intervall:
-                    ar = self._calc_ar.pop(0)
-                    self._calc_elapsed-=ar["elapsed"]
-                    self._calc_transfered-=ar["transfered"]
-                self._bps=int(float(self._calc_transfered)*(1.0/self._calc_elapsed))
-                self._last_time=tm
-                self._last_byte_transfered=self._current_byte_transfered
-            return self._bps
-        finally:
-            self._semaphore.release()
+        return self._bps
+    
+    def get_buffer_size(self):
+        return self._buffer_size
+    
+    def _calculate_buffer_size(self):
+        self._buffer_size=int(0.1*float(self._bps))
+        if self._buffer_size<BUFFER_SIZE_MIN:
+            self._buffer_size=BUFFER_SIZE_MIN
+        elif self._buffer_size>BUFFER_SIZE_MAX:
+            self._buffer_size=BUFFER_SIZE_MAX
+        else:
+            self._buffer_size=int((float(self._buffer_size)/512.0)*512.0)
+        
     
     def get_transfered(self):
         self._semaphore.acquire()
@@ -948,7 +918,7 @@ class ConnectionCheckAlive(threading.Thread):
         threading.Thread.__init__(self, name="ConnectionCheckAlive")
         self.daemon=True
         self._connection=conn
-        self._counter=Counter()
+        self._counter=utils.Counter()
         self._connection_keepalive_send=False
         self._semaphore = threading.Condition()
 
@@ -985,13 +955,13 @@ class ConnectionCheckAlive(threading.Thread):
                 #Verifica alive
                 if not self._connection_keepalive_send:                    
                     #print "Thread alive send counter: " + str(self._counter.get_value()) + " " + str(self._connection)                    
-                    if self._counter.is_elapsed((ConnectionCheckAlive._KEEPALIVE_INTERVALL-ConnectionCheckAlive._KEEPALIVE_THRESHOLD)*1000):
+                    if self._counter.is_elapsed((ConnectionCheckAlive._KEEPALIVE_INTERVALL-ConnectionCheckAlive._KEEPALIVE_THRESHOLD)):
                         self._connection_keepalive_send=True
                         self._send_keep_alive()
                         #print "Thread alive send: " + str(self._connection)
                         
                 else:
-                    if self._counter.is_elapsed((ConnectionCheckAlive._KEEPALIVE_INTERVALL+ConnectionCheckAlive._KEEPALIVE_THRESHOLD)*1000):
+                    if self._counter.is_elapsed((ConnectionCheckAlive._KEEPALIVE_INTERVALL+ConnectionCheckAlive._KEEPALIVE_THRESHOLD)):
                         bfireclose=not self._connection.is_close()
                         break                  
             finally:
@@ -1191,33 +1161,31 @@ class Connection:
     def _send_ws_data(self,data):
         self._semaphore_send.acquire()
         try:
-            bts = utils.Bytes()
             b0 = 0;
             b0 |= 1 << 7;
             b0 |= 0x2 % 128;
             length = len(data);
-            if length <= 125:
-                bts.append_byte(b0)
-                bts.append_byte(0x80 | length)
-            elif length <= 0xFFFF:
-                bts.append_byte(b0)
-                bts.append_byte(0xFE)
-                bts.append_byte(length >> 8 & 0xFF)
-                bts.append_byte(length & 0xFF)
-            else: 
-                bts.append_byte(b0)
-                bts.append_byte(0xFF)
-                bts.append_int(length)
-    
             rnd=0
-            bts.append_int(rnd)
-            bts.append_bytes(data)
+            if length <= 125:
+                data.insert_byte(0,b0)
+                data.insert_byte(1,0x80 | length)
+                data.insert_int(2,rnd)
+            elif length <= 0xFFFF:
+                data.insert_byte(0,b0)
+                data.insert_byte(1,0xFE)
+                data.insert_byte(2,length >> 8 & 0xFF)
+                data.insert_byte(3,length & 0xFF)
+                data.insert_int(4,rnd)
+            else: 
+                data.insert_byte(0,b0)
+                data.insert_byte(1,0xFF)
+                data.insert_int(2, length)
+                data.insert_int(3,rnd)
             if self._sock is None:
                 raise Exception('connection closed.')
-            utils.socket_sendall(self._sock,bts,0,len(bts))
+            utils.socket_sendall(self._sock,data)
         finally:
-            self._semaphore_send.release()
-        
+            self._semaphore_send.release()               
             
     def _send_ws_close(self):
         self._semaphore_send.acquire()
@@ -1232,9 +1200,9 @@ class Connection:
             bts.append_int(rnd)
             if self._sock is None:
                 raise Exception('connection closed.')
-            utils.socket_sendall(self._sock,bts,0,len(bts))
+            utils.socket_sendall(self._sock,bts)
         finally:
-            self._semaphore_send.release()
+            self._semaphore_send.release() 
     
     def _send_ws_ping(self):
         self._semaphore_send.acquire()
@@ -1249,10 +1217,9 @@ class Connection:
             bts.append_int(rnd)
             if self._sock is None:
                 raise Exception('connection closed.')
-            utils.socket_sendall(self._sock,bts,0,len(bts))
+            utils.socket_sendall(self._sock,bts)
         finally:
             self._semaphore_send.release()
-        
 
     def is_close(self):
         bret = True
@@ -1284,7 +1251,7 @@ class Connection:
     def close(self):
         bsendclose=False
         try:
-            self._semaphore_send.acquire()
+            self._semaphore.acquire()
             try:
                 if not self._close:
                     self._close=True
@@ -1294,14 +1261,14 @@ class Connection:
                     self._on_except = None
                     #print "session send stream close."
             finally:
-                self._semaphore_send.release()
+                self._semaphore.release()
             if bsendclose:
                 self._send_ws_close();
                 #Attende lo shutdown
-                cnt = Counter()
+                cnt = utils.Counter()
                 while not self.is_shutdown():
                     time.sleep(0.2)
-                    if cnt.is_elapsed(10000):
+                    if cnt.is_elapsed(10):
                         break
         except:
             None

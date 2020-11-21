@@ -25,6 +25,20 @@ _biswindows=(platform.system().lower().find("window") > -1)
 _bislinux=(platform.system().lower().find("linux") > -1)
 _bismac=(platform.system().lower().find("darwin") > -1)
 
+_struct_b=struct.Struct("!b")
+_struct_B=struct.Struct("!B")
+_struct_h=struct.Struct("!h")
+_struct_H=struct.Struct("!H")
+_struct_i=struct.Struct("!i")
+_struct_I=struct.Struct("!I")
+_struct_l=struct.Struct("!l")
+_struct_L=struct.Struct("!L")
+_struct_q=struct.Struct("!q")
+_struct_Q=struct.Struct("!Q")
+_struct_f=struct.Struct("!f")
+_struct_d=struct.Struct("!d")
+
+
 def is_windows():
     return _biswindows
 
@@ -223,8 +237,14 @@ def base64_decode(b):
 ##########
 # SOCKET #
 ##########
-def socket_sendall(sock, bts, p, ln):
-    sock.sendall(buffer(bts._pydata,p,ln))
+def socket_sendall(sock, bts):
+    count = 0
+    amount = len(bts._pydata)
+    v = sock.send(bts._pydata)
+    count += v
+    while (count < amount):
+        v = sock.send(bts.new_buffer(count,amount-count)._pydata)
+        count += v
 
 
 
@@ -242,14 +262,41 @@ def file_write(f,b):
 ########
 # MMAP #
 ########
-def mmap_write(mmap,bts,p,ln):
-    mmap.write(buffer(bts._pydata,p,ln))
+def mmap_write(mmap,i,bts,p,ln):
+    mmap.write(i,buffer(bts._pydata,p,ln))
 
-def mmap_read(mmap,sz):
-    return Bytes(buffer(mmap.read(sz)))
+def mmap_read(mmap,i,sz):
+    return Bytes(buffer(mmap.read(i,sz)))
 
 
 
+class Counter:
+    
+    def __init__(self, v=None):
+        #self._semaphore = threading.Condition()
+        self._current_elapsed = 0
+        self._current_time = get_time()
+        self._time_to_elapsed=v
+
+    def reset(self):
+        self._current_elapsed = 0
+        self._current_time = get_time()
+    
+    def is_elapsed(self, v=None):
+        if v is None:
+            v=self._time_to_elapsed
+        return self.get_value()>=v
+   
+    def get_value(self):
+        apptm=get_time()
+        elp=apptm-self._current_time
+        if elp>=0:
+            self._current_elapsed+=elp
+            self._current_time=apptm
+        else:
+            self._current_time=get_time()
+        #print "self._current_elapsed(" + str(self) + "): " +  str(self._current_elapsed)
+        return self._current_elapsed
 
 
 '''
@@ -271,48 +318,81 @@ class Bytes():
     
     def __init__(self, data=None):
         if data is not None:
-            self._pydata=bytearray(data)
+            if isinstance(data, bytearray):
+                self._pydata=data
+                self._pydata_isbuff=False
+            elif isinstance(data, buffer):
+                self._pydata=data
+                self._pydata_isbuff=True
+            else:
+                self._pydata=buffer(data)
+                self._pydata_isbuff=True
         else:
             self._pydata=bytearray()
+            self._pydata_isbuff=False
         
     def __len__(self):
         return len(self._pydata)
     
+    def _pydata_to_bytearray(self):
+        if self._pydata_isbuff is True:
+            self._pydata=bytearray(self._pydata)
+            self._pydata_isbuff=False
+    
     def insert_byte(self, p, b):
+        self._pydata_to_bytearray()
         self._pydata.insert(p, b)
+    
+    def insert_bytes(self, p, bts):
+        self._pydata_to_bytearray()
+        self._pydata[p:p] = bts._pydata
         
     def insert_int(self, p, i):
-        self._pydata[p:p] = struct.pack("!I",i)
+        self._pydata_to_bytearray()
+        self._pydata[p:p] = _struct_I.pack(i)    
+    
+    def insert_str(self, p, s, enc):
+        self._pydata_to_bytearray()
+        self._pydata[p:p] = bytearray(s,enc)
     
     def append_byte(self, b):
-        self._pydata+=struct.pack('!B', b)[0]
+        self._pydata_to_bytearray()
+        self._pydata+=_struct_B.pack(b)
     
     def append_bytes(self, bts):
+        self._pydata_to_bytearray()
         self._pydata+=bts._pydata
-        
+    
     def append_int(self, i):
-        self._pydata+=struct.pack("!I",i)
+        self._pydata_to_bytearray()
+        self._pydata+=_struct_I.pack(i)
         
-    def append_str(self, s, enc):
+    def append_str(self, s, enc="utf8"):
+        self._pydata_to_bytearray()
         self._pydata+=bytearray(s,enc)
     
     def to_str(self, enc="utf8"):
+        self._pydata_to_bytearray()
         return self._pydata.decode(enc)
     
     def encode_base64(self):
-        self._pydata=bytearray(base64.b64encode(buffer(self._pydata)))
+        self._pydata=buffer(base64.b64encode(buffer(self._pydata)))
+        self._pydata_isbuff=True
     
     def decode_base64(self):
-        self._pydata=bytearray(base64.b64decode(buffer(self._pydata)))
+        self._pydata=buffer(base64.b64decode(buffer(self._pydata)))
+        self._pydata_isbuff=True
     
     def compress_zlib(self):
-        self._pydata=bytearray(zlib.compress(buffer(self._pydata)))
+        self._pydata=buffer(zlib.compress(buffer(self._pydata)))
+        self._pydata_isbuff=True
     
     def decompress_zlib(self):
-        self._pydata=bytearray(zlib.decompress(buffer(self._pydata)))
+        self._pydata=buffer(zlib.decompress(buffer(self._pydata)))
+        self._pydata_isbuff=True
     
-    def get_int(self):
-        return struct.unpack('!i', self._pydata)[0]
+    def get_int(self, i):
+        return _struct_I.unpack(self._pydata)[i]
     
     def new_buffer(self,p=None,l=None):
         if p is None:
@@ -322,6 +402,7 @@ class Bytes():
         return Bytes(buffer(self._pydata,p,l))
 
     def __getitem__(self, i):
+        self._pydata_to_bytearray()
         return self._pydata[i]
                
     

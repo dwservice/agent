@@ -31,6 +31,7 @@ void inputKeyboard(int id, const char* type, const char* key, bool ctrl, bool al
 void setCallbackDebug(CallbackType callback);
 wchar_t* copyText(int id);
 void pasteText(int id, wchar_t* str);
+void setBufferSendSize(int id, int sz);
 
 #if defined OS_WINDOWS
 int startProcessAsUser(wchar_t* scmd, wchar_t* pythonHome);

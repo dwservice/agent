@@ -77,11 +77,13 @@ def get_library_config(name):
 
 def _load_libraries_with_deps(ar,name):
     cnflib=get_library_config(name)
-    if "lib_dependencies" in cnflib:
-        for ln in cnflib["lib_dependencies"]:
-            _load_libraries_with_deps(ar,ln)
-    fn = cnflib["filename_" + get_suffix()]
-    ar.insert(0,_load_lib_obj(fn))
+    if cnflib is not None:
+        if "lib_dependencies" in cnflib:
+            for ln in cnflib["lib_dependencies"]:
+                _load_libraries_with_deps(ar,ln)
+        if "filename_" + get_suffix() in cnflib:
+            fn = cnflib["filename_" + get_suffix()]
+            ar.insert(0,_load_lib_obj(fn))
 
 def load_libraries_with_deps(name):
     lstlibs=[]
@@ -277,6 +279,160 @@ class Linux():
     
     def reboot(self):
         os.system("reboot")
+        
+    def get_tty_active(self):
+        scons=None
+        try:
+            sactive=None
+            fn = "/sys/class/tty/console/active"
+            if os.path.exists(fn):
+                f = open(fn, "r")
+                try:
+                    s = f.read()    
+                    if s is not None and len(s)>0:
+                        s=s.strip("\n").strip("\r")
+                        appar = s.split(" ")
+                        for apps in appar:
+                            if apps[3:].isdigit():
+                                sactive = apps
+                                break
+                        
+                finally:
+                    f.close()
+            if sactive is not None:
+                fn = "/sys/class/tty/" + sactive+ "/active"
+                if os.path.exists(fn):
+                    f = open(fn , "r")
+                    try:
+                        s = f.read()    
+                        if s is not None and len(s)>0:
+                            s=s.strip("\n").strip("\r")
+                            scons = s.split(" ")[0]                        
+                    finally:
+                        f.close()
+                else:
+                    scons = None
+            if scons is None:
+                #Try fgconsole
+                data = subprocess.Popen(["fgconsole"], stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+                so, se = data.communicate()
+                if so is not None and len(so)>0:
+                    scons="tty"+so.replace("\n","").replace("\r","")
+                    if not os.path.exists("/sys/class/tty/" + scons):
+                        scons=None                    
+            if scons is None:
+                scons = sactive
+        except:
+            None
+        return scons
+    
+    def get_process_ids(self):
+        lret=[]
+        lst = os.listdir("/proc")
+        for name in lst:
+            if name.isdigit():
+                lret.append(int(name))
+        return lret
+    
+    def get_process_environ(self,pid):
+        eret = {} 
+        try:
+            fn = "/proc/" + str(pid) + "/" + "environ"
+            if os.path.exists(fn):
+                f = open(fn , "r")
+                try:
+                    s = f.read()    
+                    if s is not None and len(s)>0:
+                        arenv = s.split("\0")
+                        for apps in arenv:
+                            p = apps.index("=")
+                            if p>0:
+                                eret[apps[:p]]=apps[p+1:]                            
+                finally:
+                    f.close()
+        except:
+            None
+        return eret
+    
+    def get_process_stat(self,pid):
+        sret = {} 
+        try:
+            fn = "/proc/" + str(pid) + "/" + "stat"
+            if os.path.exists(fn):
+                f = open(fn , "r")
+                try:
+                    s = f.read()
+                    if s is not None and len(s)>0:
+                        rpar = s.rfind(b')')
+                        name = s[s.find(b'(') + 1:rpar]
+                        fields = s[rpar + 2:].split()            
+                        sret['name'] = name
+                        sret['status'] = fields[0]
+                        sret['ppid'] = int(fields[1])
+                        sret['pgrp'] = int(fields[2])
+                        sret['session'] = fields[3]
+                        sret['tty'] = int(fields[4])
+                        sret['tpgid'] = int(fields[5])             
+                finally:
+                    f.close()
+        except:
+            None
+        return sret
+
+    def get_process_uid(self,pid):
+        sret = -1
+        try:
+            fn = "/proc/" + str(pid) + "/" + "status"
+            if os.path.exists(fn):
+                f = open(fn , "r")
+                try:
+                    s = f.read()
+                    if s is not None and len(s)>0:
+                        import re
+                        reuids=re.compile(br'Uid:\t(\d+)\t(\d+)\t(\d+)')
+                        ur, ue, us = reuids.findall(s)[0]
+                        sret = int(ur)
+                finally:
+                    f.close()
+        except:
+            None
+        return sret
+    
+    def get_process_gid(self, pid):
+        sret = -1
+        try:
+            fn = "/proc/" + str(pid) + "/" + "status"
+            if os.path.exists(fn):
+                f = open(fn , "r")
+                try:
+                    s = f.read()
+                    if s is not None and len(s)>0:
+                        import re
+                        reuids=re.compile(br'Gid:\t(\d+)\t(\d+)\t(\d+)')
+                        gr, ge, gs = reuids.findall(s)[0]
+                        sret = gr
+                finally:
+                    f.close()
+        except:
+            None
+        return sret
+    
+    
+    def get_process_cmdline(self, pid):
+        lret = [] 
+        try:
+            fn = "/proc/" + str(pid) + "/" + "cmdline"
+            if os.path.exists(fn):
+                f = open(fn , "r")
+                try:
+                    s = f.read()
+                    if s is not None and len(s)>0:
+                        lret = s.split("\0")             
+                finally:
+                    f.close()
+        except:
+            None
+        return lret
 
 class Mac():
         

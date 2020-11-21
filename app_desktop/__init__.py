@@ -28,9 +28,9 @@ def fmain(args): #SERVE PER MACOS APP
         except:
             None
         
-    captureprocess = CaptureProcess(None)
+    captureprocess = CaptureProcess()
     if args[3]=="windows" and args[4]=="True":
-        captureprocess._get_osmodule().setAsElevated(1)
+        captureprocess._get_screen_module().setAsElevated(1)
     captureprocess.listen(args[1],args[2])
     captureprocess.destroy()    
     sys.exit(0)

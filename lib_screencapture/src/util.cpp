@@ -7,6 +7,8 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #include "util.h"
 #include <stdlib.h>
 
+
+
 int CURSOR_TYPE_ARROW_18_18=0;
 
 CURSOR_TYPE cursors[1];
@@ -112,12 +114,10 @@ void getCursorImage(int tp,int* w,int* h,int* offx,int* offy,unsigned char** rgb
 	*rgbdata = cursorData;
 }
 
-
 DistanceFrameMsCalculator::DistanceFrameMsCalculator(){
-	fastCounter.reset();
+	//fastCounter.reset();
 	distanceFrameMsCounter.reset();
 	distanceFrameMs=10;
-	distanceFrameMsFast=10;
 }
 
 DistanceFrameMsCalculator::~DistanceFrameMsCalculator() {
@@ -125,42 +125,29 @@ DistanceFrameMsCalculator::~DistanceFrameMsCalculator() {
 }
 
 int DistanceFrameMsCalculator::calculate(float fcpu){
-	int dFMs = 0;
-	if (distanceFrameMsCounter.getCounter()>=250){
+	//int dFMs = 0;
+	if (distanceFrameMsCounter.getCounter()>=1000){
 		distanceFrameMsCounter.reset();
-		if (fastCounter.getCounter() <= 1000) {
-			if (fcpu<0){
-				distanceFrameMsFast=400;
-			}else if (fcpu>CPU_MAX_FAST){
-				if (distanceFrameMs<400){
-					distanceFrameMsFast+=10;
-				}
-			}else if (distanceFrameMsFast>10){
-				distanceFrameMsFast-=10;
+		float max=CPU_MAX;
+		/*if (fastCounter.getCounter()<=1000) {
+			max=CPU_MAX_FAST;
+		}*/
+		if (fcpu<0){
+			distanceFrameMs=500;
+		}else if (fcpu>max){
+			if (distanceFrameMs<500){
+				distanceFrameMs+=10;
 			}
-			dFMs=distanceFrameMsFast;
-		}else{
-			if (fcpu<0){
-				distanceFrameMs=800;
-			}else if (fcpu>CPU_MAX){
-				if (distanceFrameMs<800){
-					distanceFrameMs+=10;
-				}
-			}else if (distanceFrameMs>10){
-				distanceFrameMs-=10;
-			}
-			dFMs=distanceFrameMs;
+		}else if (distanceFrameMs>10){
+			distanceFrameMs-=10;
 		}
-	}else{
-		if (fastCounter.getCounter() <= 1000) {
-			dFMs=distanceFrameMsFast;
-		}else{
-			dFMs=distanceFrameMs;
-		}
+		//dFMs=distanceFrameMs;
+	//}else{
+		//dFMs=distanceFrameMs;
 	}
-	return dFMs;
+	return distanceFrameMs;
 }
 
 void DistanceFrameMsCalculator::fast(){
-	fastCounter.reset();
+	//fastCounter.reset();
 }

@@ -138,22 +138,6 @@ private:
 	double percentCpu;
 	TimeCounter cpuCounter;
 
-	/*bool setXEnvirionment();
-	bool setXEnvirionmentCmd(char* cmd);
-	bool setXEnvirionmentProcess();*/
-
-	string envxauthority;
-	string envxwayland;
-	string envxdisplay;
-	long getActiveTTY();
-	long getProcessTTY(char* pid);
-	bool setXEnvirionment(long actty);
-	bool existsFile(std::string filename);
-	bool makeDirs(std::string path);
-	//void setXDPY(Display *app,Screen *appscreen);
-
-
-	void trimnl(char *s);
 	KeySym getKeySym(const char* key);
 	void mouseMove(int x,int y);
 	void mouseButton(int button,bool press);

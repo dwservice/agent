@@ -390,7 +390,7 @@ int sas(){
 
 
 int version(){
-	return 1;
+	return 2;
 }
 
 void freeMemory(void* pnt){
@@ -429,6 +429,10 @@ void pasteText(int id,wchar_t* str){
 	screenCapture.pasteText(id,str);
 }
 
+void setBufferSendSize(int id, int sz){
+	screenCapture.setBufferSendSize(id,sz);
+}
+
 void setCallbackDebug(CallbackType callback){
 	debugger.setCallback(callback);
 }
@@ -444,7 +448,6 @@ int consoleUserId(){
 	return uid;
 }
 #endif
-
 
 void callbackDifference(int sz, unsigned char* data){
 	//printf("LN:%d\n",sz);
