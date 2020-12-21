@@ -15,8 +15,6 @@ def get_supported(agt):
     arSupportedApplications.append("logwatch")
     arSupportedApplications.append("resource")
     arSupportedApplications.append("desktop")
-    #Shell
-    if agent.is_linux() or agent.is_mac():
-        arSupportedApplications.append("shell")
+    arSupportedApplications.append("shell")
     return arSupportedApplications
         
