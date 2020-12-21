@@ -1,7 +1,7 @@
 import time
 from threading import Thread
 from win32.native import *
-from  ctypes import *
+from ctypes import *
 
 class ConPty(Thread):
 
@@ -12,9 +12,9 @@ class ConPty(Thread):
         # Setup handles
         self._hPC = HPCON()                                     # handle to the pseudoconsole device
         self._ptyIn = wintypes.HANDLE(INVALID_HANDLE_VALUE)     # handle used to communicate with the pseudoconsole
-        self._ptyOut = wintypes.HANDLE(INVALID_HANDLE_VALUE)    # handle used to communicate with the pseudocnosole
-        self._cmdIn = wintypes.HANDLE(INVALID_HANDLE_VALUE)     #
-        self._cmdOut = wintypes.HANDLE(INVALID_HANDLE_VALUE)    #
+        self._ptyOut = wintypes.HANDLE(INVALID_HANDLE_VALUE)    # handle used to communicate with the pseudoconsole
+        self._cmdIn = wintypes.HANDLE(INVALID_HANDLE_VALUE)
+        self._cmdOut = wintypes.HANDLE(INVALID_HANDLE_VALUE)
         self._cmd = cmd
         self._cols = cols
         self._rows = rows
@@ -47,7 +47,7 @@ class ConPty(Thread):
         CloseHandle(self._ptyOut)       # Close the handles as they are now dup'ed into the ConHost
 
         if not hr == S_OK:
-            print('oops, something went wrong...create pseudoconsole failed')
+            print('failed to create pseudoconsole')
 
         # Initialize startup info
         self._startupInfoEx = STARTUPINFOEX()
