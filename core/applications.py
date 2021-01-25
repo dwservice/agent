@@ -7,6 +7,7 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
 import agent
+import platform
 
 def get_supported(agt):
     arSupportedApplications=[]
@@ -15,8 +16,7 @@ def get_supported(agt):
     arSupportedApplications.append("logwatch")
     arSupportedApplications.append("resource")
     arSupportedApplications.append("desktop")
-    #Shell
-    if agent.is_linux() or agent.is_mac():
+    if agent.is_linux() or agent.is_mac() or (agent.is_windows() and platform.release() == '10'):
         arSupportedApplications.append("shell")
     return arSupportedApplications
         
