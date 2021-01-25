@@ -238,7 +238,7 @@ class AsyncInvoke(threading.Thread):
             ret=self._func()  
         except SystemExit:
             self._main._action=None
-            gdi.add_scheduler(0.1, self._main.close)
+            self._main.close()
             return         
         except Exception as e:
             msg = e.__class__.__name__
@@ -321,10 +321,10 @@ class UI():
             self._logo = unicode(params["logo"])
         if "topimage" in params:
             self._topimage = unicode(params["topimage"])
-        elif "topinfo" in params:
+        if "topinfo" in params:
             self._topinfo = unicode(params["topinfo"])
         if "leftcolor" in params:
-            self._leftcolor=params["leftcolor"]
+            self._leftcolor = params["leftcolor"]
         self._step_init=step_init
         self._cur_step_ui=None
         self._wait_ui=None
@@ -442,7 +442,7 @@ class UI():
         if self._action is not None:
             self._action({"action":"CLOSE"})
         if self._gui_enable is True:
-            gdi.add_scheduler(0.1,self._app.destroy)
+            self._app.destroy()
                 
         
     def _clmode_next(self):
@@ -497,8 +497,7 @@ class UI():
     
     def _guimode_close(self, e):
         if self._cur_step_ui is None or (self._cur_step_ui.is_next_enabled() or self._cur_step_ui.is_back_enabled()) :
-            dlgerr = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_YESNO,gdi.DIALOGMESSAGE_LEVEL_INFO,self._app)
-            #dlgerr = DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_YESNO,gdi.DIALOGMESSAGE_LEVEL_INFO,self._app)
+            dlgerr = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_YESNO,gdi.DIALOGMESSAGE_LEVEL_INFO,parentwin=self._app, logopath=self._logo)
             dlgerr.set_title(self._title)
             dlgerr.set_message(messages.get_message('confirmExit'))
             dlgerr.set_action(self._guimode_close_action)
@@ -536,7 +535,7 @@ class UI():
                 
         self._top_height=0
         if self._topimage is not None:
-            self._top_height=gdi.getImageSize(self._topimage)["height"]
+            self._top_height=gdi.get_image_size(self._topimage)["height"]
         elif self._topinfo is not None:
             self._top_height=(22*len(self._topinfo.split("\n"))) + 10
         
@@ -618,12 +617,9 @@ class UI():
         self._cur_step_ui=None
         self._step_init_run=False
         
-        gdi.add_scheduler(0.1,self._guimode_step_init_start)
-        
-        #self._queue = Queue()
-        #gdi.add_scheduler(0.1, self._guimode_update)
-        
-        gdi.loop(self._app,True)
+        self._guimode_step_init_start()
+        self._app.show()
+        gdi.loop()
         
     
     def _guimode_execute(self, func, callback=None):
@@ -661,8 +657,7 @@ class UI():
             
     def _show_error(self,  msg):
         if self._gui_enable is True:
-            dlgerr = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_OK,gdi.DIALOGMESSAGE_LEVEL_ERROR,self._app)
-            #dlgerr = DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_OK,gdi.DIALOGMESSAGE_LEVEL_ERROR,self._app)
+            dlgerr = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_OK,gdi.DIALOGMESSAGE_LEVEL_ERROR,parentwin=self._app, logopath=self._logo)
             dlgerr.set_title(self._title)
             dlgerr.set_message(msg)
             dlgerr.set_action(self._show_error_gui_ok)

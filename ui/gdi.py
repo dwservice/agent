@@ -5,7 +5,6 @@ This Source Code Form is subject to the terms of the Mozilla
 Public License, v. 2.0. If a copy of the MPL was not distributed
 with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
-
 import ctypes
 import _ctypes
 import utils
@@ -17,6 +16,7 @@ import struct
 import messages
 import images
 import subprocess
+import json
 
 WINDOW_TYPE_NORMAL=0
 WINDOW_TYPE_NORMAL_NOT_RESIZABLE=1
@@ -24,7 +24,8 @@ WINDOW_TYPE_DIALOG=100
 WINDOW_TYPE_POPUP=200
 WINDOW_TYPE_TOOL=300
 
-WINDOW_POSITION_CENTER_SCREEN=0
+WINDOW_POSITION_XY=0
+WINDOW_POSITION_CENTER_SCREEN=1
 
 TEXT_ALIGN_LEFTMIDDLE=0
 TEXT_ALIGN_LEFTTOP=1
@@ -58,9 +59,18 @@ _STYLE_EDITOR_FOREGROUND_COLOR="000000"
 _STYLE_EDITOR_SELECTION_COLOR="c0c0c0"
 
 _gdimap={}
-_gdimap["root_window"]=None
+_gdimap["init"]=False
+_gdimap["lock"]=threading.Lock()
+_gdimap["cntwin"]=0
+_gdimap["cntnfi"]=0
+_gdimap["cntfnt"]=0
+_gdimap["cntimg"]=0
 _gdimap["windows"]={}
-_gdimap["thread"]=None
+_gdimap["notifyicon"]={}
+_gdimap["fontmanager"]=None
+_gdimap["imagemanager"]=None
+_gdimap["sheduler"]=None
+_gdimap["postaction"]=[]
 
 
 def is_windows():
@@ -77,6 +87,22 @@ def is_os_32bit():
 
 def is_os_64bit():
     return sys.maxsize > 2**32
+
+def _get_logo_from_conf(jocfg, pth):
+    if pth is None:
+        pth=""
+    ret=""
+    if not is_linux():
+        if "logo16x16" in jocfg:
+            ret+=pth + jocfg["logo16x16"]
+    else:
+        if "logo16x16" in jocfg:
+            ret+=pth + jocfg["logo16x16"]+"\n"
+        if "logo32x32" in jocfg:
+            ret+=pth + jocfg["logo32x32"]+"\n"
+        if "logo48x48" in jocfg:
+            ret+=pth + jocfg["logo48x48"]+"\n"
+    return ret
 
 def is_windows_user_in_admin_group():
     if is_windows():
@@ -104,54 +130,6 @@ def to_unicode(s):
         return s.decode("utf8")
     return s    
 
-#GESTIONE CALLBACK
-if is_windows() and not is_os_32bit():
-    #Gestito cosi in quanto i BOOL nel return dalla callback non funziona bene (SU WIN 32 BIT NON SI AVVIA) 
-    import ctypes.wintypes
-    CMPFUNCREPAINT = ctypes.WINFUNCTYPE(ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int)
-    CMPFUNCKEYBOARD = ctypes.WINFUNCTYPE(ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.wintypes.BOOL, ctypes.wintypes.BOOL, ctypes.wintypes.BOOL, ctypes.wintypes.BOOL)
-    CMPFUNCMOUSE = ctypes.WINFUNCTYPE(ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p, ctypes.c_int, ctypes.c_int, ctypes.c_int)
-    CMPFUNCWINDOW = ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL,ctypes.c_int, ctypes.c_wchar_p)
-    CMPFUNCTIMER = ctypes.WINFUNCTYPE(ctypes.c_void_p)
-else:
-    CMPFUNCREPAINT = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int)
-    CMPFUNCKEYBOARD = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_bool, ctypes.c_bool, ctypes.c_bool, ctypes.c_bool)
-    CMPFUNCMOUSE = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p, ctypes.c_int, ctypes.c_int, ctypes.c_int)
-    CMPFUNCWINDOW = ctypes.CFUNCTYPE(ctypes.c_bool,ctypes.c_int, ctypes.c_wchar_p)
-    CMPFUNCTIMER = ctypes.CFUNCTYPE(ctypes.c_void_p)
-
-@CMPFUNCREPAINT 
-def cb_func_repaint(wid,x,y,w,h):
-    if wid in _gdimap["windows"]:
-        #print("CALLBACK REPAINT: " + str(x) + " " + str(y) + " " + str(w) + " " + str(h))
-        _gdimap["windows"][wid].on_paint(x,y,w,h);
-       
-
-@CMPFUNCKEYBOARD 
-def cb_func_keyboard(wid,tp,c,shift,ctrl,alt,meta):
-    if wid in _gdimap["windows"]:
-        #print("CALLBACK KEYBOARD: " + tp + " " + c)
-        _gdimap["windows"][wid].on_keyboard(tp,c,shift,ctrl,alt,meta);
-
-@CMPFUNCMOUSE 
-def cb_func_mouse(wid,tp,x,y,b):
-    if wid in _gdimap["windows"]:
-        #print("CALLBACK MOUSE: " + tp + " " + str(x) + " " + str(y) + " " + str(b))
-        _gdimap["windows"][wid].on_mouse(tp,x,y,b);
-
-@CMPFUNCWINDOW 
-def cb_func_window(wid,tp):
-    if wid in _gdimap["windows"]:
-        #print("CALLBACK WINDOW: " + tp)
-        return _gdimap["windows"][wid].on_window(tp)
-    return True
-
-@CMPFUNCTIMER 
-def cb_func_timer():
-    #print("CALLBACK TIMER: " + str(time.time()))
-    _gdimap["scheduler"].execute()
-    
-
 def gdw_lib():
     if "gdwlib" in _gdimap:
         return _gdimap["gdwlib"]
@@ -177,13 +155,13 @@ def gdw_lib():
             elif is_os_64bit():
                 namelibinst="dwaggdi_x86_64.so"
         elif is_mac():
-            namelib="dwaggdi.so"
+            namelib="dwaggdi.dylib"
             pathlib="mac"
             #Installer Mode
             if is_os_32bit():
-                namelibinst="dwaggdi_x86_32.so"
+                namelibinst="dwaggdi_x86_32.dylib"
             elif is_os_64bit():
-                namelibinst="dwaggdi_x86_64.so"
+                namelibinst="dwaggdi_x86_64.dylib"
         if not utils.path_exists(".srcmode"):
             if utils.path_exists(namelibinst): #Installer Mode
                 gdwlib = ctypes.CDLL("." + utils.path_sep + namelibinst)
@@ -194,7 +172,7 @@ def gdw_lib():
         if gdwlib==None:
             raise Exception("Missing gdi library.")
         
-        gdwlib.getClipboardText.restype = ctypes.c_wchar_p
+        gdwlib.DWAGDIGetClipboardText.restype = ctypes.c_wchar_p
         _gdimap["gdwlib"]=gdwlib
         return gdwlib 
 
@@ -205,60 +183,152 @@ def getRGBColor(s):
 def getHexColor(r,g,b):
     return struct.pack('BBB',r,g,b).encode('hex')
 
-def getImageSize(fn):
-    sz_array = (ctypes.c_int * 2)()
-    gdw_lib().getImageSize(fn,sz_array)
-    return {"width":sz_array[0], "height":sz_array[1]}
+def _repaint(sid,x,y,w,h):
+    _gdimap["postaction"].append({"name":"REPAINT","id":sid,"x":x,"y":y,"width":w,"height":h})
 
-def _repaint_later(sid,x,y,w,h):
-    _init_scheduler()
-    return _gdimap["scheduler"].repaint_later(sid,x,y,w,h)
+def _show_window(sid):
+    _gdimap["postaction"].append({"name":"SHOW","id":sid})
 
-def _init_scheduler():
-    if not "scheduler" in _gdimap:
-        sched = Scheduler()
-        _gdimap["scheduler"]=sched;
-        
-def add_scheduler(w,func,*args, **kargs):
-    _init_scheduler()
-    return _gdimap["scheduler"].add(w,func,*args,**kargs)
+def _hide_window(sid):
+    _gdimap["postaction"].append({"name":"HIDE","id":sid})
     
-def delete_scheduler(itm):
-    _init_scheduler()
-    if itm is not None:
-        _gdimap["scheduler"].delete(itm)
+def _to_front_window(sid):
+    _gdimap["postaction"].append({"name":"TO_FRONT","id":sid})
+        
+def _init_window(sid,wnd):
+    _gdimap["windows"][sid]=wnd;
+    _gdimap["postaction"].append({"name":"INIT","id":sid})
+
+def _term_window(sid):    
+    _gdimap["postaction"].append({"name":"TERM","id":sid})
+
+def _set_title(sid, title):
+    _gdimap["postaction"].append({"name":"SET_TITLE","id":sid,"title":title})
+
+def _create_notify_icon(sid, nfi, iconpath, tooltip):
+    _gdimap["notifyicon"][sid]= nfi
+    _gdimap["postaction"].append({"name":"CREATE_NOTIFY_ICON","id":sid,"iconpath":iconpath,"tooltip":tooltip})
+
+def _update_notify_icon(sid, iconpath, tooltip):
+    _gdimap["postaction"].append({"name":"UPDATE_NOTIFY_ICON","id":sid,"iconpath":iconpath,"tooltip":tooltip})
+
+def _destroy_notify_icon(sid):
+    _gdimap["postaction"].append({"name":"DESTROY_NOTIFY_ICON","id":sid})
 
 
-def init_window(win):
-    if win._id is None:
-        logo=win._logo_path
-        if logo is None:
-            if is_windows():
-                logo=images.get_image(u"logo.ico")
-            elif is_linux():
-                logo=images.get_image(u"logo16x16.xpm") + u"\n" + images.get_image(u"logo32x32.xpm")
-        win._id=gdw_lib().newWindow(win._type,win._x,win._y,win._w,win._h,logo)
-        gdw_lib().setTitle(win._id,win._title)
-        _gdimap["windows"][win._id]=win;
-        if win._notifyicon_enable:
-            gdw_lib().createNotifyIcon(win._id,win._notifyicon_path,win._notifyicon_tooltip)
+CMPFUNCEVENTMESSAGE = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_wchar_p)
 
-def loop(rwin,show):
-    _init_scheduler()
-    gdwlib=gdw_lib();
-    _gdimap["root_window"]=rwin;
-    _gdimap["thread"]=threading.current_thread()
-    gdwlib.setCallbackRepaint(cb_func_repaint)
-    gdwlib.setCallbackKeyboard(cb_func_keyboard)
-    gdwlib.setCallbackMouse(cb_func_mouse)
-    gdwlib.setCallbackWindow(cb_func_window)
-    gdwlib.setCallbackTimer(cb_func_timer)
-    init_window(rwin)
-    if show:
-        rwin.show()
-    gdwlib.loop()
-    _gdimap["scheduler"].destroy()
-    del _gdimap["scheduler"]
+@CMPFUNCEVENTMESSAGE 
+def cb_func_event_message(smsg):
+    if _gdimap["init"]==False:
+        _gdimap["init"]=True
+        _gdimap["fontmanager"].load("default")
+        
+    gdwlib=gdw_lib()
+    #SCHEDULER
+    _gdimap["sheduler"].run()
+    
+    #POST ACTION
+    while len(_gdimap["postaction"])>0: 
+        jopa = _gdimap["postaction"].pop(0)
+        if "id" in jopa:
+            if jopa["name"]=="INIT":
+                wnd=_gdimap["windows"][jopa["id"]]
+                logo=wnd._logo_path
+                if logo is None:
+                    if is_linux():
+                        logo=images.get_image(u"logo16x16.bmp") + "\n" + images.get_image(u"logo32x32.bmp") + "\n" + images.get_image(u"logo48x48.bmp")                        
+                    else:
+                        logo=images.get_image(u"logo16x16.bmp")
+                if is_linux():
+                    if not "\n" in logo:
+                        logo+="\n"
+                sx=wnd._x
+                sy=wnd._y
+                if wnd._show_position==WINDOW_POSITION_CENTER_SCREEN:
+                    sz_array = (ctypes.c_int * 2)()
+                    gdwlib.DWAGDIGetScreenSize(sz_array)
+                    sx=(int)(sz_array[0]/2)-(wnd._w/2)
+                    sy=(int)(sz_array[1]/2)-(wnd._h/2)
+                gdwlib.DWAGDINewWindow(wnd._id, wnd._type,sx,sy,wnd._w,wnd._h,logo)
+                gdwlib.DWAGDISetTitle(wnd._id,wnd._title)
+            elif jopa["name"]=="TERM":
+                gdwlib.DWAGDIDestroyWindow(jopa["id"])
+                del _gdimap["windows"][jopa["id"]]
+                if len(_gdimap["windows"])==0:
+                    gdwlib.DWAGDIEndLoop()
+                    return
+            elif jopa["name"]=="SET_TITLE":
+                gdwlib.DWAGDISetTitle(jopa["id"],jopa["title"])
+            elif jopa["name"]=="REPAINT":
+                gdwlib.DWAGDIRepaint(jopa["id"],jopa["x"],jopa["y"],jopa["width"],jopa["height"]);
+            elif jopa["name"]=="SHOW":
+                gdwlib.DWAGDIShow(jopa["id"],0)
+                gdwlib.DWAGDIToFront(jopa["id"])
+                wnd=_gdimap["windows"][jopa["id"]]
+                wnd.on_show() 
+            elif jopa["name"]=="HIDE":
+                gdwlib.DWAGDIHide(jopa["id"])
+                wnd=_gdimap["windows"][jopa["id"]]
+                wnd.on_hide()
+            elif jopa["name"]=="TO_FRONT":
+                gdwlib.DWAGDIToFront(jopa["id"])
+            elif jopa["name"]=="CREATE_NOTIFY_ICON":
+                gdwlib.DWAGDICreateNotifyIcon(jopa["id"],jopa["iconpath"],jopa["tooltip"])
+            elif jopa["name"]=="UPDATE_NOTIFY_ICON":
+                gdwlib.DWAGDIUpdateNotifyIcon(jopa["id"],jopa["iconpath"],jopa["tooltip"])
+            elif jopa["name"]=="DESTROY_NOTIFY_ICON":
+                gdwlib.DWAGDIDestroyNotifyIcon(jopa["id"])
+                del _gdimap["notifyicon"][jopa["id"]]
+    #EVENTS
+    if smsg is not None:
+        wnd = None
+        #print smsg
+        jo = json.loads(smsg)
+        if jo is not None:
+            if jo["name"]=="REPAINT":
+                if jo["id"] in _gdimap["windows"]:
+                    wnd=_gdimap["windows"][jo["id"]]
+                    #print "REPAINT: " + str(jo["x"])+ " " + str(jo["y"]) + " " + str(jo["width"]) + " " + str(jo["height"])                
+                    wnd.on_paint(jo["x"],jo["y"],jo["width"],jo["height"]);                
+            elif jo["name"]=="MOUSE":
+                if jo["id"] in _gdimap["windows"]:
+                    wnd=_gdimap["windows"][jo["id"]]
+                    wnd.on_mouse(jo["action"],jo["x"],jo["y"],jo["button"]);
+            elif jo["name"]=="KEYBOARD":
+                if jo["id"] in _gdimap["windows"]:
+                    wnd=_gdimap["windows"][jo["id"]]
+                    wnd.on_keyboard(jo["type"],jo["value"],jo["shift"],jo["ctrl"],jo["alt"],jo["command"]);
+            elif jo["name"]=="WINDOW":
+                if jo["id"] in _gdimap["windows"]:
+                    wnd=_gdimap["windows"][jo["id"]]
+                    bret = wnd.on_window(jo["action"]);
+                    if jo["action"]=="ONCLOSE":
+                        if bret==True:
+                            wnd.destroy() 
+            elif jo["name"]=="NOTIFY":
+                if jo["id"] in _gdimap["notifyicon"]:
+                    nfi=_gdimap["notifyicon"][jo["id"]]
+                    bret = nfi.on_action(jo["action"]);
+    #else:
+    #    print ("ON TICK: " + str(time.time()))
+    
+    
+
+def loop():
+    gdwlib=gdw_lib()
+    _gdimap["fontmanager"]=FontManager()
+    _gdimap["imagemanager"]=ImageManager()
+    if _gdimap["sheduler"] is None:
+        _gdimap["sheduler"]=Sheduler()
+    gdwlib.DWAGDILoop(cb_func_event_message)
+    _gdimap["sheduler"].destroy()
+    _gdimap["imagemanager"].destroy()
+    _gdimap["fontmanager"].destroy()
+    _gdimap["sheduler"]=None
+    _gdimap["imagemanager"]=None
+    _gdimap["fontmanager"]=None
+    _gdimap["init"]=False    
     if is_windows():
         _ctypes.FreeLibrary(gdwlib._handle)
     else:
@@ -266,108 +336,99 @@ def loop(rwin,show):
     del gdwlib    
 
 
-def get_time():
-    if is_windows():
-        return time.clock()
-    else:
-        return time.time()
+def add_scheduler(tm, func):
+    if _gdimap["sheduler"] is None:
+        _gdimap["sheduler"]=Sheduler()
+    _gdimap["sheduler"].add(tm, func)
 
-
-class Scheduler():
-    
+class Sheduler:
     def __init__(self):
-        self._semaphore = threading.Condition()
-        self.daemon=True
-        self._destroy=False
         self._list=[]
-        self._repaint_list=[]
+        
+    def add(self, tm, func):
+        itm = {"intervall": tm, "time": time.time(), "func": func}
+        self._list.append(itm)
+        return itm 
     
-    def execute(self):
-        to_exec=[]
-        self._semaphore.acquire()
-        try:
-            new_list=[]
-            for itm in self._list:
-                cur_time=long(get_time() * 1000)
-                elapsed = (cur_time - itm["time"])
-                if elapsed>itm["wait"]:
-                    to_exec.append(itm)
-                else:
-                    if elapsed<0:
-                        itm["time"]=cur_time
-                    new_list.append(itm)
-            
-            self._list=new_list;
-        finally:
-            self._semaphore.release() 
-        #EXECUTE
-        for itm in to_exec:
-            itm["func"](*itm["args"],**itm["kargs"])
-        #REPAINT
-        self._semaphore.acquire()
-        try:
-            for itm in self._repaint_list:
-                gdw_lib().repaint(itm["id"],itm["x"],itm["y"],itm["w"],itm["h"])
-            self._repaint_list=[]
-        finally:
-            self._semaphore.release()
-    
-    def add(self,wt,func,*args, **kargs):
-        itm=None
-        self._semaphore.acquire()
-        try:
-            if self._destroy:
-                return
-            itm={"time": long(get_time() * 1000),"wait":wt*1000, "func":func, "args":args ,"kargs":kargs}
-            self._list.append(itm)
-        finally:
-            self._semaphore.release()
-        return itm    
-    
-    def delete(self,itm):
-        self._semaphore.acquire()
-        try:
-            if self._destroy:
-                return
-            if itm in self._list: 
-                self._list.remove(itm)
-        finally:
-            self._semaphore.release()
-    
-    def repaint_later(self,sid,x,y,w,h):
-        self._semaphore.acquire()
-        try:
-            if self._destroy:
-                return
-            #Verifica se è già presente un repaint che lo contiene
-            badd=True
-            for itm in self._repaint_list:
-                if sid==itm["id"]:
-                    if x>=itm["x"] and y>=itm["y"] and x+w<=itm["x"]+itm["w"] and y+h<=itm["y"]+itm["h"]:
-                        badd=False
-                        break
-            if badd:
-                #Elimina i rettangoli contenuti
-                newlist=[]
-                for itm in self._repaint_list:
-                    if sid==itm["id"]:
-                        if not (itm["x"]>=x and itm["y"]>=y and itm["x"]+itm["w"]<=x+w and itm["y"]+itm["h"]<=y+h):
-                            newlist.append(itm)
-                    else:
-                        newlist.append(itm)
-                newlist.append({"id":sid,"x":x,"y":y,"w":w,"h":h})
-                self._repaint_list=newlist;
-        finally:
-            self._semaphore.release()
+    def cancel(self, itm):
+        self._list.remove(itm)
+         
     
     def destroy(self):
-        self._semaphore.acquire()
-        try:
-            self._destroy=True
-            self._repaint_list=[]
-        finally:
-            self._semaphore.release()
-       
+        self._list=[]
+    
+    def run(self):
+        if len(self._list)>0:
+            ar = self._list[:]
+            for itm in ar:
+                elps = time.time()-itm["time"]
+                if elps<0:
+                    itm["time"]=time.time()
+                elif elps>itm["intervall"]:
+                    self._list.remove(itm)
+                    itm["func"]()
+                    
+            
+            
+class FontManager:
+    
+    def __init__(self):
+        self._list={}
+    
+    def load(self, name):
+        if name not in self._list:
+            i = 0
+            with _gdimap["lock"]:
+                _gdimap["cntfnt"]+=1
+                i=_gdimap["cntfnt"]
+            gdw_lib().DWAGDILoadFont(i,name)
+            self._list[name]=i
+    
+    def unload(self, name):
+        if name in self._list:
+            gdw_lib().DWAGDIUnloadFont(self._list[name])
+            del self._list[name]
+    
+    def destroy(self):
+        for name in self._list:
+            gdw_lib().DWAGDIUnloadFont(self._list[name])
+        self._list={}
+    
+    def get_id(self, name):
+        return self._list[name]
+
+
+def get_image_size(name):
+    sz_array = (ctypes.c_int * 2)()
+    gdw_lib().DWAGDIGetImageSize(name,sz_array)
+    return {"width":sz_array[0], "height":sz_array[1]} 
+
+class ImageManager:
+    
+    def __init__(self):
+        self._list={}
+    
+    def load(self, name):
+        with _gdimap["lock"]:
+            _gdimap["cntimg"]+=1
+            i=_gdimap["cntimg"]
+        sz_array = (ctypes.c_int * 2)()
+        gdw_lib().DWAGDILoadImage(i,name,sz_array)
+        itm={"id" : i, "name" : name, "width":sz_array[0], "height":sz_array[1]}
+        self._list["K" + str(i)]=itm 
+        return itm
+    
+    def unload(self, itm):
+        sid = "K" + str(itm[id]);
+        if sid in self._list:
+            gdw_lib().DWAGDIUnloadImage(self._list[sid]["id"])
+            del self._list[sid]
+    
+    def destroy(self):
+        for sid in self._list:
+            gdw_lib().DWAGDIUnloadImage(self._list[sid]["id"])
+        self._list={}
+    
 
 class Paint:
     def __init__(self,win,offx,offy,clipx,clipy,clipw,cliph):
@@ -378,38 +439,36 @@ class Paint:
         self._clipy=clipy;
         self._clipw=clipw;
         self._cliph=cliph;
+        self._fontid=_gdimap["fontmanager"].get_id("default")
     
     def pen_color(self, col):
         rgb=getRGBColor(col.upper());
-        gdw_lib().penColor(self._window._id,rgb[0],rgb[1],rgb[2])
+        gdw_lib().DWAGDIPenColor(self._window._id,rgb[0],rgb[1],rgb[2])
 
     def fill_rectangle(self,x,y,w,h):
-        gdw_lib().fillRectangle(self._window._id,self._offx+x,self._offy+y,w,h)
+        gdw_lib().DWAGDIFillRectangle(self._window._id,self._offx+x,self._offy+y,w,h)
         
     def fill_ellipse(self,x,y,w,h):
-        gdw_lib().fillEllipse(self._window._id,self._offx+x,self._offy+y,w,h)
+        gdw_lib().DWAGDIFillEllipse(self._window._id,self._offx+x,self._offy+y,w,h)
 
-    def draw_image_fromfile(self,fn,x,y,w,h):
-        gdw_lib().drawImageFromFile(self._window._id,fn,self._offx+x,self._offy+y,w,h)                  
+    def draw_image(self,imgitm,x,y):
+        gdw_lib().DWAGDIDrawImage(self._window._id,imgitm["id"],self._offx+x,self._offy+y)                  
         
     def draw_ellipse(self,x,y,w,h):
-        gdw_lib().drawEllipse(self._window._id,self._offx+x,self._offy+y,w,h)
+        gdw_lib().DWAGDIDrawEllipse(self._window._id,self._offx+x,self._offy+y,w,h)
         
     def draw_line(self,x1,y1,x2,y2):
-        gdw_lib().drawLine(self._window._id,self._offx+x1,self._offy+y1,self._offx+x2,self._offy+y2)
+        gdw_lib().DWAGDIDrawLine(self._window._id,self._offx+x1,self._offy+y1,self._offx+x2,self._offy+y2)
     
     def get_text_height(self):
-        return gdw_lib().getTextHeight(self._window._id);
+        return gdw_lib().DWAGDIGetTextHeight(self._window._id,self._fontid);
     
     def get_text_width(self,s):
-        return gdw_lib().getTextWidth(self._window._id,s);
+        return gdw_lib().DWAGDIGetTextWidth(self._window._id,self._fontid,s);
     
-    def get_image_size(self,fn):
-        return getImageSize(fn)
-            
     def draw_text(self,s,x,y):
-        gdw_lib().drawText(self._window._id,s,self._offx+x,self._offy+y);
-        
+        gdw_lib().DWAGDIDrawText(self._window._id,self._fontid,s,self._offx+x,self._offy+y);
+    
     def clip_rectangle(self,x,y,w,h):
         appx=self._offx+x
         appy=self._offy+y
@@ -421,18 +480,64 @@ class Paint:
             w=(self._clipx+self._clipw)-appx
         if appy+h>self._clipy+self._cliph:
             h=(self._clipy+self._cliph)-appy
-        gdw_lib().clipRectangle(self._window._id,appx,appy,w,h)
+        gdw_lib().DWAGDIClipRectangle(self._window._id,appx,appy,w,h)
     
     def clear_clip_rectangle(self):
-        gdw_lib().clipRectangle(self._window._id,self._clipx,self._clipy,self._clipw,self._cliph)
+        gdw_lib().DWAGDIClipRectangle(self._window._id,self._clipx,self._clipy,self._clipw,self._cliph)
+    
+
+class NotifyIcon:
+    def __init__(self,imgpath,tooltip):
+        with _gdimap["lock"]:
+            _gdimap["cntnfi"]+=1
+            self._id=_gdimap["cntnfi"]
+        self._imgpath=imgpath
+        self._tooltip=tooltip
+        self._action=None
+        self._object={}
+        _create_notify_icon(self._id,self,imgpath,tooltip)
+        
+    def update(self,imgpath,tooltip):
+        self._imgpath=imgpath
+        self._tooltip=tooltip
+        _update_notify_icon(self._id,imgpath,tooltip)
+    
+    def _fire_action(self,e):
+        if self._action is not None:
+            e["source"]=self
+            self._action(e)
+    
+    def set_action(self,f):
+        self._action=f
+        
+    def get_action(self):
+        return self._action
+    
+    def set_object(self,k,v):
+        self._object[k]=v
+        
+    def get_object(self,k):
+        return self._object[k] 
+    
+    def on_action(self, tp):
+        if tp=="ACTIVATE":
+            self._fire_action({"action":"ACTIVATE"})
+        elif tp=="CONTEXTMENU":
+            self._fire_action({"action":"CONTEXTMENU"})
+        
+    def destroy(self):
+        _destroy_notify_icon(self._id)
     
 
 class Window:
     def __init__(self,tp=WINDOW_TYPE_NORMAL_NOT_RESIZABLE,parentwin=None,logopath=None):
-        self._id=None;
+        with _gdimap["lock"]:
+            _gdimap["cntwin"]+=1
+            self._id=_gdimap["cntwin"]
         self._type=tp
         self._top_windows=[]
         self._title="";
+        self._show_position=WINDOW_POSITION_XY
         self._x=0;
         self._y=0;
         self._w=300;
@@ -448,15 +553,14 @@ class Window:
         self._focus_sequence_index=None
         self._focus_sequence=[]
         self._mouse_enter_component=None
-        self._notifyicon_enable=False
-        self._notifyicon_path=None
-        self._notifyicon_tooltip=None
         self._action=None
+        self._object={}
         self._parent_window=parentwin
         if self._parent_window is not None:
             self._parent_window._top_windows.append(self)
-            self.set_title(parentwin.get_title())
-    
+            self._title=parentwin.get_title()
+        _init_window(self._id,self)
+        
     
     def _fire_action(self,e):
         if self._action is not None:
@@ -468,6 +572,12 @@ class Window:
         
     def get_action(self):
         return self._action
+    
+    def set_object(self,k,v):
+        self._object[k]=v
+        
+    def get_object(self,k):
+        return self._object[k]
     
     def get_x(self):
         return self._x;
@@ -498,16 +608,13 @@ class Window:
     
     def set_title(self,t):
         self._title=to_unicode(t)
+        _set_title(self._id,self._title)
     
     def get_title(self):
         return self._title
 
     def set_show_position(self,p):
-        if p==WINDOW_POSITION_CENTER_SCREEN:
-            sz_array = (ctypes.c_int * 2)()
-            gdw_lib().getScreenSize(sz_array)
-            self._x=(int)(sz_array[0]/2)-(self._w/2)
-            self._y=(int)(sz_array[1]/2)-(self._h/2)
+        self._show_position=p
 
     def set_position(self,x,y):
         self._x=x;
@@ -549,7 +656,7 @@ class Window:
                 self._focus_sequence.remove(c)
                 if bchangefocus:
                     self.next_focus_component()
-                _repaint_later(self._id,c._x,c._y,c._w,c._h)
+                _repaint(self._id,c._x,c._y,c._w,c._h)
                 break
     
     def get_all_components(self):
@@ -557,7 +664,7 @@ class Window:
     
     def repaint(self):
         if self._id is not None:
-            _repaint_later(self._id,self._x,self._y,self._w,self._h)
+            _repaint(self._id,self._x,self._y,self._w,self._h)
     
     def destroy(self):
         if self._id is not None:
@@ -566,47 +673,11 @@ class Window:
                 self._parent_window._top_windows.remove(self)
             for w in self._top_windows:
                 w.hide();
-            gdw_lib().destroyWindow(self._id)
-            del _gdimap["windows"][self._id]
+            _term_window(self._id)
             if self._parent_window is not None and self._parent_window._id is not None:
                 if self._parent_window.is_show():
                     self._parent_window.to_front()
     
-    def show_notifyicon(self,path,tooltip):
-        if not self._notifyicon_enable:
-            self._notifyicon_enable=True
-            self._notifyicon_path=path
-            self._notifyicon_tooltip=tooltip
-            if self._id is not None:
-                gdw_lib().createNotifyIcon(self._id,self._notifyicon_path,self._notifyicon_tooltip)
-    
-    def hide_notifyicon(self):
-        if self._notifyicon_enable:
-            self._notifyicon_enable=False
-            if self._id is not None:
-                gdw_lib().destroyNotifyIcon(self._id)
-    
-    def update_notifyicon(self,path,tooltip):
-        self._notifyicon_path=path
-        self._notifyicon_tooltip=tooltip
-        if self._id is not None:
-            gdw_lib().updateNotifyIcon(self._id,self._notifyicon_path,self._notifyicon_tooltip)
-    
-    def _show_later(self):
-        init_window(self)
-        gdw_lib().show(self._id,0)
-        gdw_lib().toFront(self._id)
-        self.on_show()
-    
-    def _hide_later(self):
-        init_window(self)
-        self.on_hide()
-        gdw_lib().hide(self._id)
-    
-    def _to_front_later(self):
-        init_window(self)
-        gdw_lib().toFront(self._id)
-        
     def is_show(self):
         return self._show
     
@@ -615,24 +686,15 @@ class Window:
             self._show=True
             if self._parent_window is not None:
                 self._parent_window._disable=True
-            if _gdimap["thread"]==threading.current_thread():
-                self._show_later()
-            else:
-                add_scheduler(0,self._show_later) #CREA LA FINESTRA NEL THREAD GRAFICO
+            _show_window(self._id)            
     
     def hide(self):
         if self._show:
             self._show=False
-            if _gdimap["thread"]==threading.current_thread():
-                self._hide_later()
-            else:
-                add_scheduler(0,self._hide_later) 
+            _hide_window(self._id)            
     
-    def to_front(self):
-        if _gdimap["thread"]==threading.current_thread():
-            self._to_front_later()
-        else:
-            add_scheduler(0,self._to_front_later)
+    def to_front(self):        
+        _to_front_window(self._id)
         
     def on_show(self):
         self._set_activate()
@@ -649,7 +711,7 @@ class Window:
         if self._activate:
             self._activate=False    
             self._focus_sequence_index_lost=self._focus_sequence_index
-            self._set_focus_component_byindex(None,{"mode":"KEYBOARD"})
+            self._set_focus_component_byindex(None,{"mode":"WINDOW"})
             self._set_mouse_enter_component(None, "", 0, 0, False)
     
     def _set_focus_component(self,c,e):
@@ -663,17 +725,16 @@ class Window:
         self._focus_sequence_index=idx
         if oldc is not None:
             oldc.on_focus_lost(e)
-            oldc.repaint()
         if self._focus_sequence_index is not None:
             if self._activate:
                 self.get_focus_component().on_focus_get(e)
-                self.get_focus_component().repaint()
             else:
                 self._focus_sequence_index_lost=self._focus_sequence_index
             
     def next_focus_component(self):
         if self._focus_sequence_index_lost is not None:
-            self._set_focus_component_byindex(self._focus_sequence_index_lost,{"mode":"KEYBOARD"})
+            self._focus_sequence_index=None            
+            self._set_focus_component_byindex(self._focus_sequence_index_lost,{"mode":"WINDOW"})
             self._focus_sequence_index_lost=None
             return
         if self._focus_sequence_index is None:
@@ -682,7 +743,8 @@ class Window:
                     if c.is_focusable() and c.is_enable():
                         self._set_focus_component(c,{"mode":"KEYBOARD"})
                         break 
-        else:
+        else:            
+            #print ("focus NEXT len: " + str(len(self._focus_sequence)) + "  idx: " + str(self._focus_sequence_index))            
             i=self._focus_sequence_index+1;
             while i!=self._focus_sequence_index:
                 if i>(len(self._focus_sequence)-1):
@@ -693,7 +755,7 @@ class Window:
                     break
                 i+=1
 
-    def previous_focus_component(self):
+    def previous_focus_component(self):        
         if self._focus_sequence_index is None:
             if len(self._components)>0:
                 for c in reversed(self._focus_sequence):
@@ -701,6 +763,7 @@ class Window:
                         self._set_focus_component(c,{"mode":"KEYBOARD"})
                         break 
         else:
+            #print ("focus PREV len: " + str(len(self._focus_sequence)) + "  idx: " + str(self._focus_sequence_index))            
             i=self._focus_sequence_index-1;
             while i!=self._focus_sequence_index:
                 if i<0:
@@ -729,8 +792,8 @@ class Window:
     def on_paint(self,x,y,w,h):
         if self._id is not None:
             rgb=getRGBColor(self._background);
-            gdw_lib().penColor(self._id,rgb[0],rgb[1],rgb[2])
-            gdw_lib().fillRectangle(self._id,x,y,w,h)
+            gdw_lib().DWAGDIPenColor(self._id,rgb[0],rgb[1],rgb[2])
+            gdw_lib().DWAGDIFillRectangle(self._id,x,y,w,h)
             #print str("*******************************")
             for c in self._components:
                 self._on_paint_component(c,x,y,w,h,0,0)
@@ -754,10 +817,10 @@ class Window:
             if cliph>(y+h)-clipy:
                 cliph=(y+h)-clipy
             
-            gdw_lib().clipRectangle(self._id,clipx,clipy,clipw,cliph)
+            gdw_lib().DWAGDIClipRectangle(self._id,clipx,clipy,clipw,cliph)
             pobj=Paint(self,c._x+offx,c._y+offy,clipx,clipy,clipw,cliph)
             c.on_paint(pobj) #DA FARE GESTIRE INTERSEZIONE DARE CORDINATE CORRETTE
-            gdw_lib().clearClipRectangle(self._id)
+            gdw_lib().DWAGDIClearClipRectangle(self._id)
             #print str(c) + " " + str(c._x+offx) + " " + str(c._y+offy) + " CLIP:" + str(clipx) + " " + str(clipy) + " " + str(clipw) + " " + str(cliph)            
         
     def _on_paint_container(self,cnt,x,y,w,h,offx,offy):
@@ -831,13 +894,9 @@ class Window:
                     w.to_front()
         elif tp=="INACTIVE":
             self._set_inactivate()
-        elif tp=="NOTIFYICON_ACTIVATE":
-            self._fire_action({"action":"NOTIFYICON_ACTIVATE"})
-        elif tp=="NOTIFYICON_CONTEXTMENU":
-            self._fire_action({"action":"NOTIFYICON_CONTEXTMENU"})
         elif tp=="ONCLOSE":
             if not self._disable:
-                e={"action":"ONCLOSE"};
+                e={"window":self, "action":"ONCLOSE"};                
                 self._fire_action(e)
                 if "cancel" in e and e["cancel"] == True:
                     return False
@@ -847,14 +906,14 @@ class Window:
  
 class DialogMessage(Window):
     
-    def __init__(self,act,lv,parentwin=None):
+    def __init__(self,act,lv,parentwin=None,logopath=None):
         if parentwin is None:
-            Window.__init__(self,WINDOW_TYPE_DIALOG,parentwin)
+            Window.__init__(self,WINDOW_TYPE_DIALOG,parentwin=parentwin,logopath=logopath)
         else:
             if parentwin.is_show():
-                Window.__init__(self,WINDOW_TYPE_TOOL,parentwin)
+                Window.__init__(self,WINDOW_TYPE_TOOL,parentwin=parentwin,logopath=logopath)
             else:
-                Window.__init__(self,WINDOW_TYPE_DIALOG,parentwin)
+                Window.__init__(self,WINDOW_TYPE_DIALOG,parentwin=parentwin,logopath=logopath)
         self._actions=act
         self._level=lv
         self._message=u""
@@ -947,7 +1006,8 @@ class PopupMenu(Window):
         Window.__init__(self,WINDOW_TYPE_POPUP)
         self._w=110;
         self._h=30;
-        self._show_position=POPUP_POSITION_BOTTONRIGHT
+        self._show_position=[POPUP_POSITION_BOTTONRIGHT, POPUP_POSITION_BOTTONLEFT, POPUP_POSITION_TOPRIGHT, POPUP_POSITION_TOPLEFT]
+        #self._show_position=[POPUP_POSITION_TOPRIGHT]
         self._action=None
         self._list=[]        
     
@@ -970,31 +1030,41 @@ class PopupMenu(Window):
         return self._action
     
     def show(self):
-        self._h=len(self._list)*30+4
-        
+        self._h=len(self._list)*30+4        
+        pos_array = (ctypes.c_int * 2)()
+        gdw_lib().DWAGDIGetMousePosition(pos_array)
         sz_array = (ctypes.c_int * 2)()
-        gdw_lib().getMousePosition(sz_array)
-        
-        if self._show_position==POPUP_POSITION_TOPLEFT:
-            self._x=(int)(sz_array[0])-self._w
-            self._y=(int)(sz_array[1])-self._h
-        elif self._show_position==POPUP_POSITION_TOPRIGHT:
-            self._x=(int)(sz_array[0])
-            self._y=(int)(sz_array[1])-self._h
-        elif self._show_position==POPUP_POSITION_BOTTONRIGHT:
-            self._x=(int)(sz_array[0])
-            self._y=(int)(sz_array[1])
-        elif self._show_position==POPUP_POSITION_BOTTONLEFT:
-            self._x=(int)(sz_array[0])-self._w
-            self._y=(int)(sz_array[1])
+        gdw_lib().DWAGDIGetScreenSize(sz_array)
+        self._x=(int)(pos_array[0])
+        self._y=(int)(pos_array[1])
+        for p in self._show_position:
+            if p==POPUP_POSITION_BOTTONRIGHT:
+                if (pos_array[1]+self._h<sz_array[1]) and (pos_array[0]+self._w<sz_array[0]):                    
+                    self._x=(int)(pos_array[0])
+                    self._y=(int)(pos_array[1])
+                    break;
+            elif p==POPUP_POSITION_BOTTONLEFT:
+                if (pos_array[1]+self._h<sz_array[1]) and (pos_array[0]-self._w>=0):
+                    self._x=(int)(pos_array[0])-self._w
+                    self._y=(int)(pos_array[1])
+                    break;
+            elif p==POPUP_POSITION_TOPRIGHT:
+                if (pos_array[1]-self._h>=0) and (pos_array[0]+self._w<sz_array[0]):
+                    self._x=(int)(pos_array[0])
+                    self._y=(int)(pos_array[1])-self._h
+                    break;
+            elif p==POPUP_POSITION_TOPLEFT:
+                if (pos_array[1]-self._h>=0) and (pos_array[0]-self._w>=0):
+                    self._x=(int)(pos_array[0])-self._w
+                    self._y=(int)(pos_array[1])-self._h
+                    break;            
         
         pnl = Panel()
         pnl.set_background("ffffff")
         pnl.set_border(BorderLine())
         pnl.set_position(0, 0)
         pnl.set_size(self._w, self._h)
-        self.add_component(pnl)
-        
+        self.add_component(pnl)        
         y=2
         for itm in self._list:
             lbl = Label()
@@ -1037,14 +1107,10 @@ class BorderLine:
             
     def on_paint(self,c,pobj):
         pobj.pen_color(self._color)
-        x=0
-        y=0
-        w=c._w
-        h=c._h
         pobj.draw_line(0,0,0,c._h-1) #LEFT
         pobj.draw_line(0,0,c._w-1,0) #TOP       
-        pobj.draw_line(c._w-1,0,c._w-1,c._h-1) #RIGHT 
-        pobj.draw_line(0,c._h-1,c._w-1,c._h-1) #BOTTOM
+        pobj.draw_line(c._w-1,0,c._w-1,c._h) #RIGHT 
+        pobj.draw_line(0,c._h-1,c._w,c._h-1) #BOTTOM
         
 
 class Component:
@@ -1095,7 +1161,7 @@ class Component:
                     if bchangefocus:
                         self._window.next_focus_component()
                     xy=self._get_win_pos()
-                    _repaint_later(self._window._id,c._x+xy[0],c._y+xy[1],c._w,c._h)
+                    _repaint(self._window._id,c._x+xy[0],c._y+xy[1],c._w,c._h)
                     break
     
     def get_components(self):
@@ -1116,11 +1182,11 @@ class Component:
                 if bchangefocus:
                         self._window.next_focus_component()
                 xy=self._get_win_pos()
-                _repaint_later(self._window._id,c._x+xy[0],c._y+xy[1],c._w,c._h)
+                _repaint(self._window._id,c._x+xy[0],c._y+xy[1],c._w,c._h)
     
     def focus(self):
         if self._window:
-            self._window._set_focus_component(self,{"mode":"KEYBOARD"})
+            self._window._set_focus_component(self,{"mode":"CODE"})
     
     def get_name(self):
         return self._name
@@ -1254,13 +1320,13 @@ class Component:
         if self._window is not None and self._window._id is not None:
             #print "repaint"
             xy=self._get_win_pos()
-            _repaint_later(self._window._id,xy[0],xy[1],self._w,self._h);
+            _repaint(self._window._id,xy[0],xy[1],self._w,self._h);            
     
     def repaint_area(self,x,y,w,h):
         if self._window is not None and self._window._id is not None:
             #print "repaint_area"
             xy=self._get_win_pos()
-            _repaint_later(self._window._id,xy[0]+x,xy[1]+y,w,h);
+            _repaint(self._window._id,xy[0]+x,xy[1]+y,w,h);
     
     def _draw_background_gradient(self,pobj,x,y,w,h):
         rgbstart = getRGBColor(self._gradient_background_start);
@@ -1667,25 +1733,41 @@ class ImagePanel(Component):
     
     def __init__(self):
         Component.__init__(self)
+        self._imgreload=True
+        self._imgitm=None
         self._filename=None
         self._w=250;
         self._h=100;
         self._focusable=False
         self._opaque=False
-        
+     
+    def _destroy(self):
+        if self._imgitm is not None:
+            _gdimap["imagemanager"].unload(self._imgitm)
+            self._imgitm=None
+        Component._destroy(self)   
     
     def get_filename(self):
         return self._filename
 
     def set_filename(self, fn):
-        self._filename = fn;
-        self.repaint() 
+        if self._filename != fn:
+            self._filename = fn
+            self._imgreload = True
+            self.repaint() 
 
     def on_paint(self,pobj):
         Component.on_paint(self, pobj)
-        if self._filename is not None:
-            if utils.path_exists(self._filename):
-                pobj.draw_image_fromfile(self._filename,0,0,self._w,self._h);
+        if self._imgreload:
+            if self._imgitm is not None:
+                _gdimap["imagemanager"].unload(self._imgitm)
+                self._imgitm=None
+            self._imgitm = _gdimap["imagemanager"].load(self._filename)
+            self._imgreload=False
+        
+        if self._imgitm is not None:
+            pobj.draw_image(self._imgitm,0,0);            
+                
                 
 class TextBox(Component):
     
@@ -1708,20 +1790,7 @@ class TextBox(Component):
         self._cursor_x=-1
         self._text_offx=0
     
-    def _stop_blink(self):
-        delete_scheduler(self._blinkitm);
-        self._blinkitm = None
-        self._blink=False
-        self._repaint_cursor()
-    
-    def _start_blink(self):
-        if self.has_focus():
-            self._blink = not self._blink
-            self._repaint_cursor()
-            self._blinkitm = add_scheduler(0.5, self._start_blink);
-        else:
-            self._stop_blink()
-    
+        
     def set_password_mask(self,value):
         self._password_mask=value
     
@@ -1742,50 +1811,53 @@ class TextBox(Component):
         self._cursor_position=len(self._text)
         self._selection_start=self._cursor_position
         self._selection_end=self._cursor_position
-        self.repaint()
+        self.repaint()        
               
+    def _blinktimer(self):
+        self._blink=not self._blink
+        self._repaint_cursor()
+        self._blinkitm=_gdimap["sheduler"].add(0.5,self._blinktimer)        
+    
     def on_focus_get(self,e):
         if e["mode"]=="KEYBOARD":
             self._selection_start=len(self._text)
             self._selection_end=len(self._text)
             self._cursor_position=self._selection_end
-        delete_scheduler(self._blinkitm);
-        self._blink=False
-        self._start_blink()
+        self._blink=True
+        self._repaint_text_area()
+        self._blinkitm=_gdimap["sheduler"].add(0.5,self._blinktimer)
     
     def on_focus_lost(self,e):
+        if self._blinkitm is not None:
+            _gdimap["sheduler"].cancel(self._blinkitm)
+        self._blinkitm=None
         if self._validate is not None:
             self._validate({"window":self._window, "source": self})
-        self._cursor_position=0
         self._selection_start=0
         self._selection_end=0
-        self._stop_blink()
+        self._blink=False
+        self._repaint_text_area()
     
     def _get_cursor_pos_by_x(self,x):
+        fontid=_gdimap["fontmanager"].get_id("default")
         x=x
         xi=2
         xf=2
         for i in range(len(self._text)):
             s=self._text[0:i]
             if len(s)!=0:
-                xf = gdw_lib().getTextWidth(self._window._id,s)+2-self._text_offx
+                xf = gdw_lib().DWAGDIGetTextWidth(self._window._id,fontid,s)+2-self._text_offx
                 if x>=xi and x<=xf:
                     return i-1
                 xi=xf
         if len(self._text)!=0:
-            xf = gdw_lib().getTextWidth(self._window._id,self._text)+2-self._text_offx
+            xf = gdw_lib().DWAGDIGetTextWidth(self._window._id,fontid,self._text)+2-self._text_offx
             if x>=xi and x<=xf:
                 return len(self._text)-1
         return len(self._text)
     
-    '''def on_mouse_enter(self,e):
-        self.repaint()
-    
-    def on_mouse_leave(self,e):
-        self.repaint()'''
-    
     def _repaint_text_area(self):
-        self.repaint_area(1, 1, self._w-1, self._h-1)
+        self.repaint_area(2, 2, self._w-4, self._h-4)
     
     def _repaint_cursor(self):
         if self._cursor_x!=-1:
@@ -1833,9 +1905,8 @@ class TextBox(Component):
             self._text_offx=0
         if self._blink:
             pobj.pen_color(self._foreground)
-            pobj.draw_line(self._cursor_x-self._text_offx,3,self._cursor_x-self._text_offx,self._h-3)
-        pobj.clear_clip_rectangle();
-        
+            pobj.draw_line(self._cursor_x-self._text_offx,3,self._cursor_x-self._text_offx,self._h-4)
+        pobj.clear_clip_rectangle();        
     
     def _on_keyboard_char(self,c,shift,ctrl,alt,meta):
         if self._selection_start!=self._selection_end:
@@ -1947,14 +2018,14 @@ class TextBox(Component):
         if c=="COPY":
             s=self._text[self._selection_start:self._selection_end]
             if len(s)>0:
-                gdw_lib().setClipboardText(s)  
+                gdw_lib().DWAGDISetClipboardText(s)  
         elif c=="CUT":
             s=self._text[self._selection_start:self._selection_end]
             if len(s)>0:
-                gdw_lib().setClipboardText(s) 
+                gdw_lib().DWAGDISetClipboardText(s) 
             self._on_keyboard_key("DELETE",shift,ctrl,alt,meta)
         elif c=="PASTE":
-            s=gdw_lib().getClipboardText()
+            s=gdw_lib().DWAGDIGetClipboardText()
             if len(s)>0:
                 self._on_keyboard_char(s,shift,ctrl,alt,meta) 
 
@@ -1973,6 +2044,6 @@ class TextBox(Component):
             self._cursor_position=self._get_cursor_pos_by_x(x)
             self._selection_start=self._cursor_position
             self._selection_end=self._cursor_position
-            self.repaint()
+            self._repaint_text_area()
 
 

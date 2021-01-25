@@ -102,10 +102,15 @@ class NativeLinux:
         self._name=None
         self._current_path=None
         self._install_path=None
-        self._etc_path = u"/etc/dwagent"
+        self._etc_path=None
+        self._logo_path=u"/ui/images/logo.png"
     
     def set_name(self, k):
         self._name=k
+        self._etc_path = u"/etc/" + self._name.lower()
+    
+    def set_logo_path(self, pth):
+        self._logo_path=pth
     
     def set_current_path(self, pth):
         self._current_path=pth
@@ -117,7 +122,7 @@ class NativeLinux:
         self._install_log=log
         
     def get_proposal_path(self):
-        return u'/usr/share/dwagent' 
+        return u"/usr/share/" + self._name.lower()
     
     def get_install_path(self) :
         if utils.path_exists(self._etc_path):
@@ -161,56 +166,74 @@ class NativeLinux:
         self._install_log.flush()
         return ret==0
     
-    def replace_key_file(self, path,  key,  val):
+    def replace_key_file(self, path, lst):
         fin = utils.file_open(path, "r", encoding='utf-8')
         data = fin.read()
         fin.close()
         fout = utils.file_open(path, "w", encoding='utf-8')
-        fout.write(data.replace(key,val))
+        for k in lst:
+            data = data.replace(k,lst[k])
+        fout.write(data)
         fout.close()
-        
+    
+    def get_replace_list(self):
+        return {
+                u"@NAME@": self._name, 
+                u"@EXE_NAME@": self._name.lower(), 
+                u"@PATH_DWA@": self._install_path,
+                u"@PATH_LOGOOS@": self._install_path + self._logo_path
+            }
+    
     def prepare_file_service(self, pth):
-        #Service
+        lstrepl = self.get_replace_list()
         fdwagsvc=pth + utils.path_sep + u"dwagsvc"
-        self.replace_key_file(fdwagsvc, u"@PATH_DWA@",  self._install_path)
+        self.replace_key_file(fdwagsvc, lstrepl)
         utils.path_change_permissions(fdwagsvc,  stat.S_IRWXU + stat.S_IRGRP + stat.S_IROTH)
         fdwagent=pth + utils.path_sep + u"dwagent.service"
-        self.replace_key_file(fdwagent, u"@PATH_DWA@",  self._install_path)
+        if self._name.lower()!=u"dwagent":
+            utils.path_rename(fdwagent,pth + utils.path_sep  + self._name.lower() + u".service")
+            fdwagent=pth + utils.path_sep  + self._name.lower() + u".service"
+        self.replace_key_file(fdwagent, lstrepl)
         utils.path_change_permissions(fdwagent,  stat.S_IRUSR + stat.S_IWUSR + stat.S_IRGRP + stat.S_IROTH)
     
     def prepare_file_sh(self, pth):
-        #DWAgent
-        appf=pth + utils.path_sep + u"dwagent"
-        self.replace_key_file(appf, u"@PATH_DWA@",  self._install_path)
+        lstrepl = self.get_replace_list()        
+        appf=pth + utils.path_sep + u"dwagent"        
+        if self._name.lower()!=u"dwagent":
+            utils.path_rename(appf, pth + utils.path_sep + self._name.lower())
+            appf=pth + utils.path_sep + self._name.lower()
+        self.replace_key_file(appf, lstrepl)        
         utils.path_change_permissions(appf,  stat.S_IRWXU + stat.S_IRGRP +  stat.S_IXGRP + stat.S_IROTH + stat.S_IXOTH)
         
-        #DWAgent
         appf=pth + utils.path_sep + u"configure"
-        self.replace_key_file(appf, u"@PATH_DWA@",  self._install_path)
+        self.replace_key_file(appf, lstrepl)
         utils.path_change_permissions(appf,  stat.S_IRWXU + stat.S_IRGRP +  stat.S_IXGRP + stat.S_IROTH + stat.S_IXOTH)
         
-        #DWAgent
         appf=pth + utils.path_sep + u"uninstall"
-        self.replace_key_file(appf, u"@PATH_DWA@",  self._install_path)
+        self.replace_key_file(appf, lstrepl)
         utils.path_change_permissions(appf,  stat.S_IRWXU + stat.S_IRGRP +  stat.S_IXGRP + stat.S_IROTH + stat.S_IXOTH)
         
         #Menu
         fmenuconf=pth + utils.path_sep + u"dwagent.desktop"
         if utils.path_exists(fmenuconf):
-            self.replace_key_file(fmenuconf, u"@PATH_DWA@",  self._install_path)
+            if self._name.lower()!=u"dwagent":
+                utils.path_rename(fmenuconf, pth + utils.path_sep + self._name.lower() + u".desktop")
+                fmenuconf=pth + utils.path_sep + self._name.lower() + u".desktop"        
+            self.replace_key_file(fmenuconf, lstrepl)
             utils.path_change_permissions(fmenuconf,  stat.S_IRWXU + stat.S_IRGRP + stat.S_IRWXO)
         
     
     #LO USA ANCHE agent.py
     def prepare_file_monitor(self, pth):
+        lstrepl = self.get_replace_list()
         appf=pth + utils.path_sep + u"systray"
         if utils.path_exists(appf):
-            self.replace_key_file(appf, u"@PATH_DWA@",  self._install_path)
+            self.replace_key_file(appf, lstrepl)
             utils.path_change_permissions(appf,  stat.S_IRWXU + stat.S_IRGRP +  stat.S_IXGRP + stat.S_IROTH + stat.S_IXOTH)
         
         fmenusystray=pth + utils.path_sep + u"systray.desktop"
         if utils.path_exists(fmenusystray):
-            self.replace_key_file(fmenusystray, u"@PATH_DWA@",  self._install_path)
+            self.replace_key_file(fmenusystray, lstrepl)
             utils.path_change_permissions(fmenusystray,  stat.S_IRWXU + stat.S_IRGRP + stat.S_IRWXO)
     
     def prepare_file(self):
@@ -239,7 +262,7 @@ class NativeLinux:
         utils.path_makedir(ds)
         utils.path_makedir(ds + utils.path_sep + u"bin")
         utils.path_makedir(ds + utils.path_sep + u"lib")
-        utils.path_symlink(sys.executable, ds + utils.path_sep + u"bin" + utils.path_sep + u"dwagent")
+        utils.path_symlink(sys.executable, ds + utils.path_sep + u"bin" + utils.path_sep + self._name.lower())
         return True;
     
     def install_service(self):
@@ -255,8 +278,8 @@ class NativeLinux:
     def install_auto_run_monitor(self):
         try:
             pautos = u"/etc/xdg/autostart"
-            utils.path_copy(self._install_path + utils.path_sep + u"native" + utils.path_sep + u"systray.desktop", pautos + utils.path_sep + u"dwagent_systray.desktop")
-            utils.path_change_permissions(pautos + utils.path_sep + u"dwagent_systray.desktop",  stat.S_IRWXU + stat.S_IRGRP + stat.S_IRWXO)
+            utils.path_copy(self._install_path + utils.path_sep + u"native" + utils.path_sep + u"systray.desktop", pautos + utils.path_sep + self._name.lower() + u"_systray.desktop")
+            utils.path_change_permissions(pautos + utils.path_sep + self._name.lower() + u"_systray.desktop",  stat.S_IRWXU + stat.S_IRGRP + stat.S_IRWXO)
             #SI DEVE LANCIARE CON L'UTENTE CONNESSO A X
             #Esegue il monitor
             #os.system(self._install_path + utils.path_sep + u"native" + utils.path_sep + u"dwaglnc systray &")
@@ -266,7 +289,7 @@ class NativeLinux:
     
     def remove_auto_run_monitor(self):
         try:
-            fnm = u"/etc/xdg/autostart/dwagent_systray.desktop"
+            fnm = u"/etc/xdg/autostart/" + self._name.lower() + u"_systray.desktop"
             if utils.path_exists(fnm):
                 utils.path_remove(fnm)
         except:
@@ -312,12 +335,26 @@ class NativeLinux:
 class NativeMac:
     def __init__(self):
         self._name=None
-        self._current_path=None
-        self._install_path=None
-        self._lncdmn_path = u"/Library/LaunchDaemons/net.dwservice.agsvc.plist"
+        self._current_path = None
+        self._install_path = None
+        self._svcnm = None
+        self._guilncnm = None
+        self._systraynm = None
+        self._logo_path=u"/ui/images/logo.icns"
 
     def set_name(self, k):
         self._name=k
+        if self._name.lower()==u"dwagent":            
+            self._svcnm = u"net.dwservice.agsvc"
+            self._guilncnm = u"net.dwservice.agguilnc"
+            self._systraynm = u"net.dwservice.agsystray"
+        else:
+            self._svcnm = u"com.apiremoteaccess." + self._name.lower() + u"svc"
+            self._guilncnm = u"com.apiremoteaccess." + self._name.lower() + u"lnc"
+            self._systraynm = u"com.apiremoteaccess." + self._name.lower() +  u"systray"
+        
+    def set_logo_path(self, pth):
+        self._logo_path=pth
     
     def set_current_path(self, pth):
         self._current_path=pth
@@ -329,23 +366,24 @@ class NativeMac:
         self._install_log=log
         
     def get_proposal_path(self):
-        return u'/Library/DWAgent' 
+        return u'/Library/' + self._name 
     
-    def get_install_path(self) :
-        #Verificare la cartella dei servizi
-        if utils.path_exists(self._lncdmn_path) and utils.path_islink(self._lncdmn_path):
-            return utils.path_dirname(utils.path_dirname(utils.path_realname(self._lncdmn_path)))
+    def get_install_path(self) :        
+        ldpth = u"/Library/LaunchDaemons/" + self._svcnm + u".plist"
+        if utils.path_exists(ldpth) and utils.path_islink(ldpth):
+            return utils.path_dirname(utils.path_dirname(utils.path_realname(ldpth)))
         
-        #COMPATIBILITA CON INSTALLAZIONI PRECEDENTI
-        oldlncdmn_path = u"/Library/LaunchDaemons/net.dwservice.agent.plist"
-        if utils.path_exists(oldlncdmn_path) and utils.path_islink(oldlncdmn_path):
-            return utils.path_dirname(utils.path_dirname(utils.path_realname(oldlncdmn_path)))
+        if self._name.lower()==u"dwagent":
+            #KEEP FOR COMPATIBILITY
+            oldlncdmn_path = u"/Library/LaunchDaemons/net.dwservice.agent.plist"
+            if utils.path_exists(oldlncdmn_path) and utils.path_islink(oldlncdmn_path):
+                return utils.path_dirname(utils.path_dirname(utils.path_realname(oldlncdmn_path)))
+            #KEEP FOR COMPATIBILITY                        
+            oldlncdmn_path = u"/System/Library/LaunchDaemons/org.dwservice.agent.plist"
+            if utils.path_exists(oldlncdmn_path) and utils.path_islink(oldlncdmn_path):
+                return utils.path_dirname(utils.path_dirname(utils.path_realname(oldlncdmn_path)))        
         
-        oldlncdmn_path = u"/System/Library/LaunchDaemons/org.dwservice.agent.plist"
-        if utils.path_exists(oldlncdmn_path) and utils.path_islink(oldlncdmn_path):
-            return utils.path_dirname(utils.path_dirname(utils.path_realname(oldlncdmn_path)))
-        
-        return  None             
+        return None             
     
     def is_task_running(self, pid):
         try:
@@ -358,7 +396,7 @@ class NativeMac:
         return None
     
     def check_init_install(self, onlycheck=False):
-        if os.geteuid() != 0: #DEVE ESSERE EUID
+        if os.geteuid() != 0: #MUST BE EUID
             if onlycheck:
                 return messages.get_message("linuxRootPrivileges")
             else:
@@ -368,7 +406,7 @@ class NativeMac:
         return None
     
     def check_init_uninstall(self):
-        if os.geteuid() != 0: #DEVE ESSERE EUID
+        if os.geteuid() != 0: #MUST BE EUID
             return messages.get_message(u"linuxRootPrivileges")
         return None
 
@@ -409,7 +447,7 @@ class NativeMac:
         
     def stop_service(self):
         #Arresta GUILauncher
-        self._bootout_agent(u"net.dwservice.agguilnc.plist")
+        self._bootout_agent(self._guilncnm + u".plist")
         ret =utils.system_call(self._install_path + utils.path_sep + u"native" + utils.path_sep + u"dwagsvc stop", shell=True, stdout=self._install_log, stderr=subprocess.STDOUT)
         self._install_log.flush()
         return ret==0
@@ -420,25 +458,39 @@ class NativeMac:
         bret = (ret==0)
         if bret:
             #Avvia GUILauncher
-            self._bootstrap_agent(u"net.dwservice.agguilnc.plist")
+            self._bootstrap_agent(self._guilncnm + u".plist")
         return bret
     
-    def replace_key_file(self, path, enc,  key,  val):
+    def get_replace_list(self):
+        return {
+            u"@NAME@": self._name, 
+            u"@EXE_NAME@": self._name.lower(), 
+            u"@PATH_DWA@": self._install_path,
+            u"@PATH_LOGOOS@": self._install_path + self._logo_path,
+            u"@LDNAME_SERVICE@": self._svcnm ,
+            u"@LDNAME_GUILNC@": self._guilncnm ,
+            u"@LDNAME_SYSTRAY@": self._systraynm 
+        }
+    
+    def replace_key_file(self, path, enc,  lst):
         fin=utils.file_open(path, "r", enc)
         data = fin.read()
         fin.close()
         fout=utils.file_open(path,"w", enc)
-        fout.write(data.replace(key,val))
+        for k in lst:
+            data = data.replace(k,lst[k])
+        fout.write(data)
         fout.close()
             
     def prepare_file_service(self, pth):
+        lstrepl = self.get_replace_list()
         #Service
         fapp=pth + utils.path_sep + "dwagsvc"
-        self.replace_key_file(fapp, "utf-8", "@PATH_DWA@",  self._install_path)
+        self.replace_key_file(fapp, "utf-8", lstrepl)
         utils.path_change_permissions(fapp,  stat.S_IRWXU + stat.S_IRGRP + stat.S_IROTH)
         
         fapp=pth + utils.path_sep + "dwagsvc.plist"
-        self.replace_key_file(fapp, "utf-8", "@PATH_DWA@",  self._install_path)
+        self.replace_key_file(fapp, "utf-8", lstrepl)
         utils.path_change_permissions(fapp,  stat.S_IRUSR + stat.S_IWUSR + stat.S_IRGRP + stat.S_IROTH)
         
         #GUI Launcher
@@ -446,38 +498,56 @@ class NativeMac:
         utils.path_change_permissions(fapp,  stat.S_IRWXU + stat.S_IRGRP + stat.S_IXGRP + stat.S_IROTH + stat.S_IXOTH)
         
         fapp=pth + utils.path_sep + "dwagguilnc.plist"
-        self.replace_key_file(fapp, "utf-8", "@PATH_DWA@",  self._install_path)
+        self.replace_key_file(fapp, "utf-8", lstrepl)
         utils.path_change_permissions(fapp,  stat.S_IRUSR + stat.S_IWUSR + stat.S_IRGRP + stat.S_IROTH)
     
     def prepare_file_app(self, pth):
-                
+        utils.path_makedir(pth + u"/DWAgent.app/Contents/Resources")
+        utils.path_copy(self._install_path + self._logo_path, pth + u"/DWAgent.app/Contents/Resources/Icon.icns")
         shutil.copytree(pth + u"/DWAgent.app",pth + u"/Configure.app")
         shutil.copytree(pth + u"/DWAgent.app",pth + u"/Uninstall.app")
-                
-        utils.path_change_permissions(pth + u"/DWAgent.app/Contents/MacOS/DWAgent",  stat.S_IRUSR + stat.S_IWUSR + stat.S_IXUSR + stat.S_IRGRP + stat.S_IXGRP + stat.S_IROTH + stat.S_IXOTH)           
-        self.replace_key_file(pth + u"/DWAgent.app/Contents/Info.plist", "utf-8", u"@EXE_NAME@" ,  u"DWAgent")
-        self.replace_key_file(pth + u"/DWAgent.app/Contents/MacOS/DWAgent", "utf-8",u"@MOD_DWA@",  u"monitor")
-        self.replace_key_file(pth + u"/DWAgent.app/Contents/MacOS/DWAgent", "utf-8",u"@PATH_DWA@",  self._install_path)
+        idname=u"net.dwservice."
+        if self._name.lower()!=u"dwagent":
+            shutil.move(pth + u"/DWAgent.app",pth + u"/" + self._name + u".app")            
+            idname=u"com.apiremoteaccess."
         
-        shutil.move(pth + u"/Configure.app/Contents/MacOS/DWAgent",  pth + "/Configure.app/Contents/MacOS/Configure")
-        utils.path_change_permissions(pth + u"/Configure.app/Contents/MacOS/Configure",  stat.S_IRUSR + stat.S_IWUSR + stat.S_IXUSR + stat.S_IRGRP + stat.S_IXGRP + stat.S_IROTH + stat.S_IXOTH)
-        self.replace_key_file(pth + u"/Configure.app/Contents/Info.plist", "utf-8", u"@EXE_NAME@" ,  u"Configure")
-        self.replace_key_file(pth + u"/Configure.app/Contents/MacOS/Configure", "utf-8",u"@MOD_DWA@",  u"configure")
-        self.replace_key_file(pth + u"/Configure.app/Contents/MacOS/Configure", "utf-8",u"@PATH_DWA@",  self._install_path)
+        #DWAGENT        
+        utils.path_change_permissions(pth + u"/" + self._name + u".app/Contents/MacOS/Run",  stat.S_IRUSR + stat.S_IWUSR + stat.S_IXUSR + stat.S_IRGRP + stat.S_IXGRP + stat.S_IROTH + stat.S_IXOTH)           
+        lstrepl = self.get_replace_list()
+        lstrepl["@MOD_DWA@"]=u"monitor"
+        self.replace_key_file(pth + u"/" + self._name + u".app/Contents/MacOS/Run", "utf-8", lstrepl)
+        lstrepl["@ID_NAME@"]=idname + lstrepl["@EXE_NAME@"] 
+        self.replace_key_file(pth + u"/" + self._name + u".app/Contents/Info.plist", "utf-8", lstrepl)        
         
-        shutil.move(pth + u"/Uninstall.app/Contents/MacOS/DWAgent",  pth + "/Uninstall.app/Contents/MacOS/Uninstall")
-        utils.path_change_permissions(pth + u"/Uninstall.app/Contents/MacOS/Uninstall",  stat.S_IRUSR + stat.S_IWUSR + stat.S_IXUSR + stat.S_IRGRP + stat.S_IXGRP + stat.S_IROTH + stat.S_IXOTH)
-        self.replace_key_file(pth + u"/Uninstall.app/Contents/Info.plist", "utf-8", u"@EXE_NAME@" ,  u"Uninstall")
-        self.replace_key_file(pth + u"/Uninstall.app/Contents/MacOS/Uninstall", "utf-8",u"@MOD_DWA@",  u"uninstall")
-        self.replace_key_file(pth + u"/Uninstall.app/Contents/MacOS/Uninstall", "utf-8",u"@PATH_DWA@",  self._install_path)
+        #CONFIGURE
+        utils.path_change_permissions(pth + u"/Configure.app/Contents/MacOS/Run",  stat.S_IRUSR + stat.S_IWUSR + stat.S_IXUSR + stat.S_IRGRP + stat.S_IXGRP + stat.S_IROTH + stat.S_IXOTH)
+        lstrepl = self.get_replace_list()
+        lstrepl["@MOD_DWA@"]=u"configure"
+        self.replace_key_file(pth + u"/Configure.app/Contents/MacOS/Run", "utf-8", lstrepl)
+        lstrepl["@NAME@"]=u"Configure"
+        lstrepl["@EXE_NAME@"]=u"configure"        
+        lstrepl["@ID_NAME@"]=idname + lstrepl["@EXE_NAME@"]
+        self.replace_key_file(pth + u"/Configure.app/Contents/Info.plist", "utf-8", lstrepl)                
+        
+        #UNINSTALL        
+        utils.path_change_permissions(pth + u"/Uninstall.app/Contents/MacOS/Run",  stat.S_IRUSR + stat.S_IWUSR + stat.S_IXUSR + stat.S_IRGRP + stat.S_IXGRP + stat.S_IROTH + stat.S_IXOTH)
+        lstrepl = self.get_replace_list()
+        lstrepl["@MOD_DWA@"]=u"uninstall"
+        self.replace_key_file(pth + u"/Uninstall.app/Contents/MacOS/Run", "utf-8", lstrepl)
+        lstrepl["@NAME@"]=u"Uninstall"
+        lstrepl["@EXE_NAME@"]=u"uninstall"        
+        lstrepl["@ID_NAME@"]=idname + lstrepl["@EXE_NAME@"]
+        self.replace_key_file(pth + u"/Uninstall.app/Contents/Info.plist", "utf-8", lstrepl)                
         
     
     def prepare_file_monitor(self, pth):
+        lstrepl = self.get_replace_list()
+        
         fapp=pth + utils.path_sep + "dwagsystray"
         utils.path_change_permissions(fapp,  stat.S_IRWXU + stat.S_IRGRP + stat.S_IXGRP + stat.S_IROTH + stat.S_IXOTH)
         
         fapp=pth + utils.path_sep + "dwagsystray.plist"
-        self.replace_key_file(fapp, "utf-8", "@PATH_DWA@",  self._install_path)
+        self.replace_key_file(fapp, "utf-8", lstrepl)
         utils.path_change_permissions(fapp,  stat.S_IRUSR + stat.S_IWUSR + stat.S_IRGRP + stat.S_IROTH)
         
     
@@ -520,13 +590,13 @@ class NativeMac:
         bret = (ret==0)
         if bret:
             #Avvia systray
-            self._bootstrap_agent(u"net.dwservice.agsystray.plist")
+            self._bootstrap_agent(self._systraynm + u".plist")
         return bret
         
     
     def remove_auto_run_monitor(self):
         #Chiude tutti systray
-        self._bootout_agent(u"net.dwservice.agsystray.plist")
+        self._bootout_agent(self._systraynm + u".plist")
         ret = utils.system_call(self._install_path + utils.path_sep + u"native" + utils.path_sep + u"dwagsvc removeAutoRun", shell=True, stdout=self._install_log, stderr=subprocess.STDOUT)
         self._install_log.flush()
         return ret==0
@@ -539,7 +609,7 @@ class NativeMac:
             pathsrc = self._install_path + utils.path_sep + u"native/"
             pathdst = u"/Applications/"
             if utils.path_exists(pathdst):
-                shutil.copytree(pathsrc+u"DWAgent.app", pathdst+u"DWAgent.app", symlinks=True)
+                shutil.copytree(pathsrc + self._name + u".app", pathdst + self._name +u".app", symlinks=True)
             return True
         except:
             return False
@@ -547,7 +617,7 @@ class NativeMac:
         
     def remove_shortcuts(self) :
         try:
-            pathsrc = u"/Applications/DWAgent.app"
+            pathsrc = u"/Applications/" + self._name + u".app"
             if utils.path_exists(pathsrc):
                 utils.path_remove(pathsrc)
             return True
@@ -734,10 +804,14 @@ class NativeWindows:
         self._os_env=None
         self._py_exe=None
         self._runtime=None
+        self._logo_path=u"\\ui\\images\\logo.ico"
     
     def set_name(self, k):
         self._name=k
         self._runtime=k.lower() + u".exe"
+    
+    def set_logo_path(self, pth):
+        self._logo_path=pth
     
     def set_current_path(self, pth):
         self._current_path=pth
@@ -839,6 +913,7 @@ class NativeWindows:
         pth=self._install_path
         arf = []
         arf.append(u''.join([u"serviceName=",self._name,u"\r\n"]))
+        arf.append(u''.join([u"iconPath=" ,  pth, self._logo_path + u"\r\n"]))
         #FIX UNICODE PATH
         arf.append(u''.join([u"pythonHome=runtime\r\n"]))
         arf.append(u''.join([u"pythonPath=",  pth, utils.path_sep, u"runtime", utils.path_sep, self._runtime, u"\r\n"]))
@@ -852,6 +927,7 @@ class NativeWindows:
         pth=self._install_path
         arf = []
         arf.append(u''.join([u"serviceName=",self._name + u"RunOnFly",u"\r\n"]))
+        arf.append(u''.join([u"iconPath=" ,  pth, self._logo_path + u"\r\n"]))
         #FIX UNICODE PATH
         ar = self._current_path.split(utils.path_sep)
         arf.append(u''.join([u"pythonHome=.." + utils.path_sep + ar[len(ar)-1] + utils.path_sep + u"runtime\r\n"]))
@@ -934,8 +1010,7 @@ class NativeWindows:
             #Esegue il monitor
             cmdmon=u'"' + self._install_path + utils.path_sep + u'native' + utils.path_sep + u'dwaglnc.exe" systray' 
             NativeWindowsPopenUnicode(cmdmon, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-        return b
-    
+        return b    
     
     def remove_auto_run_monitor(self):
         cmd=u'"' + self._install_path + utils.path_sep + u'native' + utils.path_sep + u'dwagsvc.exe" removeAutoRun'
@@ -944,7 +1019,7 @@ class NativeWindows:
     def install_extra(self):
         return True
     
-    def install_shortcuts(self) :
+    def install_shortcuts(self) :        
         cmd=u'"' + self._install_path + utils.path_sep + u'native' + utils.path_sep + u'dwagsvc.exe" installShortcuts'
         return self.executecmd(cmd)
             
@@ -1090,8 +1165,9 @@ class Install:
             prmsui["topinfo"]=self._options["topinfo"]
         if "topimage" in self._options:
             prmsui["topimage"]=self._options["topimage"]
-        if "logo" in self._options:
-            prmsui["logo"]=self._options["logo"]
+        applg = gdi._get_logo_from_conf(self._options,None)
+        if applg != "":
+            prmsui["logo"]=applg
         if "leftcolor" in self._options:
             prmsui["leftcolor"]=self._options["leftcolor"]
         self._uinterface = ui.UI(prmsui, self.step_init)
@@ -1320,7 +1396,16 @@ class Install:
 
     def read_obfuscated_password(self, enpwd):
         return zlib.decompress(base64.b64decode(enpwd))
-        
+    
+    def _copy_custom_images(self, prpconf, pth):
+        ar = ["topimage", "logoxos", "logo16x16", "logo32x32", "logo48x48"]
+        for nm in ar:
+            if nm in prpconf and utils.path_exists(prpconf[nm]):
+                dstpth = pth + utils.path_sep + "ui" + utils.path_sep + "images" + utils.path_sep + "custom"
+                if not utils.path_exists(dstpth):
+                    utils.path_makedirs(dstpth)
+                utils.path_copy(self._options[nm], dstpth + utils.path_sep + self._options[nm])
+    
     def _download_files(self, pstart, pend):
         iniperc=0;
         if "downloadtext" in self._options:
@@ -1347,13 +1432,16 @@ class Install:
         if "topinfo" in self._options:
             prpconf["topinfo"]=self._options["topinfo"]
         if "topimage" in self._options and utils.path_exists(self._options["topimage"]):
-            if gdi.is_windows():
-                prpconf["topimage"]=u'topimage.png'
-                utils.path_copy(self._options["topimage"], pth + utils.path_sep + u'topimage.png')            
-        if "logo" in self._options and utils.path_exists(self._options["logo"]):
-            if gdi.is_windows():
-                prpconf["logo"]=u'logo.ico'
-                utils.path_copy(self._options["logo"], pth + utils.path_sep + u'logo.ico')                
+            prpconf["topimage"]=self._options["topimage"]                        
+        if "logoxos" in self._options and utils.path_exists(self._options["logoxos"]):
+            prpconf["logoxos"]=self._options["logoxos"]
+            self._native.set_logo_path(utils.path_sep + u"ui" + utils.path_sep + u"images" + utils.path_sep + u"custom" + utils.path_sep + prpconf["logoxos"])        
+        if "logo16x16" in self._options and utils.path_exists(self._options["logo16x16"]):
+            prpconf["logo16x16"]=self._options["logo16x16"]
+        if "logo32x32" in self._options and utils.path_exists(self._options["logo32x32"]):
+            prpconf["logo32x32"]=self._options["logo32x32"]
+        if "logo48x48" in self._options and utils.path_exists(self._options["logo48x48"]):
+            prpconf["logo48x48"]=self._options["logo48x48"]
         if "leftcolor" in self._options:
             prpconf["leftcolor"]=self._options["leftcolor"]                    
         if not self._runWithoutInstall:
@@ -1370,7 +1458,9 @@ class Install:
                         prpconf["preferred_run_user"]=appconf["preferred_run_user"]
             except:
                 None
-                
+        
+        
+        self._copy_custom_images(prpconf, pth)
         self.store_prop_json(prpconf, pth + utils.path_sep + u'config.json')
         
         if not (self._runWithoutInstall and utils.path_exists(pth + utils.path_sep + u"config.json") 
@@ -1601,7 +1691,6 @@ class Install:
         self._uinterface.wait_message(msg,  None, pend)
     
     def step_config_init(self, curui):
-        #Benvenuto
         chs = ui.Chooser()
         m=self._get_message('configureInstallAgent')
         chs.set_message(m)
@@ -1611,6 +1700,8 @@ class Install:
         chs.add("installNewAgent", self._get_message('configureInstallNewAgent'))        
         chs.set_variable(ui.VarString("installCode"))
         chs.next_step(self.step_config)
+        if "installputcode" in self._options and self._options["installputcode"]:
+            return self.step_config(chs)
         return chs
     
     def step_config(self, curui):
@@ -1643,7 +1734,8 @@ class Install:
                 self._install_code.set("")
             ipt.set_message(self._get_message('enterInstallCode'))
             ipt.add('code', self._get_message('code'), self._install_code, True)
-        ipt.prev_step(self.step_config_init)
+        if not ("installputcode" in self._options and self._options["installputcode"]):            
+            ipt.prev_step(self.step_config_init)
         ipt.next_step(self.step_config_install_request)
         return ipt
     
@@ -2416,17 +2508,18 @@ class Uninstall:
         if "name" in confjson:
             self._name=unicode(confjson["name"])
             self._native.set_name(self._name)
-        else:            
+        else:
             self._native.set_name(u"DWAgent")
         prmsui["title"]=self._get_message('titleUninstall')
         if "topinfo" in confjson:
             prmsui["topinfo"]=confjson["topinfo"]
         if "topimage" in confjson:
-            prmsui["topimage"]=confjson["topimage"]
-        if "logo" in confjson:
-            prmsui["logo"]=confjson["logo"]
+            prmsui["topimage"]=u"ui" + utils.path_sep + u"images" + utils.path_sep + u"custom" + utils.path_sep + confjson["topimage"]
+        applg = gdi._get_logo_from_conf(confjson, u"ui" + utils.path_sep + u"images" + utils.path_sep + u"custom" + utils.path_sep)
+        if applg != "":
+            prmsui["logo"]=applg
         if "leftcolor" in confjson:
-            prmsui["leftcolor"]=confjson["leftcolor"]            
+            prmsui["leftcolor"]=confjson["leftcolor"]
         self._uinterface = ui.UI(prmsui, self.step_init)
         self._uinterface.start(bgui)
         

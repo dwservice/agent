@@ -16,6 +16,8 @@ ScreenCaptureNative::ScreenCaptureNative(DWDebugger* dbg){
 	runAsElevated=false;
 	firstmonitorscheck=true;
 
+	checkBlockInputsWin=NULL;
+
 	monitorsCounter.reset();
 	cpuCounter.reset();
 }
@@ -1167,17 +1169,19 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 	int p=0;
 	addCtrlAltShift(inputs,p,ctrl,alt,shift);
 
+	int mx=-1;
+	int my=-1;
 	int appx = 0;
 	int appy = 0;
 	int mouseData=0;
 	DWORD dwFlags = 0;
     if ((x!=-1) && (y!=-1)) {
-		int mx=x;
-		int my=y;
 		MonitorInfo* mi = getMonitorInfo(monitor);
+		mx=x;
+		my=y;
 		if (mi!=NULL){
-			mx=mx+mi->x;
-			my=my+mi->y;
+			mx+=mi->x;
+			my+=mi->y;
 		}
         dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE | MOUSEEVENTF_VIRTUALDESK;
 		UINT16 desktopWidth =  GetSystemMetrics(SM_CXVIRTUALSCREEN);
@@ -1234,7 +1238,26 @@ void ScreenCaptureNative::inputMouse(int monitor, int x, int y, int button, int 
 		}
 		addInputMouse(inputs,p,appx,appy,dwFlags,mouseData,0);
 	}
-	sendInputs(inputs,p);
+	/*if ((p==1) && (button==-1) && (mouseData==0) && (mx!=-1) && (my!=1)){ //INPUT BLOCKED BY FOREGROUND WINDOWS
+		HWND h = GetForegroundWindow();
+		if (h!=checkBlockInputsWin){
+			setCurrentThreadDesktop();
+			POINT pnt;
+			SetCursorPos(mx,my);
+			if (GetCursorPos(&pnt)==TRUE){
+				if ((mx!=pnt.x) || (my!=pnt.y)){
+					SetForegroundWindow(hwndwts);
+				}
+			}else{
+				sendInputs(inputs,p);
+			}
+		}else{
+			sendInputs(inputs,p);
+		}
+		checkBlockInputsWin=h;
+	}else{*/
+		sendInputs(inputs,p);
+	//}
 }
 
 void ScreenCaptureNative::copy(){

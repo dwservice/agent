@@ -15,18 +15,18 @@ else
 	cd "${PATH_DWA}"
 	export LD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
 	export PYTHONIOENCODING=utf-8
-	"${PATH_DWA_RUNTIME}/dwagent" installer.pyc uninstall $@
+	"${PATH_DWA_RUNTIME}/@EXE_NAME@" installer.pyc uninstall $@
 	if [ ! $? -eq 0 ]; then
 		echo "Error starting gui, attempt to start console mode..."
-		"${PATH_DWA_RUNTIME}/dwagent" installer.pyc uninstall -console
+		"${PATH_DWA_RUNTIME}/@EXE_NAME@" installer.pyc uninstall -console
 	fi
 	if [ -f "${PATH_DWA}/agent.uninstall" ]; then
 		cd /tmp
-		echo '#!/bin/sh' > dwagent_remove
-		echo 'sleep 2' >> dwagent_remove
-		echo 'rm -r -f "@PATH_DWA@"' >> dwagent_remove
-		chmod u+x dwagent_remove
-		./dwagent_remove &
+		echo '#!/bin/sh' > @EXE_NAME@_remove
+		echo 'sleep 2' >> @EXE_NAME@_remove
+		echo 'rm -r -f "@PATH_DWA@"' >> @EXE_NAME@_remove
+		chmod u+x @EXE_NAME@_remove
+		./@EXE_NAME@_remove &
 	fi
 fi
 exit 0

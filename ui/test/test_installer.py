@@ -22,12 +22,16 @@ if __name__ == "__main__":
     #arij["runputcode"]=True;
     #arij["lang"]="en"   
     #arij["topimage"]="image.bmp"
-    #arij["logo"]="logo.ico"
+    #arij["logoxos"]="logo.png"
+    #arij["logo16x16"]="logo16x16.bmp"
+    #arij["logo32x32"]="logo32x32.bmp"
+    #arij["logo48x486"]="logo48x48.bmp"
     arij["welcometext"]="Hi this is a welcome message\n\ntest message"
     arij["runtoptext"]="runtoptext"
     arij["runbottomtext"]="runbottomtext"
     arij["leftcolor"]="ff4400"
-    arotps["install.json"]=arij
+    #arij["installputcode"]=True    
+    #arotps["install.json"]=arij
     
     
     '''

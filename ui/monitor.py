@@ -16,6 +16,8 @@ import listener
 import gdi
 import time
 import images
+import os
+
 
 _WIDTH=440
 _HEIGHT=180
@@ -72,8 +74,9 @@ class Main():
             None
         if 'name' in self._properties:
             self._name=unicode(self._properties["name"])
-        if "logo" in self._properties:
-            self._logo=self._properties["logo"]
+        applg = gdi._get_logo_from_conf(self._properties,u"ui" + utils.path_sep + u"images" + utils.path_sep + u"custom" + utils.path_sep)
+        if applg != "":
+            self._logo=applg        
     
     def _get_message(self, key):
         smsg = messages.get_message(key)
@@ -96,7 +99,7 @@ class Main():
             utils.path_makedirs(self._homedir)
         self._lockfilename = self._homedir + utils.path_sep + "monitor.lock"
         try:
-            if is_linux():
+            if is_linux() or is_mac():
                 import fcntl
                 self._lockfile = utils.file_open(self._lockfilename , "w")
                 fcntl.lockf(self._lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -154,7 +157,7 @@ class Main():
         return utils.path_exists(showfilename)
     
     def get_ico_file(self, name):
-        return images.get_image(name + ".ico")
+        return images.get_image(name + ".bmp")
        
     def get_info(self):
         ret={"state": "-1","connections":"0"}
@@ -199,6 +202,7 @@ class Main():
             return
         if self.check_show():
             self._app.show()
+            self._app.to_front()
             self.remove_show_file()
         gdi.add_scheduler(0.5, self.check_events)
     
@@ -385,20 +389,23 @@ class Main():
         if is_windows():
             subprocess.call(["native" + utils.path_sep + "dwaglnc.exe" , "configure"]) 
         elif is_linux():
-            subprocess.Popen(["native" + utils.path_sep + "configure"])
+            self._runproc(["native" + utils.path_sep + "configure"])
         elif is_mac():
-            subprocess.Popen(["native/Configure.app/Contents/MacOS/Configure"])
-    
+            #KEEP FOR COMPATIBILITY
+            if utils.path_exists("native/Configure.app/Contents/MacOS/Configure"):
+                self._runproc(["native/Configure.app/Contents/MacOS/Configure"])
+            else:
+                self._runproc(["native/Configure.app/Contents/MacOS/Run"])
+            
+            
     def run_update(self):
         #Lancia se stesso perche con il file monitor.update attende che le librerie si aggiornano
         if is_windows():
             subprocess.call(["native" + utils.path_sep + "dwaglnc.exe" , "systray"]) 
         elif is_linux():
-            None
-            #subprocess.Popen(["native" + utils.path_sep + "configure"])
+            self._runproc(["native" + utils.path_sep + self._name.lower(),"systray","&"])
         elif is_mac():
-            None
-            #subprocess.Popen(["native/Configure.app/Contents/MacOS/Configure"])
+            None            
     
     def unistall(self, e):
         if is_windows():
@@ -410,14 +417,28 @@ class Main():
             elif self._which("kdesu"):
                 sucmd="kdesu"
             if sucmd is not None:
-                subprocess.Popen([sucmd , utils.path_absname("native" + utils.path_sep + "uninstall")])
+                osenv = os.environ
+                libenv = {}
+                for k in osenv:
+                    if k!="LD_LIBRARY_PATH":
+                        libenv[k]=osenv[k]
+                subprocess.Popen([sucmd , utils.path_absname("native" + utils.path_sep + "uninstall")],env=libenv)
             else:
                 dlg = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_OK,gdi.DIALOGMESSAGE_LEVEL_ERROR,self._app)
                 dlg.set_title(self._get_message('monitorTitle'))
                 dlg.set_message(self._get_message('monitorUninstallNotRun'))
                 dlg.show();
         elif is_mac():
-            subprocess.Popen(["native/Uninstall.app/Contents/MacOS/Uninstall"])      
+            self._runproc(["open", "-a", os.path.abspath("native/Uninstall.app")])
+                  
+    
+    def _runproc(self, ar, ev=None):
+        if ev is None:
+            p = subprocess.Popen(ar)
+        else:
+            p = subprocess.Popen(ar,env=ev)
+        p.communicate()
+        p.wait()
     
     def _which(self, name):
         p = subprocess.Popen("which " + name, stdout=subprocess.PIPE, shell=True)
@@ -440,8 +461,7 @@ class Main():
         else:
             msgst=self._get_message('monitorStatusNoService')
         print("Status: " + msgst)
-        print("Connections: " + appar["connections"])
-    
+        print("Connections: " + appar["connections"])    
     
     def _actions_systray(self,e):
         if e["action"]=="show":
@@ -460,14 +480,15 @@ class Main():
         if e["action"]==u"ONCLOSE":
             if self._monitor_tray_icon:
                 e["source"].hide()
-                e["cancel"]=True
-        if e["action"]==u"NOTIFYICON_ACTIVATE":
-            e["source"].show()
-            e["source"].to_front()
-        elif e["action"]==u"NOTIFYICON_CONTEXTMENU":
+                e["cancel"]=True        
+    
+    def notify_action(self, e):
+        if e["action"]==u"ACTIVATE":
+            e["source"].get_object("window").show()
+            e["source"].get_object("window").to_front()
+        elif e["action"]==u"CONTEXTMENU":
             pp=gdi.PopupMenu()
-            pp.set_show_position(gdi.POPUP_POSITION_TOPLEFT)
-            if not self._app.is_show():
+            if not e["source"].get_object("window").is_show():
                 pp.add_item("show",self._get_message('monitorShow'))
             else:
                 pp.add_item("hide",self._get_message('monitorHide'))
@@ -483,7 +504,7 @@ class Main():
     
     def update_systray(self,icon,msg):
         if self._monitor_tray_icon:
-            self._app.update_notifyicon(self.get_ico_file(icon), self._name + " - " + msg)
+            self._monitor_tray_obj.update(self.get_ico_file(icon), self._name + " - " + msg)
         
     def prepare_systray(self):
         ti=True
@@ -494,7 +515,9 @@ class Main():
             None
         if self._monitor_tray_icon!=ti:
             msgst=self._get_message('monitorStatusNoService')
-            self._app.show_notifyicon(self.get_ico_file(u"monitor_warning"), self._name + " - " + msgst)
+            self._monitor_tray_obj=gdi.NotifyIcon(self.get_ico_file(u"monitor_warning"), self._name + " - " + msgst)
+            self._monitor_tray_obj.set_object("window",self._app)
+            self._monitor_tray_obj.set_action(self.notify_action)
             self._monitor_tray_icon=ti
     
     def prepare_window(self):
@@ -566,16 +589,11 @@ class Main():
         appy+=hbtn+6
         
     def start(self, mode):        
-        #GESTIONE PROVVISORIA MAC
-        if mode=="systray" and is_mac():
-            while True:
-                time.sleep(5)
-            return
-        
         self._semaphore = threading.Condition()
         self._sharedmemclient = None
         self._mode=mode
         self._monitor_tray_icon=False
+        self._monitor_tray_obj=None
         self._update=False
         if mode=="info":
             self.printInfo()
@@ -595,13 +613,11 @@ class Main():
             gdi.add_scheduler(0.5, self.update_status)
             #self._event=None
             gdi.add_scheduler(1, self.check_events)
-            
-            bshow=True
             if mode=="systray":
                 self.prepare_systray()
-                bshow=False
-            
-            gdi.loop(self._app, bshow)
+            else:
+                self._app.show()
+            gdi.loop()
             self.unlock()
             if self._update:
                 self.run_update()
@@ -638,6 +654,9 @@ def fmain(args): #SERVE PER MACOS APP
     except Exception as e:
         print str(e)
         sys.exit(1)
+
+def ctrlHandler(ctrlType):    
+    return 1
 
 if __name__ == "__main__":
     fmain(sys.argv)

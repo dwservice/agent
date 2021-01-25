@@ -7,7 +7,34 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
 import gdi
+import images
+_NOTIFY_ICON={"visible":False, "obj":None}
 
+def _test_notify(e):
+    if _NOTIFY_ICON["visible"]:
+        #_NOTIFY_ICON["obj"].update(images.get_image("monitor_red.bmp"),u"MSG LOGO")
+        _NOTIFY_ICON["obj"].destroy()
+        _NOTIFY_ICON["visible"]=False
+        _NOTIFY_ICON["obj"]=None        
+    else:         
+        _NOTIFY_ICON["obj"] = gdi.NotifyIcon(images.get_image("monitor_green.bmp"),u"MSG LOGO")
+        _NOTIFY_ICON["obj"].set_object("window",e["window"])
+        _NOTIFY_ICON["obj"].set_action(_test_notify_action)
+        _NOTIFY_ICON["visible"]=True
+        
+
+def _test_notify_action(e):
+    if e["action"]==u"ACTIVATE":
+        e["source"].get_object("window").show()
+        e["source"].get_object("window").to_front()
+    elif e["action"]==u"CONTEXTMENU":
+        pp=gdi.PopupMenu()
+        pp.add_item("show","show")
+        pp.add_item("disable","disable")
+        pp.add_item("configure","configure")        
+        pp.set_action(_test_other_window);        
+        pp.show()
+    
 
 def _test_other_window(e):
     prnt=None
@@ -21,28 +48,21 @@ def _test_other_window(e):
 def _test_close_window(e):
     wnd=None
     if "window" in e:
+        if _NOTIFY_ICON["visible"]:
+            _NOTIFY_ICON["obj"].destroy()
+            _NOTIFY_ICON["visible"]=False
+            _NOTIFY_ICON["obj"]=None
         wnd=e["window"]
         wnd.destroy()
         
 
 def _test_window_action(e):
-    if e["action"]==u"NOTIFYICON_ACTIVATE":
-        e["source"].show()
-        e["source"].to_front()
-    elif e["action"]==u"NOTIFYICON_CONTEXTMENU":
-        pp=gdi.PopupMenu()
-        pp.set_show_position(gdi.POPUP_POSITION_TOPLEFT)
-        pp.add_item("show","show")
-        pp.add_item("disable","disable")
-        pp.add_item("configure","configure")
-        
-        pp.set_action(_test_other_window);
-        
-        pp.show()
-    elif e["action"]==u"ONCLOSE":
-        #e["source"].hide()
-        #e["cancel"]=True
-        None    
+    wnd=e["window"]
+    if e["action"]==u"ONCLOSE":
+        if _NOTIFY_ICON["visible"]:
+            e["source"].hide()
+            e["cancel"]=True
+            
         
 if __name__ == "__main__":
     ww = gdi.Window()
@@ -101,18 +121,16 @@ if __name__ == "__main__":
     pbr.set_percent(0.4)
     ww.add_component(pbr)
     
-    '''
-    imp = ImagePanel()
-    imp.set_position(250, 280)
-    imp.set_filename(u"test.bmp")
-    ww.add_component(imp)
-    '''
-    
     pl = gdi.Panel();
     pl.set_position(0, 0)
     pl.set_size(90,ww.get_height())
     pl.set_background_gradient("83e5ff", "FFFFFF", gdi.GRADIENT_DIRECTION_LEFTRIGHT)
     ww.add_component(pl)
+    
+    imp = gdi.ImagePanel()
+    imp.set_position(200, 280)
+    imp.set_filename(images.get_image("logo32x32.bmp"))
+    ww.add_component(imp)    
    
     pb = gdi.Panel();
     pb.set_position(0, ww.get_height()-55)
@@ -130,10 +148,15 @@ if __name__ == "__main__":
     b2.set_position(10+b1.get_width()+10, 10)
     b2.set_action(_test_close_window)
     pb.add_component(b2)    
-   
-    #ww.show_notifyicon(u"logo.ico",u"MSG LOGO")
-   
-    gdi.loop(ww,True)
+    
+    b3 = gdi.Button();
+    b3.set_text("Notify")
+    b3.set_position(10+b1.get_width()+10+b2.get_width()+10, 10)
+    b3.set_action(_test_notify)
+    pb.add_component(b3)
+
+    ww.show()
+    gdi.loop()
     
 
             

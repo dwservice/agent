@@ -7,6 +7,7 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
 import messages
+import gdi
 import ui
 import sys
 import listener
@@ -106,8 +107,7 @@ class Configure:
             self._proxy_port.set(self.get_config("proxy_port"))
             self._proxy_user.set(self.get_config("proxy_user"))
     
-    def start(self, bgui=True):
-        
+    def start(self, bgui=True):        
         confjson={}
         try:
             f = utils.file_open('config.json')
@@ -122,9 +122,10 @@ class Configure:
         if "topinfo" in confjson:
             prmsui["topinfo"]=confjson["topinfo"]
         if "topimage" in confjson:
-            prmsui["topimage"]=confjson["topimage"]
-        if "logo" in confjson:
-            prmsui["logo"]=confjson["logo"]
+            prmsui["topimage"]=u"ui" + utils.path_sep + u"images" + utils.path_sep + u"custom" + utils.path_sep + confjson["topimage"]
+        applg = gdi._get_logo_from_conf(confjson, u"ui" + utils.path_sep + u"images" + utils.path_sep + u"custom" + utils.path_sep)
+        if applg != "":
+            prmsui["logo"]=applg
         if "leftcolor" in confjson:
             prmsui["leftcolor"]=confjson["leftcolor"]  
         self._uinterface = ui.UI(prmsui, self.step_init)

@@ -102,7 +102,6 @@ private:
 	DEVMODE deviceMode;
 	DISPLAY_DEVICE deviceDisplay;*/
 	
-	
 	vector<ScreenShotInfo> screenShotInfo;
 
 	wchar_t prevDesktopName[1024];
@@ -113,6 +112,7 @@ private:
 	FILETIME prevProcUser;
 	float lastCpu=-1;
 	TimeCounter cpuCounter;
+	HWND checkBlockInputsWin;
 
 	//int detectMirrorDriver(vector<DISPLAY_DEVICE>& devices,map<int,DEVMODE>& settings);
 	OSVERSIONINFOEX m_osVerInfo;

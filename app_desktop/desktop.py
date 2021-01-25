@@ -724,7 +724,7 @@ class CaptureProcessClient(threading.Thread):
                             arcmd = scmd.split("/")
                             if len(arcmd)>0:
                                 scmd=arcmd[len(arcmd)-1]
-                                if scmd.upper()=="X" or scmd.upper()=="XORG": 
+                                if scmd.upper()=="X" or "XORG" in scmd.upper():
                                     bok=True
                                 elif scmd.upper()=="XWAYLAND":
                                     bwaylanderr=True
@@ -769,6 +769,10 @@ class CaptureProcessClient(threading.Thread):
                         os.close(fd)                                                        
                 except:
                     None
+        
+        if "XAUTHORITY" not in lstret and (uid!=-1 or tty is not None): 
+            return self._get_linux_envirionment(-1, None)
+        
         '''
         if "DISPLAY" in lstret:
             self._agent_main.write_info("DISPLAY: " + lstret["DISPLAY"])
@@ -837,7 +841,7 @@ class CaptureProcessClient(threading.Thread):
             try:
                 stty=native.get_instance().get_tty_active()
                 if stty is not None:
-                    return {"id": stty}                    
+                    return {"id": stty}
             except:
                 None 
             
