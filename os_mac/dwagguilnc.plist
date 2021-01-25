@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
         <key>Label</key>
-        <string>net.dwservice.agguilnc</string>
+        <string>@LDNAME_GUILNC@</string>
         <key>Disabled</key>
         <false/>
 	<key>LimitLoadToSessionType</key>
@@ -15,6 +15,7 @@
         <array>
                 <string>@PATH_DWA@/native/dwagguilnc</string>
 				<string>@PATH_DWA@</string>
+				<string>@EXE_NAME@</string>
         </array>
         <key>RunAtLoad</key>
         <true/>

@@ -5,17 +5,17 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleDisplayName</key>
-	<string>@EXE_NAME@</string>
+	<string>@NAME@</string>
 	<key>CFBundleExecutable</key>
-	<string>@EXE_NAME@</string>
+	<string>Run</string>
 	<key>CFBundleIconFile</key>
-	<string>DWAgent.icns</string>
+	<string>Icon.icns</string>
 	<key>CFBundleIdentifier</key>
 	<string>net.dwservice.@EXE_NAME@"</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>@EXE_NAME@</string>
+	<string>@NAME@</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

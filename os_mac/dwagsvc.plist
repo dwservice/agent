@@ -5,7 +5,7 @@
 	<key>Disabled</key>
 	<true/>
 	<key>Label</key>
-	<string>net.dwservice.agsvc</string>
+	<string>@LDNAME_SERVICE@</string>
 	<key>ProgramArguments</key>
 	<array>
 		<string>@PATH_DWA@/native/dwagsvc</string>

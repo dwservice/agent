@@ -13,13 +13,24 @@ EOF
 	exit $?
 else
 	cd "${PATH_DWA}"
+	EXENM="dwagent"
+	if [ -f "${PATH_DWA}/install.json" ]; then
+		EXEAP=`grep \"name\" "${PATH_DWA}/install.json" | cut -d ':' -f 2 | cut -d '"' -f 2 | tr '[A-Z]' '[a-z]'`
+		if [ $? -gt 0 ]; then
+			exit 1
+		fi
+		if [ ! -z "${EXEAP}" ]; then
+			EXENM=${EXEAP}
+			mv "${PATH_DWA_RUNTIME}/dwagent" "${PATH_DWA_RUNTIME}/$EXENM"		
+		fi
+	fi
 	#BIGSUR FIX
 	unlink "${PATH_DWA_RUNTIME_LIBRARY}/libz.1.dylib"
 	export DYLD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
 	if [ -z "$3" ] && [ -z "$4" ]; then
-		"${PATH_DWA_RUNTIME}/dwagent" installer.pyc
+		"${PATH_DWA_RUNTIME}/$EXENM" installer.pyc
 	else
-		"${PATH_DWA_RUNTIME}/dwagent" installer.pyc $3 $4
+		"${PATH_DWA_RUNTIME}/$EXENM" installer.pyc $3 $4
 	fi
 fi
 exit 0

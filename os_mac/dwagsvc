@@ -17,24 +17,24 @@ run() {
 		#BIGSUR FIX
 		unlink "${PATH_DWA_RUNTIME_LIBRARY}/libz.1.dylib"
 		export DYLD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
-        "${PATH_DWA_RUNTIME}/dwagent" agent.pyc -filelog -noctrlfile
+        "${PATH_DWA_RUNTIME}/@EXE_NAME@" agent.pyc -filelog -noctrlfile
 	fi
 }
 
 install() {
-	ln -s "${PATH_DWA_NATIVE}/dwagsvc.plist" /Library/LaunchDaemons/net.dwservice.agsvc.plist
+	ln -s "${PATH_DWA_NATIVE}/dwagsvc.plist" /Library/LaunchDaemons/@LDNAME_SERVICE@.plist
 	if [ $? -eq 0 ]; then
 		echo "Installed"
 	else
 		echo "Error: Create symbolic link."
 		RETVAL=12
 	fi
-	ln -s "${PATH_DWA_NATIVE}/dwagguilnc.plist" /Library/LaunchAgents/net.dwservice.agguilnc.plist
+	ln -s "${PATH_DWA_NATIVE}/dwagguilnc.plist" /Library/LaunchAgents/@LDNAME_GUILNC@.plist
 }
 
 delete() {
-	rm -f /Library/LaunchAgents/net.dwservice.agguilnc.plist
-	rm -f /Library/LaunchDaemons/net.dwservice.agsvc.plist
+	rm -f /Library/LaunchAgents/@LDNAME_GUILNC@.plist
+	rm -f /Library/LaunchDaemons/@LDNAME_SERVICE@.plist
 	if [ $? -eq 0 ]; then
 		echo "Deleted"
 	else 
@@ -44,23 +44,23 @@ delete() {
 }
 
 start() {
-	if ! launchctl load -w -F /Library/LaunchDaemons/net.dwservice.agsvc.plist; then
+	if ! launchctl load -w -F /Library/LaunchDaemons/@LDNAME_SERVICE@.plist; then
 		RETVAL=1
 	fi
 }
 
 stop() {
-	if ! launchctl unload -F /Library/LaunchDaemons/net.dwservice.agsvc.plist; then
+	if ! launchctl unload -F /Library/LaunchDaemons/@LDNAME_SERVICE@.plist; then
 		RETVAL=1
 	fi
 }
 
 installAutoRun() {
-	ln -s "${PATH_DWA_NATIVE}/dwagsystray.plist" /Library/LaunchAgents/net.dwservice.agsystray.plist
+	ln -s "${PATH_DWA_NATIVE}/dwagsystray.plist" /Library/LaunchAgents/@LDNAME_SYSTRAY@.plist
 }
 
 removeAutoRun() {
-	rm -f /Library/LaunchAgents/net.dwservice.agsystray.plist
+	rm -f /Library/LaunchAgents/@LDNAME_SYSTRAY@.plist
 }
 
 case "$1" in

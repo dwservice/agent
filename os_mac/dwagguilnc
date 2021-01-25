@@ -16,6 +16,6 @@ done
 if [ -f "${PATH_DWA}/guilnc.run" ]; then
 	cd "${PATH_DWA}"
 	export DYLD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
-	"${PATH_DWA_RUNTIME}/dwagent" agent.pyc guilnc
+	"${PATH_DWA_RUNTIME}/@EXE_NAME@" agent.pyc guilnc
 fi
 exit 0

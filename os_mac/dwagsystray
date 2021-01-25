@@ -12,5 +12,5 @@ PATH_DWA_RUNTIME_LIBRARY="$PATH_DWA/runtime/lib"
 
 cd "${PATH_DWA}"
 export DYLD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
-"${PATH_DWA_RUNTIME}/dwagent" monitor.pyc systray
+"${PATH_DWA_RUNTIME}/@EXE_NAME@" monitor.pyc systray
 exit 0

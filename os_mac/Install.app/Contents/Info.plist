@@ -7,9 +7,9 @@
 	<key>CFBundleDisplayName</key>
 	<string>DWAgent</string>
 	<key>CFBundleExecutable</key>
-	<string>DWAgent</string>
+	<string>Run</string>
 	<key>CFBundleIconFile</key>
-	<string>DWAgent.icns</string>
+	<string>Icon.icns</string>
 	<key>CFBundleIdentifier</key>
 	<string>net.dwservice.DWAgent</string>
 	<key>CFBundleInfoDictionaryVersion</key>

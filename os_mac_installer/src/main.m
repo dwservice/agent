@@ -16,8 +16,8 @@ NSWindow *window=NULL;
 NSString *errclose = nil;
 BOOL bclose = NO;
 int currentPerc=0;
-int height=40;
-int width=250;
+int height=9;
+int width=200;
 
 @interface DWADelegate : NSObject <NSApplicationDelegate> {
 
@@ -49,9 +49,9 @@ int width=250;
 	[[NSColor whiteColor] set];
 	NSRectFill( [self bounds] );
 
-	int rx=20;
-	int ry=15;
-	int rw=width-(2*rx);
+	int rx=0;
+	int ry=0;
+	int rw=width-1;
 	int rh=8;
 
 	[[NSColor grayColor] set];
@@ -210,6 +210,19 @@ int width=250;
 			[taskextract waitUntilExit];
 			if ([taskextract terminationStatus] != 0){
 				errclose=@"Error decompress file.";
+			}else{
+				//Copy custom
+				NSString *custompath=[exepth stringByAppendingString:@"/Custom"];
+				if ([[NSFileManager defaultManager] fileExistsAtPath:custompath]==YES){
+					NSArray *contentOfDirectory=[[NSFileManager defaultManager] contentsOfDirectoryAtPath:custompath error:NULL];
+					int contentcount = [contentOfDirectory count];
+					for (int i=0;i<contentcount;i++){
+						NSString *fileName = [contentOfDirectory objectAtIndex:i];
+						NSString *srcPath = [custompath stringByAppendingFormat:@"%@%@",@"/",fileName];
+						NSString *dstPath = [basepth stringByAppendingFormat:@"%@%@",@"/",fileName];
+						[[NSFileManager defaultManager] copyPath:srcPath toPath:dstPath handler:nil];
+					}
+				}
 			}
 		}else{
 			errclose=@"Error missing extract.";
@@ -217,7 +230,7 @@ int width=250;
 	}
 
 	if (errclose==nil){
-		//Esgue installer
+		//Execute installer
 		NSString *installpath=[exepth stringByAppendingString:@"/install"];
 		if ([[NSFileManager defaultManager] fileExistsAtPath:installpath]==YES){
 			//Fix High Sierra
@@ -228,7 +241,7 @@ int width=250;
 			    [[NSFileManager defaultManager] copyItemAtPath:@"/usr/lib/libz.1.2.8.dylib" toPath:libzpath error:&appError];
 			}
 			[NSThread sleepForTimeInterval:0.25f];
-			[window orderOut:[window contentView]]; //Nasconde finestra
+			[window orderOut:[window contentView]]; //Hide window
 
 			BOOL runAsAdmin=NO;
 			while(true){
@@ -316,16 +329,13 @@ int main(int argc, const char *argv[]) {
 	int w=width;
 	int x=(e.size.width/2)-(w/2);
 	int y=(e.size.height/2)-(h/2);
-	NSRect frame = NSMakeRect(x, e.size.height-h-y+50, w, h); //50 centra meglio
+	NSRect frame = NSMakeRect(x, e.size.height-h-y, w, h);
 	window = [[NSWindow alloc]
 		initWithContentRect:frame
-				  styleMask:NSTitledWindowMask
+				  styleMask:NSBorderlessWindowMask
 					backing:NSBackingStoreBuffered
 					  defer:false];
 
-
-	//TITOLO
-	[window setTitle:@"DWAgent"];
 
 	//SHOW
 	IGView *view = [window contentView];

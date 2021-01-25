@@ -8,14 +8,14 @@ PATH_DWA_RUNTIME_LIBRARY="$PATH_DWA/runtime/lib"
 if [ "@MOD_DWA@" == "uninstall" ]; then
 	if [ "$(id -u)" != "0" ]; then
 		LANGUAGE=$(defaults read -g AppleLocale | tr -d ' ' | tr -d \' | tr -d '\r' | cut -c1-2)
-		osascript -e 'do shell script "@PATH_DWA@/native/Uninstall.app/Contents/MacOS/Uninstall '$LANGUAGE'" with administrator privileges'
+		osascript -e 'do shell script "@PATH_DWA@/native/Uninstall.app/Contents/MacOS/Run '$LANGUAGE'" with administrator privileges'
 	else
 		cd "${PATH_DWA}"
 		export DYLD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
 		if [ -z "$1" ]; then
-			"${PATH_DWA_RUNTIME}/dwagent" installer.pyc uninstall
+			"${PATH_DWA_RUNTIME}/@EXE_NAME@" installer.pyc uninstall
 		else
-			"${PATH_DWA_RUNTIME}/dwagent" installer.pyc uninstall LANG=$1
+			"${PATH_DWA_RUNTIME}/@EXE_NAME@" installer.pyc uninstall LANG=$1
 		fi	
 		if [ -f "${PATH_DWA}/agent.uninstall" ]; then
 			cd /tmp
@@ -30,10 +30,10 @@ if [ "@MOD_DWA@" == "uninstall" ]; then
 elif [ "@MOD_DWA@" == "monitor" ]; then
 	cd "${PATH_DWA}"
 	export DYLD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
-	"${PATH_DWA_RUNTIME}/dwagent" monitor.pyc
+	"${PATH_DWA_RUNTIME}/@EXE_NAME@" monitor.pyc
 elif [ "@MOD_DWA@" == "configure" ]; then
 	cd "${PATH_DWA}"
 	export DYLD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
-	"${PATH_DWA_RUNTIME}/dwagent" configure.pyc
+	"${PATH_DWA_RUNTIME}/@EXE_NAME@" configure.pyc
 fi
 exit 0

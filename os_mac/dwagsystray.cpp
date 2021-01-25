@@ -23,7 +23,8 @@ int main(int argc, char **argv) {
   
   strcpy(cmd_to_execute,"");
   strcat(cmd_to_execute, path_dwa);
-  strcat(cmd_to_execute, "/runtime/bin/dwagent");
+  strcat(cmd_to_execute, "/runtime/bin/");
+  strcat(cmd_to_execute, argv[2]);
   
   
   chdir(path_dwa);
