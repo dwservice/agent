@@ -2,6 +2,6 @@
 Encoding=UTF-8
 Type=Application
 Terminal=false
+Icon=@PATH_LOGOOS@
 Exec="@PATH_DWA@/native/systray"
-Icon=@PATH_DWA@/images/logo.png
-Name=DWAgent - Systray
+Name=@NAME@ - Systray

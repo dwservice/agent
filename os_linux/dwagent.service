@@ -1,5 +1,5 @@
 [Unit]
-Description=DWAgent
+Description=@NAME@
 After=syslog.target network.target
 
 [Service]

@@ -11,9 +11,9 @@ PATH_DWA_NATIVE="$PATH_DWA/native"
 cd "${PATH_DWA}"
 export LD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
 export PYTHONIOENCODING=utf-8
-"${PATH_DWA_RUNTIME}/dwagent" monitor.pyc $@
+"${PATH_DWA_RUNTIME}/@EXE_NAME@" monitor.pyc $@
 if [ ! $? -eq 0 ]; then
 	echo "Error starting gui, attempt to start console mode..."
-	"${PATH_DWA_RUNTIME}/dwagent" monitor.pyc info
+	"${PATH_DWA_RUNTIME}/@EXE_NAME@" monitor.pyc info
 fi
 exit 0
