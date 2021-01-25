@@ -38,7 +38,7 @@ def check_hw_string(s):
 
 def get_hw_name():
     sapp = platform.machine()
-    if is_linux() and len(sapp)>=3 and (sapp[0:3].lower()=="arm" or sapp[0:7].lower()=="aarch64"):
+    if is_linux() and ((len(sapp)>=3 and sapp[0:3].lower()=="arm") or (len(sapp)>=7 and sapp[0:7].lower()=="aarch64")):
         #VERIFICA SE RASPBERRY
         try:
             if utils.path_exists("/sys/firmware/devicetree/base/model"):
@@ -108,8 +108,10 @@ def get_native_suffix():
                                 #return "linux_armel"
                 except:
                     None
-            elif is_linux() and len(sapp)>=3 and sapp[0:7].lower()=="aarch64":
+            elif is_linux() and len(sapp)>=7 and sapp[0:7].lower()=="aarch64":
                 return "linux_arm64_v1"
+            elif is_windows() and sapp.upper()=="ARM64":
+                return "win_x86_32" 
     except:
         None
     if is_linux():
