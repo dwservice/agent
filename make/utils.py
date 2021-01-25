@@ -201,7 +201,7 @@ def compile_lib(mainconf):
         if "linker_flags" in cconf:
             lflgs=cconf["linker_flags"]
         cconf["cpp_compiler"]="g++ " + cflgs + " -DOS_WINDOWS %INCLUDE_PATH% -O3 -g3 -Wall -c -fmessage-length=0 -o \"%NAMEO%\" \"%NAMECPP%\""
-        cconf["linker"]="g++ " + lflgs + " %LIBRARY_PATH% -s -municode -shared -o %OUTNAME% %SRCFILES% %LIBRARIES%"
+        cconf["linker"]="g++ " + lflgs + " %LIBRARY_PATH% -s -municode -o %OUTNAME% %SRCFILES% %LIBRARIES%"
     elif is_linux():
         if not "linux" in mainconf:
             print "NO CONFIGURATION."
@@ -244,7 +244,7 @@ def compile_lib(mainconf):
     srcfiles=""
     dsrc = os.listdir(mainconf["pathsrc"])
     for f in dsrc:
-        if f.endswith(".cpp"):
+        if f.endswith(".cpp") or (is_mac() and (f.endswith(".m") or f.endswith(".mm"))):
             srcname=f
             scmd=cconf["cpp_compiler"]
             apprs=""

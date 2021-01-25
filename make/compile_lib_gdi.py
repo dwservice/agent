@@ -29,13 +29,12 @@ class Compile(compile_generic.Compile):
             conf["libraries"]=["X11", "Xpm"]
         elif osn=="mac":
             None
-            '''
             conf={}
             conf["outname"]="dwaggdi.dylib" 
             conf["cpp_include_paths"]=[] 
             conf["cpp_library_paths"]=conf["cpp_include_paths"]
-            conf["libraries"]=[] 
-            '''
+            conf["libraries"]=[]            
+            conf["linker_flags"]="-framework Cocoa -framework ApplicationServices -framework SystemConfiguration -framework IOKit"
         return conf
 
 if __name__ == "__main__":
