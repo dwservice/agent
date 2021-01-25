@@ -27,6 +27,8 @@ wstring pythonHome = L"";
 wstring pythonPath = L"";
 wstring parameters = L"";
 wstring workPath = L"";
+wstring iconPath = L"";
+wchar_t iconPathForLink[_MAX_PATH-1];
 
 
 void WINAPI ServiceMain(DWORD argc, LPWSTR *argv);
@@ -383,6 +385,10 @@ void loadProperties() {
 				stopFileName = L"dwagent.stop";
 			}
 
+			if (part1.compare(L"iconPath") == 0) {
+				iconPath = part2;
+			}
+
 			if (part1.compare(L"pythonPath") == 0) {
 				pythonPath = part2;
 			}
@@ -446,7 +452,7 @@ vector<wstring> split(const wstring& s, const wstring& delim, const bool keep_em
     return result;
 }
 
-void createLink(wchar_t* workPath,wchar_t* dstpath,wchar_t *iconame,wchar_t *command, wchar_t *label){
+void createLink(wchar_t* workPath,wchar_t* dstpath,wchar_t *command, wchar_t *label){
 	//Crea Directory
 	CoInitialize(NULL);
 	
@@ -471,22 +477,7 @@ void createLink(wchar_t* workPath,wchar_t* dstpath,wchar_t *iconame,wchar_t *com
 		wcscpy(szWorkPath, workPath);
 		wcscat(szWorkPath, L"\\native");
 		pShellLink->SetWorkingDirectory(szWorkPath);
-
-		wchar_t szIconPath[_MAX_PATH-1];
-		wcscpy(szIconPath, workPath);
-		wstring testpath;
-		testpath.append(workPath);
-		testpath.append(L"\\");
-		testpath.append(iconame);
-		testpath.append(L".ico");
-		if (existsFile(testpath)){
-			wcscat(szIconPath, L"\\");
-		}else{
-			wcscat(szIconPath, L"\\ui\\images\\");
-		}
-		wcscat(szIconPath, iconame);
-		wcscat(szIconPath, L".ico");
-		pShellLink->SetIconLocation(szIconPath,0);
+		pShellLink->SetIconLocation(iconPathForLink,0);
 
         hres = pShellLink->QueryInterface(FIX_IID_IPersistFile, reinterpret_cast<void**>(&pPersistFile));
 
@@ -520,16 +511,16 @@ bool installShortcuts(wchar_t* workPath){
 		wcscat(myDirectory,L"\\");
 		wcscat(myDirectory, towchar_t(serviceName));
 		CreateDirectoryW(myDirectory, NULL);
-		createLink(workPath,myDirectory, (wchar_t*)L"logo", (wchar_t*)L"monitor", towchar_t(serviceName));
+		createLink(workPath,myDirectory, (wchar_t*)L"monitor", towchar_t(serviceName));
 
 		//Crea link in Native
 		wchar_t appDirectory[_MAX_PATH-1];
 		wcscpy(appDirectory, workPath);
 		wcscat(appDirectory,L"\\");
 		wcscat(appDirectory, L"native");
-		createLink(workPath, appDirectory, (wchar_t*)L"logo", (wchar_t*)L"monitor", towchar_t(serviceName));
-		createLink(workPath, appDirectory, (wchar_t*)L"logo", (wchar_t*)L"configure", (wchar_t*)L"Configure");
-		createLink(workPath, appDirectory, (wchar_t*)L"logo", (wchar_t*)L"uninstall", (wchar_t*)L"Uninstall");
+		createLink(workPath, appDirectory, (wchar_t*)L"monitor", towchar_t(serviceName));
+		createLink(workPath, appDirectory, (wchar_t*)L"configure", (wchar_t*)L"Configure");
+		createLink(workPath, appDirectory, (wchar_t*)L"uninstall", (wchar_t*)L"Uninstall");
 	}
 	
 	//Crea la voce di registo per l'uninstaller
@@ -541,23 +532,8 @@ bool installShortcuts(wchar_t* workPath){
 
 		wchar_t* appdn = towchar_t(serviceName);
 		st = RegSetValueExW(regkey, L"DisplayName",0, REG_SZ, (BYTE *)appdn, wcslen(appdn)*2);
-
-		wchar_t iconph[_MAX_PATH-1];
-		wcscpy(iconph, workPath);
-		wstring testpath;
-		testpath.append(workPath);
-		testpath.append(L"\\");
-		testpath.append(L"logo.ico");
-		if (existsFile(testpath)){
-			wcscat(iconph, L"\\logo.ico");
-		}else{
-			wcscat(iconph, L"\\ui\\images\\logo.ico");
-		}
-		st = RegSetValueExW(regkey, L"DisplayIcon",0, REG_SZ, (BYTE *)iconph, wcslen(iconph)*2);
-
-
+		st = RegSetValueExW(regkey, L"DisplayIcon",0, REG_SZ, (BYTE *)iconPathForLink, wcslen(iconPathForLink)*2);
 		st = RegSetValueExW(regkey, L"InstallLocation",0, REG_SZ, (BYTE *)workPath, wcslen(workPath)*2);
-
 		wstring path=L"";
 		path.append(L"\"").append(workPath).append(L"\\native\\dwaglnc.exe\" uninstall");
 		wchar_t* appun = towchar_t(path);
@@ -630,7 +606,7 @@ bool installAutoRun(wchar_t* name, wchar_t* workPath){
 
 			wchar_t appDirectory[_MAX_PATH-1];
 			wcscpy(appDirectory, SpecialFolderPath);
-			createLink(workPath, appDirectory, (wchar_t*)L"logo", (wchar_t*)L"systray", towchar_t(serviceName));
+			createLink(workPath, appDirectory, (wchar_t*)L"systray", towchar_t(serviceName));
 		}
 	}
 	return true;
@@ -841,16 +817,22 @@ bool startRunOnFly(wchar_t* serviceName) {
 	return bret;
 }
 
+void setIconPathForLink(wchar_t* workPath){
+	if (iconPath.compare(L"") == 0) {
+		wcscpy(iconPathForLink, workPath);
+		wcscat(iconPathForLink, L"\\ui\\images\\logo.ico");
+	}else{
+		wcscpy(iconPathForLink, iconPath.c_str());
+	}
+}
+
 int wmain(int argc, wchar_t **argv) {
 	if (argc<2){
 		printf("ERROR: Unknown command");
 		return 0;
 	}
-
 	wstring command = wstring(argv[1]);
-
     workPath = getDWAgentPath();
-
     if ((command.compare(L"run") == 0) || (command.compare(L"runonfly") == 0)){
         logfile = workPath;
 		logfile.append(L"\\native\\service.log");
@@ -899,6 +881,7 @@ int wmain(int argc, wchar_t **argv) {
 				printf("ERROR");
 			}
 		} else if (command.compare(L"installShortcuts") == 0) {
+			setIconPathForLink(towchar_t(workPath));
 			if (installShortcuts(towchar_t(workPath))){
 				printf("OK");
 			}else{
@@ -911,6 +894,7 @@ int wmain(int argc, wchar_t **argv) {
 				printf("ERROR");
 			}
 		} else if (command.compare(L"installAutoRun") == 0) {
+			setIconPathForLink(towchar_t(workPath));
 			wstring monname;
 			monname.append(serviceName);
 			monname.append(L"Mon");
