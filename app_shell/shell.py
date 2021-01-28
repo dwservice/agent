@@ -137,7 +137,7 @@ class ShellManager(threading.Thread):
                     if prprequest["type"]==ShellManager.REQ_TYPE_INITIALIZE:
                         sid=prprequest["id"]
                         if agent.is_windows():
-                            shl = Windows(sid, prprequest["cols"], prprequest["rows"])
+                            shl = Windows(self, sid, prprequest["cols"], prprequest["rows"])
                         else:
                             shl = Linux(self, sid, prprequest["cols"], prprequest["rows"])
                         shl.initialize()
@@ -273,7 +273,7 @@ class ShellManager(threading.Thread):
 
 class Linux():
     
-    def __init__(self,mgr, sid, col, row):
+    def __init__(self, mgr, sid, col, row):
         self._manager=mgr
         self._id=sid
         self._cols=col
@@ -431,7 +431,8 @@ class Linux():
 
 class Windows():
 
-    def __init__(self, sid, col, row):
+    def __init__(self, mgr, sid, col, row):
+        self._manager=mgr
         self._id = sid
         self._col = col
         self._row = row
@@ -440,18 +441,25 @@ class Windows():
         self._cmd = "cmd.exe"
         self._pty = None
 
+    def _write_err(self,m):
+        self._manager._shlmain._agent_main.write_err("AppShell:: " + m)
+
+    def _write_debug(self,m):
+        self._manager._shlmain._agent_main.write_debug("AppShell:: " + m)
+
     def get_id(self):
         return self._id
 
     def initialize(self):
-        print('setting up ConPty')
-        self._pty = conpty.ConPty(self._cmd, self._col, self._row)
-        self._pty.start()
-        print('ConPty setup')
+        self._write_debug("setting up ConPty")
+        self._pty = conpty.ConPty(self._cmd, self._col, self._row, self._write_err)
+        self._pty.open()
+        self._write_debug("ConPty setup")        
 
     def terminate(self):
         self._bterm = True
         self._pty.close()
+        self._write_debug("ConPty closed")
 
     def is_terminate(self):
         return self._bterm
@@ -467,37 +475,7 @@ class Windows():
         return self._pty.read()
 
     def change_rows_cols(self, rows, cols):
-        pass
+        self._pty.resize(rows, cols)
 
     
 
-'''   
-if __name__ == "__main__":
-    #a = os.popen('chcp')
-    #chcp = a.read()
-    #a.close()
-    #chcp="cp" + chcp.split(":")[1].strip()
-    
-    p = subprocess.Popen("powershell", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=False)
-    
-    #f = codecs.open(p.stdout, 'r', chcp)
-    
-    #p.stdin.write("$OutputEncoding = New-Object -typename System.Text.UTF8Encoding\n")
-    
-    p.stdin.write(u"top@à\n\r".encode('unicode_escape'))
-    #import io
-    #reader = io.TextIOWrapper(p.stdout, encoding=chcp)
-    while True:
-        ln=p.stdout.read(1)
-        print ln
-        if ln is None:
-            break
-    
-    ln=p.stdout.readline()
-    
-    #(po, pe) = p.communicate()
-    #p.wait()
-    #print po
-    #print pe
-    
-'''  

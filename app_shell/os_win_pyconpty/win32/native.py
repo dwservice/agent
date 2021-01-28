@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+
+'''
+This Source Code Form is subject to the terms of the Mozilla
+Public License, v. 2.0. If a copy of the MPL was not distributed
+with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+'''
 from ctypes import Structure, POINTER, windll, c_void_p, c_char_p, c_size_t, HRESULT, WinError, wintypes
 from ctypes.wintypes import *
 
@@ -301,6 +308,16 @@ WriteFile.argtypes = (
 CreatePseudoConsole = windll.kernel32.CreatePseudoConsole
 CreatePseudoConsole.argtype = [COORD, HANDLE, HANDLE, DWORD, POINTER(HPCON)]
 CreatePseudoConsole.restype = HRESULT
+
+
+# HRESULT WINAPI ResizePseudoConsole(
+#     _In_ HANDLE phPC,
+#     _In_ COORD size,
+# );
+ResizePseudoConsole = windll.kernel32.ResizePseudoConsole
+ResizePseudoConsole.argtype = [HANDLE, COORD]
+ResizePseudoConsole.restype = HRESULT
+
 
 # void WINAPI ClosePseudoConsole(
 #     _In_ HPCON hPC
