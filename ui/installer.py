@@ -30,8 +30,8 @@ import traceback
 
 
 _MAIN_URL = "https://www.dwservice.net/"
-_MAIN_URL_QA = "https://qa.dwservice.net:7742/"
-_MAIN_URL_SVIL = "https://svil.dwservice.net:7732/dws_site/"
+_MAIN_URL_QA = "https://qa.dwservice.net/"
+_MAIN_URL_DEV = "https://dev.dwservice.net/dws_site/"
 _NATIVE_PATH = u'native'
 _RUNTIME_PATH = u'runtime'
 
@@ -1077,8 +1077,8 @@ class Install:
             return self._main_url
         elif self._ambient=="QA":
             return _MAIN_URL_QA
-        elif self._ambient=="SVIL":
-            return _MAIN_URL_SVIL
+        elif self._ambient=="DEV":
+            return _MAIN_URL_DEV
         return _MAIN_URL
 
     def _uinterface_action(self,e):
@@ -1297,9 +1297,9 @@ class Install:
 
     def step_check_install_path(self, curui):
         pth = self._install_path.get()
-        if pth.startswith("#SVIL#"):
-            self._ambient="SVIL"
-            pth=pth[6:]
+        if pth.startswith("#DEV#"):
+            self._ambient="DEV"
+            pth=pth[5:]
             self._install_path.set(pth)
         elif pth.startswith("#QA#"):
             self._ambient="QA"
@@ -2257,8 +2257,8 @@ class Install:
             
     
     def step_install(self, curui):
-        if utils.path_exists(self._current_path + utils.path_sep + "ambient.svil"):
-            self._ambient="SVIL"
+        if utils.path_exists(self._current_path + utils.path_sep + "ambient.dev"):
+            self._ambient="DEV"
         elif utils.path_exists(self._current_path + utils.path_sep + "ambient.qa"):
             self._ambient="QA"
             

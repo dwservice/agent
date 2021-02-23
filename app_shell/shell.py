@@ -177,7 +177,7 @@ class ShellManager(threading.Thread):
     def run(self):
         self._timeout_cnt=0;
         self._last_timeout=long(time.time() * 1000)
-        try:
+        try:            
             self._semaphore.acquire()
             try:
                 bwait=False
@@ -234,7 +234,7 @@ class ShellManager(threading.Thread):
                 self._semaphore.release()
         except Exception as e:
             self.terminate()
-            self._shlmain._agent_main.write_except(e,"AppShell:: shell manager error " + self._id + ":")
+            self._shlmain._agent_main.write_except(e,"AppShell:: shell manager error " + self._id + ":")        
         self._destroy();
     
     def _on_close(self):
@@ -374,7 +374,11 @@ class Linux():
         
         self._reader = io.open(pio, 'rb', closefd=False)
         self._writer = io.open(pio, 'wt', encoding="UTF-8", closefd=False)
- 
+                
+        try:
+            self._manager._cinfo.inc_activities_value("shellSession")
+        except:
+            None
 
     def _processIsAlive(self):
         try:
@@ -385,6 +389,10 @@ class Linux():
             return False
         
     def terminate(self):
+        try:
+            self._manager._cinfo.dec_activities_value("shellSession")
+        except:
+            None
         self._bterm=True
         self._reader.close()
         self._writer.close()
@@ -393,7 +401,7 @@ class Linux():
             time.sleep(0.5)
         if self._processIsAlive():
             os.kill(self.ppid, signal.SIGKILL)
-            os.waitpid(self.ppid, 0)                
+            os.waitpid(self.ppid, 0)
         
     def is_terminate(self):
         if not self._processIsAlive():
@@ -454,9 +462,17 @@ class Windows():
         self._write_debug("setting up ConPty")
         self._pty = conpty.ConPty(self._cmd, self._col, self._row, self._write_err)
         self._pty.open()
-        self._write_debug("ConPty setup")        
+        self._write_debug("ConPty setup")
+        try:
+            self._manager._cinfo.inc_activities_value("shellSession")
+        except:
+            None        
 
     def terminate(self):
+        try:
+            self._manager._cinfo.dec_activities_value("shellSession")
+        except:
+            None
         self._bterm = True
         self._pty.close()
         self._write_debug("ConPty closed")

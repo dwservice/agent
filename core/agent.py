@@ -241,7 +241,7 @@ class Agent():
         self._config_semaphore = threading.Condition()
         self._osmodule = load_osmodule()
         self._svcpid=None
-        
+                
         #Inizializza il path delle shared mem
         sharedmem.init_path()
     
@@ -414,17 +414,21 @@ class Agent():
         finally:
             self._connections_semaphore.release()
     
-    def get_active_session_count(self, ckint=30):
-        cnt=0;
+    def get_active_sessions_status(self, ckint=30):
+        ar = []
         self._connections_semaphore.acquire()
         try:
             tm = time.time()
             for sid in self._sessions.keys():
-                if tm-self._sessions[sid].get_last_activity_time()<=ckint:
-                    cnt+=1
+                sesitm = self._sessions[sid]
+                if tm-sesitm.get_last_activity_time()<=ckint:
+                    itm={}
+                    itm["idsession"] = sesitm.get_idsession()
+                    itm["activities"] = sesitm.get_activities()
+                    ar.append(itm)
         finally:
             self._connections_semaphore.release()
-        return cnt
+        return ar
     
     def _load_config(self):
         #self.write_info("load configuration...")
@@ -2246,12 +2250,34 @@ class Session(Message):
         self._bclose = False
         self._idsession= idses
         self._permissions = perms
+        self._activities = {}
+        self._activities["screenCapture"] = False
+        self._activities["shellSession"] = False
+        self._activities["downloads"] = 0
+        self._activities["uploads"] = 0
 
     def get_idsession(self):
         return self._idsession
     
     def get_permissions(self):
         return self._permissions
+    
+    def inc_activities_value(self, k):
+        self._agent._connections_semaphore.acquire()
+        try:
+            self._activities[k]+=1
+        finally:
+            self._agent._connections_semaphore.release()
+    
+    def dec_activities_value(self, k):
+        self._agent._connections_semaphore.acquire()
+        try:
+            self._activities[k]-=1
+        finally:
+            self._agent._connections_semaphore.release()
+    
+    def get_activities(self):
+        return self._activities
         
     def _fire_msg(self,msg):
         try:
@@ -2768,7 +2794,7 @@ class Download():
         self._calcbps=communication.BandwidthCalculator()        
         self._bclose = False
         self._status="T"
-        self._baccept=True
+        self._baccept=True        
         self._agent._task_pool.execute(self.run)
     
     def is_accept(self):
@@ -2796,6 +2822,7 @@ class Download():
         return self._status   
     
     def run(self):
+        self._parent.inc_activities_value("downloads")
         fl=None
         try:
             fl = utils.file_open(self._path, 'rb')
@@ -2819,6 +2846,7 @@ class Download():
         if self._conn is not None:
             self._conn.close()
             self._conn = None
+        self._parent.dec_activities_value("downloads")        
     
     def is_close(self):
         self._semaphore.acquire()
@@ -2840,7 +2868,7 @@ class Download():
         finally:
             self._semaphore.release()
     
-    def close(self):
+    def close(self):        
         self._semaphore.acquire()
         try:
             if not self._bclose:
@@ -2891,6 +2919,7 @@ class Upload():
         except Exception as e:
             self._remove_temp_file()
             raise e
+        self._parent.inc_activities_value("uploads")
         
     def _remove_temp_file(self):
         try:
@@ -2975,34 +3004,43 @@ class Upload():
         return ret
         
     def _on_close_conn(self):
-        if not self._bclose:
-            self._semaphore.acquire()
-            try:
+        bclose = False
+        self._semaphore.acquire()
+        try:
+            if not self._bclose:
                 #print "UPLOAD - ONCLOSE"
-                self._bclose=True
+                bclose = True
+                self._bclose=True                
                 self._remove_temp_file()
                 if not self._enddatafile:
                     self._status = "E"
-            finally:
-                self._semaphore.release()
+        finally:
+            self._semaphore.release()
+        if bclose is True:
+            self._parent.dec_activities_value("uploads")
             if self._conn is not None:
                 self._conn.close()
                 self._conn = None
+                
+            
     
     def close(self):
-        if not self._bclose:
-            #print "UPLOAD - CLOSE"
-            self._semaphore.acquire()
-            try:
+        bclose = False
+        self._semaphore.acquire()
+        try:
+            if not self._bclose:
+                #print "UPLOAD - CLOSE"
+                bclose = True
                 self._bclose=True
                 self._remove_temp_file()
                 self._status  = "C"
-            finally:
-                self._semaphore.release()
+        finally:
+            self._semaphore.release()
+        if bclose is True:
+            self._parent.dec_activities_value("uploads")
             if self._conn is not None:
                 self._conn.close()
                 self._conn = None
-
 
 main = None
 

@@ -351,7 +351,6 @@ DWAImage* getImageByID(int wid){
 	return NULL;
 }
 
-
 @interface GView : NSView <NSWindowDelegate> {
 	int wid;
 	int h;
@@ -699,8 +698,9 @@ extern "C" void DWAGDIDrawImage(int wid, int imgid, int x, int y){
 }
 
 extern "C" void DWAGDINewWindow(int wid, int tp,int x, int y, int w, int h, wchar_t* iconPath){
-	NSRect e = [[NSScreen mainScreen] frame];
-	NSRect frame = NSMakeRect(x, e.size.height-h-y+50, w, h);  //50 centra meglio
+	NSRect sr = [[NSScreen mainScreen] frame];
+	NSRect svr = [[NSScreen mainScreen] visibleFrame];
+	NSRect frame = NSMakeRect(x, svr.size.height-y+(sr.size.height-svr.size.height)-y, w, h);
 
 	int sm=NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask;
 	if (tp==WINDOW_TYPE_TOOL){
@@ -717,12 +717,43 @@ extern "C" void DWAGDINewWindow(int wid, int tp,int x, int y, int w, int h, wcha
 					backing:NSBackingStoreBuffered
 					  defer:false];
 
+	if (tp==WINDOW_TYPE_POPUP){
+		[window setLevel: NSPopUpMenuWindowLevel];
+	}
+
 	DWAWindow* ww=addWindow(window, wid);
 	[ww setX:x];
 	[ww setY:y];
 	[ww setW:w];
 	[ww setH:h];
 }
+
+extern "C" void DWAGDIPosSizeWindow(int wid,int x, int y, int w, int h){
+	DWAWindow* dwa = getWindowByID(wid);
+	if (dwa!=NULL){
+		NSWindow *window = [dwa win];
+		NSRect sr = [[NSScreen mainScreen] frame];
+		NSRect svr = [[NSScreen mainScreen] visibleFrame];
+		NSPoint pos;
+		pos.x = x;
+		pos.y = svr.size.height-h+(sr.size.height-svr.size.height)-y;
+		[window setFrameOrigin:pos];
+		NSSize sz;
+		sz.width=w;
+		sz.height=h;
+		[window setContentSize:sz];
+		[dwa setX:x];
+		[dwa setY:y];
+		[dwa setW:w];
+		[dwa setH:h];
+		if (dwa.boolInit){
+			GView *view = [window contentView];
+			[view setW:w];
+			[view setH:h];
+		}
+	}
+}
+
 
 extern "C" void DWAGDIDestroyWindow(int wid){
 	DWAWindow* dwa = getWindowByID(wid);

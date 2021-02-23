@@ -36,6 +36,7 @@ extern "C"{
 	void DWAGDIDrawText(int id, int fntid, wchar_t* str, int x, int y);
 	void DWAGDINewWindow(int id,int tp,int x, int y, int w, int h, wchar_t* iconPath);
 	void DWAGDIDestroyWindow(int id);
+	void DWAGDIPosSizeWindow(int id,int x, int y, int w, int h);
 	void DWAGDISetTitle(int id, wchar_t* title);
 	void DWAGDIShow(int id,int mode);
 	void DWAGDIHide(int id);

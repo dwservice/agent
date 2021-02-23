@@ -20,7 +20,7 @@ class Compile(compile_generic.Compile):
             conf["cpp_include_paths"]=[] 
             conf["cpp_library_paths"]=conf["cpp_include_paths"]
             conf["libraries"]=["gdi32", "shell32", "user32", "userenv"]
-            conf["linker_flags"]="-static-libgcc -static-libstdc++"
+            conf["linker_flags"]="-static-libgcc -static-libstdc++ -shared"
         elif osn=="linux":
             conf={}
             conf["outname"]="dwaggdi.so" 
@@ -39,6 +39,7 @@ class Compile(compile_generic.Compile):
 
 if __name__ == "__main__":
     m = Compile()
+    #m.set_32bit()
     m.run()
     
     

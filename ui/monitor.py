@@ -18,14 +18,13 @@ import time
 import images
 import os
 
+_WIDTH=550
+_HEIGHT=300
 
-_WIDTH=440
-_HEIGHT=180
-#_HEIGHT_BOTTOM=45
-#_CONTENT_HEIGHT=_HEIGHT-_HEIGHT_BOTTOM
 _WIDTH_RIGHT=140
 _CONTENT_WIDTH=_WIDTH-_WIDTH_RIGHT
-_HEIGHT_STATUS=30
+_HEIGHT_STATUS_BAR=28
+_HEIGHT_STATUS=60
 
 MENU_SHOW = 1
 MENU_HIDE = 2
@@ -59,6 +58,95 @@ def get_user_dir():
     except:
         return utils.path_expanduser("~")
 
+
+class NotifyActivities():
+    def __init__(self, prt):
+        self._parent=prt
+        self._list=[u"screencapture",u"shell",u"transfers"]
+        self._sessions=False
+        self._cmps={}
+        self._visible_cmps={}
+        self._screen_w=0
+        self._screen_h=0                
+        self._dlg_w=25        
+        self._dlg = gdi.Window(gdi.WINDOW_TYPE_POPUP)
+        self._dlg.set_background("ffaa33")
+        self._pnl = gdi.Panel()
+        self._pnl.set_position(1, 1)      
+        self._pnl.set_size(self._dlg_w, 24)  
+        self._pnl.set_background("313536")
+        self._dlg.add_component(self._pnl)
+        implogo = gdi.ImagePanel()
+        implogo.set_position(4, 4)
+        implogo.set_filename(images.get_image(u"logo16x16.bmp"))
+        self._pnl.add_component(implogo)
+        
+        for k in self._list:
+            self._visible_cmps[k]=False
+            self._cmps[k] = gdi.ImagePanel()        
+            self._cmps[k].set_filename(images.get_image(u"activities_" + k + u".bmp"))
+            self._dlg.add_component(self._cmps[k])
+        
+        self._sessions_last_update=self._sessions
+        self._visible_cmps_last_update=self._visible_cmps.copy()
+        self._dlg.set_action(self.on_action)        
+            
+    def set_sessions(self, b):
+        self._sessions=b
+        
+    def set_visible(self, k, b):        
+        self._visible_cmps[k]=b
+        
+    def on_action(self,e):
+        if e["action"]=="CLICK":
+            self._parent._app.show()
+            self._parent._app.to_front()
+    
+    def update(self):
+        bok=False
+        if self._sessions_last_update != self._sessions:
+            bok=True
+        else:
+            for k in self._list:
+                if self._visible_cmps_last_update[k] != self._visible_cmps[k]:
+                    bok=True
+        ar = gdi.get_screen_size()
+        if self._screen_w!=ar["width"] or self._screen_h!=ar["height"]:
+            self._screen_w=ar["width"]
+            self._screen_h=ar["height"]
+            bok=True 
+        if bok:
+            if self._sessions:
+                self._dlg_h=28
+                for k in self._list:
+                    if self._visible_cmps[k]:
+                        self._cmps[k].set_position(5, self._dlg_h)
+                        self._cmps[k].set_visible(True)
+                        self._dlg_h+=20                        
+                    else:
+                        self._cmps[k].set_visible(False)
+                if self._dlg_h==28:
+                    self._dlg_h=26
+                
+                ygap=100
+                if is_mac():
+                    ygap=140
+                self._dlg.set_position(self._screen_w-self._dlg_w,self._screen_h-self._dlg_h-ygap)
+                self._dlg.set_size(self._dlg_w, self._dlg_h)
+                self._dlg.show()                
+            else: 
+                self._dlg.hide()
+                for k in self._list:
+                    self._visible_cmps[k]=False
+            self._sessions_last_update=self._sessions
+            self._visible_cmps_last_update=self._visible_cmps.copy()
+    
+    def destroy(self):
+        try:
+            if self._dlg is not None:
+                self._dlg.destroy()
+        except:
+            None
        
 class Main():
     
@@ -66,6 +154,8 @@ class Main():
         self._name=u"DWAgent"
         self._logo=None
         self._properties={}
+        self._config_base_path=None
+        self._notifyActivities=None
         try:
             f = utils.file_open('config.json')
             self._properties = json.loads(f.read())
@@ -74,7 +164,7 @@ class Main():
             None
         if 'name' in self._properties:
             self._name=unicode(self._properties["name"])
-        applg = gdi._get_logo_from_conf(self._properties,u"ui" + utils.path_sep + u"images" + utils.path_sep + u"custom" + utils.path_sep)
+        applg = gdi._get_logo_from_conf(self._properties, u"ui" + utils.path_sep + u"images" + utils.path_sep + u"custom" + utils.path_sep)
         if applg != "":
             self._logo=applg        
     
@@ -92,6 +182,9 @@ class Main():
     @staticmethod
     def set_instance(i):
         Main._instance_monitor=i
+    
+    def _set_config_base_path(self, pth):
+        self._config_base_path=pth
     
     def lock(self):
         self._homedir = get_user_dir() + utils.path_sep + u"." + self._name.lower()
@@ -158,33 +251,74 @@ class Main():
     
     def get_ico_file(self, name):
         return images.get_image(name + ".bmp")
-       
+    
+    def get_activities(self, csts):
+        ar = {}
+        ar["sessions"]=len(csts)
+        ar["screenCapture"]=0
+        ar["shellSession"]=0
+        ar["downloads"]=0
+        ar["uploads"]=0
+        for itm in csts:
+            actvs = itm["activities"]
+            if actvs["screenCapture"]>0:
+                ar["screenCapture"]+=actvs["screenCapture"]
+            if actvs["shellSession"]>0:
+                ar["shellSession"]+=actvs["shellSession"]
+            if actvs["downloads"] > 0:
+                ar["downloads"]+=actvs["downloads"]
+            if actvs["uploads"] > 0:
+                ar["uploads"]+=actvs["uploads"]            
+        return ar
+    
     def get_info(self):
-        ret={"state": "-1","connections":"0"}
+        ret={"state": "-1","sessions_status":[]}
         self._semaphore.acquire()
         try:
-            if self._sharedmemclient==None or self._sharedmemclient.is_close():
-                self._sharedmemclient=listener.SharedMemClient()
+            if self._sharedmemclient==None or self._sharedmemclient.is_close():                
+                self._sharedmemclient=listener.SharedMemClient(path=self._config_base_path)
                 self._status_cnt=-1
 
             cnt=long(self._sharedmemclient.get_property("counter"))
             if self._status_cnt!=cnt:
-                self._status_cnt=cnt
-                ret["state"] = self._sharedmemclient.get_property("state")
-                try:
-                    ret["connections"] = self._sharedmemclient.get_property("connections")
-                except:
-                    None
-                try:
-                    ret["group"] = self._sharedmemclient.get_property("group").decode("unicode-escape")
-                except:
-                    None
-                try:
-                    ret["name"] = self._sharedmemclient.get_property("name").decode("unicode-escape")
-                except:
-                    None
-                return ret;
+                if self._status_cnt==-1: #SKIP FIRST READ
+                    self._status_cnt=cnt
+                    return ret;
+                else:
+                    self._status_cnt=cnt                
+                    ret["state"] = self._sharedmemclient.get_property("state")
+                    try:
+                        ret["group"] = self._sharedmemclient.get_property("group").decode("unicode-escape")
+                    except:
+                        None
+                    try:
+                        ret["name"] = self._sharedmemclient.get_property("name").decode("unicode-escape")
+                    except:
+                        None
+                    try:
+                        if ret["state"]=='1':
+                            csts = json.loads(self._sharedmemclient.get_property("sessions_status"))
+                        else:
+                            csts = []
+                        ret["sessions_status"] = csts
+                        if self._notifications_enabled:                            
+                            if self._notifyActivities is None:
+                                self._notifyActivities=NotifyActivities(self)                            
+                            appar = self.get_activities(csts)
+                            self._notifyActivities.set_sessions(appar["sessions"])
+                            self._notifyActivities.set_visible("screencapture", appar["screenCapture"]>0)
+                            self._notifyActivities.set_visible("shell", appar["shellSession"]>0)
+                            self._notifyActivities.set_visible("transfers", (appar["downloads"]+appar["uploads"])>0)
+                            self._notifyActivities.update()                            
+                    except:
+                        None
+                    return ret;
             else:
+                if self._notifications_enabled:
+                    if self._notifyActivities is not None:                        
+                        self._notifyActivities.set_sessions(False)
+                        self._notifyActivities.update()
+                        
                 return ret
         except Exception as e:
             print str(e)
@@ -194,10 +328,14 @@ class Main():
             
     def check_events(self):
         if self.check_stop():
+            if self._notifyActivities is not None:
+                self._notifyActivities.destroy()
             self._app.destroy()
             return
         if self.check_update():
             self._update=True
+            if self._notifyActivities is not None:
+                self._notifyActivities.destroy()
             self._app.destroy()
             return
         if self.check_show():
@@ -243,9 +381,19 @@ class Main():
             bground=COLOR_NOSERVICE
             self.icofile="monitor_warning"
         
-        if newst != self._cur_status or appar["connections"] != self._cur_connections:
+        curact = self.get_activities(appar["sessions_status"])
+        bchgact=False
+        if self._cur_activities is None:
+            bchgact=True
+        else:
+            for k in curact:
+                if curact[k]!=self._cur_activities[k]:
+                    bchgact=True
+                    break;
+        if newst != self._cur_status or bchgact is True:
             self._cur_status=newst 
-            self._cur_connections=appar["connections"]
+            self._cur_activities=curact
+            self._reload_activities=False
             self.update_systray(self.icofile, self.msgst)
             self._img_status_top.set_background_gradient(bground,"ffffff",gdi.GRADIENT_DIRECTION_TOPBOTTOM)
             self._img_status_bottom.set_background_gradient(bground,"ffffff",gdi.GRADIENT_DIRECTION_BOTTONTOP)
@@ -261,14 +409,40 @@ class Main():
                 bexline=True            
             if bexline is True:
                 apptx.append(u"\n")
-            apptx.append(self._get_message("monitorStatus"))
-            apptx.append(u": ")
             apptx.append(self.msgst)
-            apptx.append(u"\n")
-            apptx.append(self._get_message("monitorConnections"))
-            apptx.append(u": ")
-            apptx.append(self._cur_connections)
             self._lbl_status.set_text(u"".join(apptx))
+                        
+            
+            if curact["sessions"]==0:
+                self._lbl_notificationsn.set_visible(True)
+                self._lbl_notificationsl.set_text("")
+                self._lbl_notificationsr.set_text("")
+            else:
+                apptxl=""
+                apptxr=""
+                apptxl+=self._get_message('monitorSession') + ":"
+                apptxr+=self._get_message('monitorActive').format(str(curact["sessions"]))
+                                
+                if curact["screenCapture"]>0:
+                    apptxl+="\n" + self._get_message('monitorScreenCapture') + ":"
+                    apptxr+="\n" + self._get_message('monitorActive').format(str(curact["screenCapture"]))
+                
+                if curact["shellSession"]>0:
+                    apptxl+="\n" + self._get_message('monitorShellSession') + ":"
+                    apptxr+="\n" + self._get_message('monitorActive').format(str(curact["shellSession"]))
+                
+                if curact["downloads"]>0:
+                    apptxl+="\n" + self._get_message('monitorDownload') + ":"
+                    apptxr+="\n" + self._get_message('monitorActive').format(str(curact["downloads"]))
+                
+                if curact["uploads"]>0:
+                    apptxl+="\n" + self._get_message('monitorUpload') + ":"
+                    apptxr+="\n" + self._get_message('monitorActive').format(str(curact["uploads"]))
+                
+                self._lbl_notificationsn.set_visible(False)
+                self._lbl_notificationsl.set_text(apptxl)
+                self._lbl_notificationsr.set_text(apptxr)
+            
             self._btconfig.set_enable(stateBtnEnDis)
             self._btends.set_text(self._get_message(msgBtnEnDis))
             self._btends.set_enable(stateBtnEnDis)
@@ -375,27 +549,29 @@ class Main():
                 dlg.show();
     
     def enable_disable(self, e):
-        msg=self._get_message('monitorDisableAgentQuestion')
-        if self._cur_status=="DISABLE":
-            msg=self._get_message('monitorEnableAgentQuestion')
-        
-        dlg = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_YESNO,gdi.DIALOGMESSAGE_LEVEL_INFO,self._app)
-        dlg.set_title(self._get_message('monitorTitle'))
-        dlg.set_message(msg)
-        dlg.set_action(self._enable_disable_action)
-        dlg.show();
+        if e["action"]=="PERFORMED":
+            msg=self._get_message('monitorDisableAgentQuestion')
+            if self._cur_status=="DISABLE":
+                msg=self._get_message('monitorEnableAgentQuestion')
+            
+            dlg = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_YESNO,gdi.DIALOGMESSAGE_LEVEL_INFO,self._app)
+            dlg.set_title(self._get_message('monitorTitle'))
+            dlg.set_message(msg)
+            dlg.set_action(self._enable_disable_action)
+            dlg.show();
     
     def configure(self, e):
-        if is_windows():
-            subprocess.call(["native" + utils.path_sep + "dwaglnc.exe" , "configure"]) 
-        elif is_linux():
-            self._runproc(["native" + utils.path_sep + "configure"])
-        elif is_mac():
-            #KEEP FOR COMPATIBILITY
-            if utils.path_exists("native/Configure.app/Contents/MacOS/Configure"):
-                self._runproc(["native/Configure.app/Contents/MacOS/Configure"])
-            else:
-                self._runproc(["native/Configure.app/Contents/MacOS/Run"])
+        if e["action"]=="PERFORMED":
+            if is_windows():
+                subprocess.call(["native" + utils.path_sep + "dwaglnc.exe" , "configure"]) 
+            elif is_linux():
+                self._runproc(["native" + utils.path_sep + "configure"])
+            elif is_mac():
+                #KEEP FOR COMPATIBILITY
+                if utils.path_exists("native/Configure.app/Contents/MacOS/Configure"):
+                    self._runproc(["native/Configure.app/Contents/MacOS/Configure"])
+                else:
+                    self._runproc(["native/Configure.app/Contents/MacOS/Run"])
             
             
     def run_update(self):
@@ -408,28 +584,29 @@ class Main():
             None            
     
     def unistall(self, e):
-        if is_windows():
-            subprocess.call(["native" + utils.path_sep + "dwaglnc.exe" , "uninstall"]) 
-        elif is_linux():
-            sucmd=None
-            if self._which("gksu"):
-                sucmd="gksu"
-            elif self._which("kdesu"):
-                sucmd="kdesu"
-            if sucmd is not None:
-                osenv = os.environ
-                libenv = {}
-                for k in osenv:
-                    if k!="LD_LIBRARY_PATH":
-                        libenv[k]=osenv[k]
-                subprocess.Popen([sucmd , utils.path_absname("native" + utils.path_sep + "uninstall")],env=libenv)
-            else:
-                dlg = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_OK,gdi.DIALOGMESSAGE_LEVEL_ERROR,self._app)
-                dlg.set_title(self._get_message('monitorTitle'))
-                dlg.set_message(self._get_message('monitorUninstallNotRun'))
-                dlg.show();
-        elif is_mac():
-            self._runproc(["open", "-a", os.path.abspath("native/Uninstall.app")])
+        if e["action"]=="PERFORMED":
+            if is_windows():
+                subprocess.call(["native" + utils.path_sep + "dwaglnc.exe" , "uninstall"]) 
+            elif is_linux():
+                sucmd=None
+                if self._which("gksu"):
+                    sucmd="gksu"
+                elif self._which("kdesu"):
+                    sucmd="kdesu"
+                if sucmd is not None:
+                    osenv = os.environ
+                    libenv = {}
+                    for k in osenv:
+                        if k!="LD_LIBRARY_PATH":
+                            libenv[k]=osenv[k]
+                    subprocess.Popen([sucmd , utils.path_absname("native" + utils.path_sep + "uninstall")],env=libenv)
+                else:
+                    dlg = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_OK,gdi.DIALOGMESSAGE_LEVEL_ERROR,self._app)
+                    dlg.set_title(self._get_message('monitorTitle'))
+                    dlg.set_message(self._get_message('monitorUninstallNotRun'))
+                    dlg.show();
+            elif is_mac():
+                self._runproc(["open", "-a", os.path.abspath("native/Uninstall.app")])
                   
     
     def _runproc(self, ar, ev=None):
@@ -461,7 +638,7 @@ class Main():
         else:
             msgst=self._get_message('monitorStatusNoService')
         print("Status: " + msgst)
-        print("Connections: " + appar["connections"])    
+        print("Sessions: " + str(len(appar["sessions_status"])))    
     
     def _actions_systray(self,e):
         if e["action"]=="show":
@@ -478,6 +655,8 @@ class Main():
     
     def _window_action(self,e):
         if e["action"]==u"ONCLOSE":
+            if self._notifyActivities is not None:
+                self._notifyActivities.destroy()
             if self._monitor_tray_icon:
                 e["source"].hide()
                 e["cancel"]=True        
@@ -522,7 +701,7 @@ class Main():
     
     def prepare_window(self):
         self._cur_status="NOSERVICE"
-        self._cur_connections=0
+        self._cur_activities=None
         #msgst=self._get_message('monitorStatusNoService')
         
         
@@ -531,28 +710,65 @@ class Main():
         self._app.set_size(_WIDTH, _HEIGHT)
         self._app.set_show_position(gdi.WINDOW_POSITION_CENTER_SCREEN)
         self._app.set_action(self._window_action)
+                
         
         self._img_status_top = gdi.Panel()
         self._img_status_top.set_position(0, 0)
-        self._img_status_top.set_size(_CONTENT_WIDTH, _HEIGHT_STATUS)
+        self._img_status_top.set_size(_CONTENT_WIDTH, _HEIGHT_STATUS_BAR)
         self._img_status_top.set_background_gradient("ffffff", "ffffff", gdi.GRADIENT_DIRECTION_TOPBOTTOM)
         self._app.add_component(self._img_status_top)
         
+        
+        self._lbl_status = gdi.Label()
+        self._lbl_status.set_background("ffffff")
+        self._lbl_status.set_opaque(True)
+        self._lbl_status.set_text_align(gdi.TEXT_ALIGN_CENTERMIDDLE)
+        self._lbl_status.set_text(self._get_message('waiting'))
+        self._lbl_status.set_position(0, _HEIGHT_STATUS_BAR)
+        #self._lbl_status.set_size(_CONTENT_WIDTH,int((_HEIGHT-(2*_HEIGHT_STATUS_BAR))/2.8))
+        self._lbl_status.set_size(_CONTENT_WIDTH,_HEIGHT_STATUS)        
+        self._app.add_component(self._lbl_status)
+        
         self._img_status_bottom = gdi.Panel()
-        self._img_status_bottom.set_position(0, _HEIGHT-_HEIGHT_STATUS)
-        self._img_status_bottom.set_size(_CONTENT_WIDTH,_HEIGHT_STATUS)
+        self._img_status_bottom.set_position(0, self._lbl_status.get_y() + self._lbl_status.get_height())
+        self._img_status_bottom.set_size(_CONTENT_WIDTH,_HEIGHT_STATUS_BAR)
         self._img_status_bottom.set_background_gradient("ffffff", "ffffff", gdi.GRADIENT_DIRECTION_BOTTONTOP)
         self._app.add_component(self._img_status_bottom)
         
+        self._lbl_notificationst = gdi.Label()
+        self._lbl_notificationst.set_background("d9d9d9")
+        self._lbl_notificationst.set_opaque(True)
+        self._lbl_notificationst.set_text_align(gdi.TEXT_ALIGN_CENTERMIDDLE)
+        self._lbl_notificationst.set_text(self._get_message('monitorCurrentActivities'))
+        self._lbl_notificationst.set_position(0, self._img_status_bottom.get_y() + self._img_status_bottom.get_height())
+        self._lbl_notificationst.set_size(_CONTENT_WIDTH,25)
+        self._app.add_component(self._lbl_notificationst)
         
-        self._lbl_status = gdi.Label()
-        self._lbl_status.set_text_align(gdi.TEXT_ALIGN_CENTERMIDDLE)
-        self._lbl_status.set_text(self._get_message('waiting'))
-        self._lbl_status.set_position(0, _HEIGHT_STATUS)
-        self._lbl_status.set_size(_CONTENT_WIDTH,_HEIGHT-(2*_HEIGHT_STATUS))
-        self._app.add_component(self._lbl_status)
+        self._lbl_notificationsl = gdi.Label()
+        self._lbl_notificationsl.set_background("ffffff")
+        self._lbl_notificationsl.set_opaque(True)
+        self._lbl_notificationsl.set_text_align(gdi.TEXT_ALIGN_RIGHTMIDDLE)
+        self._lbl_notificationsl.set_position(0, self._lbl_notificationst.get_y() + self._lbl_notificationst.get_height())
+        self._lbl_notificationsl.set_size(int(_CONTENT_WIDTH/2),_HEIGHT-(self._lbl_notificationst.get_y() + self._lbl_notificationst.get_height()))
+        self._app.add_component(self._lbl_notificationsl)
         
+        self._lbl_notificationsr = gdi.Label()
+        self._lbl_notificationsr.set_background("ffffff")
+        self._lbl_notificationsr.set_opaque(True)
+        self._lbl_notificationsr.set_text_align(gdi.TEXT_ALIGN_LEFTMIDDLE)
+        self._lbl_notificationsr.set_position(int(_CONTENT_WIDTH/2), self._lbl_notificationsl.get_y())
+        self._lbl_notificationsr.set_size(self._lbl_notificationsl.get_width(),self._lbl_notificationsl.get_height())
+        self._app.add_component(self._lbl_notificationsr)
         
+        self._lbl_notificationsn = gdi.Label()
+        self._lbl_notificationsn.set_background("ffffff")
+        self._lbl_notificationsn.set_position(0,self._lbl_notificationsl.get_y()+(int(self._lbl_notificationsl.get_height()/2)-(26/2)))
+        self._lbl_notificationsn.set_text(self._get_message('monitorNoActivities'))
+        self._lbl_notificationsn.set_text_align(gdi.TEXT_ALIGN_CENTERMIDDLE)
+        self._lbl_notificationsn.set_size(_CONTENT_WIDTH,26)
+        self._lbl_notificationsn.set_opaque(True)
+        self._app.add_component(self._lbl_notificationsn)
+                
         self._pnl_bottom = gdi.Panel()
         self._pnl_bottom.set_position(_CONTENT_WIDTH, 0)
         self._pnl_bottom.set_size(_WIDTH_RIGHT, _HEIGHT)
@@ -594,6 +810,7 @@ class Main():
         self._mode=mode
         self._monitor_tray_icon=False
         self._monitor_tray_obj=None
+        self._notifications_enabled=True
         self._update=False
         if mode=="info":
             self.printInfo()
@@ -606,17 +823,25 @@ class Main():
             while self.check_update() or self.check_stop():
                 time.sleep(2) #Attende finché il server non cancella l'update file o lo stop file
         
+            try:
+                if 'monitor_notifications' in self._properties:
+                    self._notifications_enabled=self._properties['monitor_notifications']
+            except Exception:
+                None
+        
             #Carica Maschera 
-            self.prepare_window()
-            
-            #Attiva Eventi
-            gdi.add_scheduler(0.5, self.update_status)
-            #self._event=None
-            gdi.add_scheduler(1, self.check_events)
+            self.prepare_window()            
             if mode=="systray":
                 self.prepare_systray()
             else:
                 self._app.show()
+            
+            #Attiva Eventi
+            gdi.add_scheduler(0.5, self.update_status)
+            
+            #self._event=None
+            gdi.add_scheduler(1, self.check_events)
+            
             gdi.loop()
             self.unlock()
             if self._update:

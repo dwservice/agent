@@ -30,6 +30,7 @@ WINDOW_POSITION_CENTER_SCREEN=1
 TEXT_ALIGN_LEFTMIDDLE=0
 TEXT_ALIGN_LEFTTOP=1
 TEXT_ALIGN_CENTERMIDDLE=10
+TEXT_ALIGN_RIGHTMIDDLE=20
 
 
 DIALOGMESSAGE_ACTIONS_OK=0
@@ -71,6 +72,7 @@ _gdimap["fontmanager"]=None
 _gdimap["imagemanager"]=None
 _gdimap["sheduler"]=None
 _gdimap["postaction"]=[]
+_gdimap["screensize"]={"width":0, "height":0, "_lastcheck":0.0}
 
 
 def is_windows():
@@ -188,6 +190,9 @@ def _repaint(sid,x,y,w,h):
 
 def _show_window(sid):
     _gdimap["postaction"].append({"name":"SHOW","id":sid})
+    
+def _update_pos_size(sid):
+    _gdimap["postaction"].append({"name":"UPDATEPOSSIZE","id":sid})
 
 def _hide_window(sid):
     _gdimap["postaction"].append({"name":"HIDE","id":sid})
@@ -220,11 +225,26 @@ CMPFUNCEVENTMESSAGE = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_wchar_p)
 
 @CMPFUNCEVENTMESSAGE 
 def cb_func_event_message(smsg):
+    okscreensize=False
     if _gdimap["init"]==False:
+        okscreensize=True
         _gdimap["init"]=True
         _gdimap["fontmanager"].load("default")
-        
+    else:
+        elp = time.time() - _gdimap["screensize"]["_lastcheck"]
+        if elp>3.0 or elp<0.0:
+            okscreensize=True
+    if okscreensize:
+        sz_array = (ctypes.c_int * 2)()
+        gdw_lib().DWAGDIGetScreenSize(sz_array)
+        appsz={}
+        appsz["width"] = (int)(sz_array[0])
+        appsz["height"] = (int)(sz_array[1])
+        appsz["_lastcheck"] = time.time()
+        _gdimap["screensize"]=appsz
+            
     gdwlib=gdw_lib()
+    
     #SCHEDULER
     _gdimap["sheduler"].run()
     
@@ -246,10 +266,9 @@ def cb_func_event_message(smsg):
                 sx=wnd._x
                 sy=wnd._y
                 if wnd._show_position==WINDOW_POSITION_CENTER_SCREEN:
-                    sz_array = (ctypes.c_int * 2)()
-                    gdwlib.DWAGDIGetScreenSize(sz_array)
-                    sx=(int)(sz_array[0]/2)-(wnd._w/2)
-                    sy=(int)(sz_array[1]/2)-(wnd._h/2)
+                    appsz=_gdimap["screensize"]                    
+                    sx=(int)(appsz["width"]/2)-(wnd._w/2)
+                    sy=(int)(appsz["height"]/2)-(wnd._h/2)
                 gdwlib.DWAGDINewWindow(wnd._id, wnd._type,sx,sy,wnd._w,wnd._h,logo)
                 gdwlib.DWAGDISetTitle(wnd._id,wnd._title)
             elif jopa["name"]=="TERM":
@@ -263,10 +282,26 @@ def cb_func_event_message(smsg):
             elif jopa["name"]=="REPAINT":
                 gdwlib.DWAGDIRepaint(jopa["id"],jopa["x"],jopa["y"],jopa["width"],jopa["height"]);
             elif jopa["name"]=="SHOW":
+                wnd=_gdimap["windows"][jopa["id"]]
+                sx=wnd._x
+                sy=wnd._y
+                if wnd._show_position==WINDOW_POSITION_CENTER_SCREEN:
+                    appsz=_gdimap["screensize"]
+                    sx=(int)(appsz["width"]/2)-(wnd._w/2)
+                    sy=(int)(appsz["height"]/2)-(wnd._h/2)
+                gdwlib.DWAGDIPosSizeWindow(wnd._id,sx,sy,wnd._w,wnd._h)                
                 gdwlib.DWAGDIShow(jopa["id"],0)
                 gdwlib.DWAGDIToFront(jopa["id"])
+                wnd.on_show()
+            elif jopa["name"]=="UPDATEPOSSIZE":
                 wnd=_gdimap["windows"][jopa["id"]]
-                wnd.on_show() 
+                sx=wnd._x
+                sy=wnd._y
+                if wnd._show_position==WINDOW_POSITION_CENTER_SCREEN:
+                    appsz=_gdimap["screensize"]
+                    sx=(int)(appsz["width"]/2)-(wnd._w/2)
+                    sy=(int)(appsz["height"]/2)-(wnd._h/2)
+                gdwlib.DWAGDIPosSizeWindow(wnd._id,sx,sy,wnd._w,wnd._h)
             elif jopa["name"]=="HIDE":
                 gdwlib.DWAGDIHide(jopa["id"])
                 wnd=_gdimap["windows"][jopa["id"]]
@@ -290,7 +325,7 @@ def cb_func_event_message(smsg):
                 if jo["id"] in _gdimap["windows"]:
                     wnd=_gdimap["windows"][jo["id"]]
                     #print "REPAINT: " + str(jo["x"])+ " " + str(jo["y"]) + " " + str(jo["width"]) + " " + str(jo["height"])                
-                    wnd.on_paint(jo["x"],jo["y"],jo["width"],jo["height"]);                
+                    wnd.on_paint(jo["x"],jo["y"],jo["width"],jo["height"]);
             elif jo["name"]=="MOUSE":
                 if jo["id"] in _gdimap["windows"]:
                     wnd=_gdimap["windows"][jo["id"]]
@@ -328,13 +363,15 @@ def loop():
     _gdimap["sheduler"]=None
     _gdimap["imagemanager"]=None
     _gdimap["fontmanager"]=None
-    _gdimap["init"]=False    
+    _gdimap["init"]=False
     if is_windows():
         _ctypes.FreeLibrary(gdwlib._handle)
     else:
-        _ctypes.dlclose(gdwlib._handle)
-    del gdwlib    
+        _ctypes.dlclose(gdwlib._handle)        
+    del _gdimap["gdwlib"]
 
+def get_screen_size():
+    return _gdimap["screensize"]
 
 def add_scheduler(tm, func):
     if _gdimap["sheduler"] is None:
@@ -560,13 +597,12 @@ class Window:
             self._parent_window._top_windows.append(self)
             self._title=parentwin.get_title()
         _init_window(self._id,self)
-        
     
     def _fire_action(self,e):
         if self._action is not None:
             e["source"]=self
             self._action(e)
-    
+        
     def set_action(self,f):
         self._action=f
         
@@ -619,10 +655,15 @@ class Window:
     def set_position(self,x,y):
         self._x=x;
         self._y=y;
+        if self._show:
+            _update_pos_size(self._id)            
     
     def set_size(self,w,h):
         self._w=w
         self._h=h
+        if self._show:            
+            _update_pos_size(self._id)
+            _repaint(self._id,0,0,self._w,self._h)
     
     def get_mouse_enter_component(self):
         return self._mouse_enter_component
@@ -664,7 +705,7 @@ class Window:
     
     def repaint(self):
         if self._id is not None:
-            _repaint(self._id,self._x,self._y,self._w,self._h)
+            _repaint(self._id,0,0,self._w,self._h)
     
     def destroy(self):
         if self._id is not None:
@@ -801,27 +842,28 @@ class Window:
                     self._on_paint_container(c,x,y,w,h,0,0)
     
     def _on_paint_component(self,c,x,y,w,h,offx,offy):
-        r1={"x":c._x+offx, "y":c._y+offy, "w":c._w, "h":c._h}
-        r2={"x":x, "y":y, "w":w, "h":h}
-        if self._is_intersect(r1,r2) :
-            clipx=c._x+offx
-            if x>c._x+offx:
-                clipx=x
-            clipw=c._w-(clipx-(c._x+offx))
-            if clipw>(x+w)-clipx:
-                clipw=(x+w)-clipx
-            clipy=c._y+offy
-            if y>c._y+offy:
-                clipy=y
-            cliph=c._h-(clipy-(c._y+offy))
-            if cliph>(y+h)-clipy:
-                cliph=(y+h)-clipy
-            
-            gdw_lib().DWAGDIClipRectangle(self._id,clipx,clipy,clipw,cliph)
-            pobj=Paint(self,c._x+offx,c._y+offy,clipx,clipy,clipw,cliph)
-            c.on_paint(pobj) #DA FARE GESTIRE INTERSEZIONE DARE CORDINATE CORRETTE
-            gdw_lib().DWAGDIClearClipRectangle(self._id)
-            #print str(c) + " " + str(c._x+offx) + " " + str(c._y+offy) + " CLIP:" + str(clipx) + " " + str(clipy) + " " + str(clipw) + " " + str(cliph)            
+        if c._visible:
+            r1={"x":c._x+offx, "y":c._y+offy, "w":c._w, "h":c._h}
+            r2={"x":x, "y":y, "w":w, "h":h}
+            if self._is_intersect(r1,r2) :
+                clipx=c._x+offx
+                if x>c._x+offx:
+                    clipx=x
+                clipw=c._w-(clipx-(c._x+offx))
+                if clipw>(x+w)-clipx:
+                    clipw=(x+w)-clipx
+                clipy=c._y+offy
+                if y>c._y+offy:
+                    clipy=y
+                cliph=c._h-(clipy-(c._y+offy))
+                if cliph>(y+h)-clipy:
+                    cliph=(y+h)-clipy
+                
+                gdw_lib().DWAGDIClipRectangle(self._id,clipx,clipy,clipw,cliph)
+                pobj=Paint(self,c._x+offx,c._y+offy,clipx,clipy,clipw,cliph)
+                c.on_paint(pobj) #DA FARE GESTIRE INTERSEZIONE DARE CORDINATE CORRETTE
+                gdw_lib().DWAGDIClearClipRectangle(self._id)
+                #print str(c) + " " + str(c._x+offx) + " " + str(c._y+offy) + " CLIP:" + str(clipx) + " " + str(clipy) + " " + str(clipw) + " " + str(cliph)            
         
     def _on_paint_container(self,cnt,x,y,w,h,offx,offy):
         for c in cnt._components:
@@ -860,6 +902,9 @@ class Window:
     def on_mouse(self,tp,x,y,b):
         if self._disable:
             return
+        if tp=="BUTTON_UP":
+            if self._action is not None:
+                self._action({"window":self, "source":self, "action":"CLICK"});
         #VERIFICA FOCUS
         if tp=="BUTTON_DOWN":
             for c in reversed(self._focus_sequence):
@@ -932,13 +977,16 @@ class DialogMessage(Window):
         self.destroy()
         
     def _ok_action(self,e):
-        self._fire_action({"action":"DIALOG_OK"})
+        if e["action"]=="PERFORMED":
+            self._fire_action({"action":"DIALOG_OK"})
     
     def _yes_action(self,e):
-        self._fire_action({"action":"DIALOG_YES"})
+        if e["action"]=="PERFORMED":
+            self._fire_action({"action":"DIALOG_YES"})
     
     def _no_action(self,e):
-        self._fire_action({"action":"DIALOG_NO"})
+        if e["action"]=="PERFORMED":
+            self._fire_action({"action":"DIALOG_NO"})
     
     def show(self):
         gapLabel=6
@@ -1033,23 +1081,22 @@ class PopupMenu(Window):
         self._h=len(self._list)*30+4        
         pos_array = (ctypes.c_int * 2)()
         gdw_lib().DWAGDIGetMousePosition(pos_array)
-        sz_array = (ctypes.c_int * 2)()
-        gdw_lib().DWAGDIGetScreenSize(sz_array)
+        appsz=_gdimap["screensize"]                    
         self._x=(int)(pos_array[0])
         self._y=(int)(pos_array[1])
         for p in self._show_position:
             if p==POPUP_POSITION_BOTTONRIGHT:
-                if (pos_array[1]+self._h<sz_array[1]) and (pos_array[0]+self._w<sz_array[0]):                    
+                if (pos_array[1]+self._h<appsz["height"]) and (pos_array[0]+self._w<appsz["width"]):                    
                     self._x=(int)(pos_array[0])
                     self._y=(int)(pos_array[1])
                     break;
             elif p==POPUP_POSITION_BOTTONLEFT:
-                if (pos_array[1]+self._h<sz_array[1]) and (pos_array[0]-self._w>=0):
+                if (pos_array[1]+self._h<appsz["height"]) and (pos_array[0]-self._w>=0):
                     self._x=(int)(pos_array[0])-self._w
                     self._y=(int)(pos_array[1])
                     break;
             elif p==POPUP_POSITION_TOPRIGHT:
-                if (pos_array[1]-self._h>=0) and (pos_array[0]+self._w<sz_array[0]):
+                if (pos_array[1]-self._h>=0) and (pos_array[0]+self._w<appsz["width"]):
                     self._x=(int)(pos_array[0])
                     self._y=(int)(pos_array[1])-self._h
                     break;
@@ -1126,6 +1173,7 @@ class Component:
         self._name=None
         self._border=None
         self._opaque=True
+        self._visible=True
         self._focusable=False
         self._parent=None
         self._container=False
@@ -1134,10 +1182,17 @@ class Component:
         self._gradient_background_start=None
         self._gradient_background_end=None
         self._gradient_direction=None
+        self._action=None
     
     def _destroy(self):
         self._window=None
+    
+    def set_action(self,f):
+        self._action=f
         
+    def get_action(self):
+        return self._action
+    
     def add_component(self, c):
         if self._container:
             c._window=self._window;
@@ -1195,42 +1250,57 @@ class Component:
         self._name=value
     
     def set_position(self,x,y):
-        self._x=x;
-        self._y=y;
-        self.repaint_parent()
+        if self._x!=x or self._y!=y:
+            self._x=x;
+            self._y=y;
+            self.repaint_parent()
     
     def set_size(self,w,h):
-        self._w=w;
-        self._h=h;
-        self.repaint_parent()
+        if self._w!=w or self._h!=h:
+            self._w=w;
+            self._h=h;
+            self.repaint_parent()
     
     def set_x(self,x):
-        self._x=x;
-        self.repaint_parent()
+        if self._x!=x:
+            self._x=x;
+            self.repaint_parent()
     
     def get_x(self):
         return self._x;
     
     def set_y(self,y):
-        self._y=y;
-        self.repaint_parent()
+        if self._y!=y:
+            self._y=y;
+            self.repaint_parent()
     
     def get_y(self):
         return self._y;
     
     def set_width(self,w):
-        self._w=w;
-        self.repaint_parent()
+        if self._w!=w:
+            self._w=w;
+            self.repaint_parent()
     
     def get_width(self):
         return self._w;
     
     def set_height(self,h):
-        self._h=h;
-        self.repaint_parent()
+        if self._h!=h:
+            self._h=h;
+            self.repaint_parent()
     
     def get_height(self):
         return self._h;
+    
+    
+    def set_visible(self,b):
+        if self._visible!=b:
+            self._visible=b
+            self.repaint_parent()
+    
+    def get_visible(self):
+        return self._visible
         
     def set_foreground(self,c):
         self._foreground=c
@@ -1405,7 +1475,10 @@ class Component:
                     self._window.next_focus_component()
     
     def on_mouse(self,tp,x,y,b):
-        None    
+        if self.is_enable():
+            if tp=="BUTTON_UP":
+                if self._action is not None:
+                    self._action({"window":self._window, "source":self, "action":"CLICK"});    
         #print "tp: " + tp + " - x: " + str(x) + " - y: " + str(y) + " - b: " + str(b) + "  " + str(self)
 
 class Panel(Component):
@@ -1432,8 +1505,7 @@ class Label(Component):
         self._text=u""
         self._wordwrap=False
         self._text_align=TEXT_ALIGN_LEFTMIDDLE
-        self._highlight=False
-        self._action=None
+        self._highlight=False        
     
     def get_text(self):
         return self._text
@@ -1448,13 +1520,7 @@ class Label(Component):
     def set_text_align(self, value):
         self._text_align = value
         self.repaint()
-    
-    def set_action(self,f):
-        self._action=f
         
-    def get_action(self):
-        return self._action
-    
     def set_wordwrap(self,b):
         self._wordwrap=b
         
@@ -1517,7 +1583,7 @@ class Label(Component):
                             ar.append(curs)
             th=pobj.get_text_height()*len(ar);
             ty=2;
-            if self._text_align==TEXT_ALIGN_LEFTMIDDLE or self._text_align==TEXT_ALIGN_CENTERMIDDLE:
+            if self._text_align==TEXT_ALIGN_LEFTMIDDLE or self._text_align==TEXT_ALIGN_CENTERMIDDLE or self._text_align==TEXT_ALIGN_RIGHTMIDDLE:
                 ty=(self._h/2)-(th/2)
             for sr in ar:
                 tx=gapw
@@ -1525,15 +1591,12 @@ class Label(Component):
                     tx=((self._w-(gapw*2))/2)-(pobj.get_text_width(sr)/2)
                     if tx<gapw:
                         tx=gapw
+                elif self._text_align==TEXT_ALIGN_RIGHTMIDDLE:
+                    tx=(self._w-(gapw*2))-pobj.get_text_width(sr)
                 pobj.draw_text(sr,tx,ty);
                 ty+=pobj.get_text_height()
         pobj.clear_clip_rectangle()
 
-    def on_mouse(self,tp,x,y,b):
-        if self.is_enable():
-            if tp=="BUTTON_UP":
-                if self._enable and self._action is not None:
-                    self._action({"window":self._window, "source":self, "action":"CLICK"});
                     
 
 class Button(Component):
@@ -1544,8 +1607,7 @@ class Button(Component):
         self._focusable=True
         self._opaque=True
         self._text=u""
-        self._border=BorderLine();
-        self._action=None
+        self._border=BorderLine();        
         
     
     def get_text(self):
@@ -1554,12 +1616,6 @@ class Button(Component):
     def set_text(self, value):
         self._text = to_unicode(value)
         self.repaint() 
-    
-    def set_action(self,f):
-        self._action=f
-        
-    def get_action(self):
-        return self._action
     
     def on_mouse_enter(self,e):
         if self._enable:
@@ -1593,6 +1649,7 @@ class Button(Component):
         pobj.clear_clip_rectangle()
     
     def on_mouse(self,tp,x,y,b):
+        Component.on_mouse(self, tp, x, y, b)
         if self.is_enable():
             if tp=="BUTTON_DOWN":
                 self.focus()
@@ -1612,14 +1669,7 @@ class RadioButton(Component):
         self._border=None;
         self._selected=False
         self._group=None
-        self._action=None
-    
-    def set_action(self,f):
-        self._action=f
-        
-    def get_action(self):
-        return self._action
-    
+            
     def get_text(self):
         return self._text
 
@@ -1678,6 +1728,7 @@ class RadioButton(Component):
         pobj.clear_clip_rectangle()
             
     def on_mouse(self,tp,x,y,b):
+        Component.on_mouse(self, tp, x, y, b)
         if self.is_enable():
             if tp=="BUTTON_DOWN":
                 self.focus()
@@ -1695,7 +1746,7 @@ class RadioButton(Component):
                     self._selected=True
                     self._repaint_check()
                     if self._enable and self._action is not None:
-                        self._action({"window":self._window, "source":self, "old_selected":old_selected});
+                        self._action({"window":self._window, "source":self, "action":"SELECTED", "old_selected":old_selected});
 
 
 class ProgressBar(Component):
@@ -2040,6 +2091,7 @@ class TextBox(Component):
             
                
     def on_mouse(self,tp,x,y,b):
+        Component.on_mouse(self, tp, x, y, b)
         if tp=="BUTTON_DOWN":
             self._cursor_position=self._get_cursor_pos_by_x(x)
             self._selection_start=self._cursor_position

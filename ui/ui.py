@@ -198,8 +198,9 @@ class Chooser(BaseUI):
         self._disble_next_button()
 
     def on_selected(self,e):
-        self.get_variable().set(e["source"].get_name())
-        self._disble_next_button()
+        if e["action"]=="SELECTED":
+            self.get_variable().set(e["source"].get_name())
+            self._disble_next_button()
     
     def is_next_enabled(self):
         if self._main is not None and self.get_accept_key() is not None:
@@ -486,24 +487,27 @@ class UI():
         self._printcl(u"")
     
     def _guimode_next(self, e):
-        self._guimode_execute(self._cur_step_ui.fire_next_step, self._op_complete)
+        if e["action"]=="PERFORMED":
+            self._guimode_execute(self._cur_step_ui.fire_next_step, self._op_complete)
         
     def _guimode_back(self, e):
-        self._guimode_execute(self._cur_step_ui.fire_prev_step, self._op_complete)
+        if e["action"]=="PERFORMED":
+            self._guimode_execute(self._cur_step_ui.fire_prev_step, self._op_complete)
         
     def _guimode_close_action(self, e):
         if e["action"]=="DIALOG_YES":
             self._guimode_execute(self.close)
     
     def _guimode_close(self, e):
-        if self._cur_step_ui is None or (self._cur_step_ui.is_next_enabled() or self._cur_step_ui.is_back_enabled()) :
-            dlgerr = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_YESNO,gdi.DIALOGMESSAGE_LEVEL_INFO,parentwin=self._app, logopath=self._logo)
-            dlgerr.set_title(self._title)
-            dlgerr.set_message(messages.get_message('confirmExit'))
-            dlgerr.set_action(self._guimode_close_action)
-            dlgerr.show();
-        else:
-            self.close()
+        if e["action"]=="PERFORMED":
+            if self._cur_step_ui is None or (self._cur_step_ui.is_next_enabled() or self._cur_step_ui.is_back_enabled()) :
+                dlgerr = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_YESNO,gdi.DIALOGMESSAGE_LEVEL_INFO,parentwin=self._app, logopath=self._logo)
+                dlgerr.set_title(self._title)
+                dlgerr.set_message(messages.get_message('confirmExit'))
+                dlgerr.set_action(self._guimode_close_action)
+                dlgerr.show();
+            else:
+                self.close()
     
     def _guimode_action(self, e):
         if e["action"]==u"ONCLOSE":

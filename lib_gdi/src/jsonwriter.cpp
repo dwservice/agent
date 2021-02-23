@@ -83,46 +83,61 @@ void JSONWriter::addString(wstring name, wstring value){
 
 void JSONWriter::addNumber(wstring name,int value){
 	addProp(name);
-	//data.append(std::to_wstring(value));
+#if defined OS_WINDOWS
+	data.append(std::to_wstring(value));
+#else
 	wostringstream appss;
 	appss << value;
 	data.append(appss.str());
+#endif
 	data.append(L",");
 }
 
 void JSONWriter::addNumber(wstring name, long value){
 	addProp(name);
-	//data.append(std::to_wstring(value));
+#if defined OS_WINDOWS
+	data.append(std::to_wstring(value));
+#else
 	wostringstream appss;
 	appss << value;
 	data.append(appss.str());
+#endif
 	data.append(L",");
 }
 
 void JSONWriter::addNumber(wstring name, unsigned long value){
 	addProp(name);
-	//data.append(std::to_wstring(value));
+#if defined OS_WINDOWS
+	data.append(std::to_wstring(value));
+#else
 	wostringstream appss;
 	appss << value;
 	data.append(appss.str());
+#endif
 	data.append(L",");
 }
 
 void JSONWriter::addNumber(wstring name, unsigned long long value){
 	addProp(name);
-	//data.append(std::to_wstring(value));
+#if defined OS_WINDOWS
+	data.append(std::to_wstring(value));
+#else
 	wostringstream appss;
 	appss << value;
 	data.append(appss.str());
+#endif
 	data.append(L",");
 }
 
 void JSONWriter::addBoolean(wstring name, bool value){
 	addProp(name);
-	//data.append(std::to_wstring(value));
+#if defined OS_WINDOWS
+	data.append(std::to_wstring(value));
+#else
 	wostringstream appss;
 	appss << value;
 	data.append(appss.str());
+#endif
 	data.append(L",");
 }
 

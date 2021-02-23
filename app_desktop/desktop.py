@@ -123,7 +123,7 @@ class Desktop():
                     self._list[key]=itm
                     break
         finally:
-            self._list_semaphore.release()
+            self._list_semaphore.release()        
         itm.start()
         return itm
     
@@ -407,7 +407,8 @@ class Session(threading.Thread):
         self._send_buffer_size = -1                       
         
     def run(self):
-        process_status_counter=utils.Counter()    
+        process_status_counter=utils.Counter()
+        bact=False    
         bfirst=True
         err_msg=None
         try:
@@ -422,6 +423,12 @@ class Session(threading.Thread):
             while not self.is_destroy() and not self._dskmain._capture_process.is_destroy():
                 lst = None                
                 if self._dskmain._capture_process.get_status()=="started":
+                    try:
+                        if not bact:
+                            self._cinfo.inc_activities_value("screenCapture")
+                            bact=True
+                    except:
+                        None
                     if not self._dskmain._capture_process.exists(self):
                         try:                            
                             self._capture_process_recovery=not bfirst
@@ -464,7 +471,10 @@ class Session(threading.Thread):
                     appmsg = utils.exception_to_string(e)
                 self._dskmain._agent_main.write_err("AppDesktop:: capture process id: " + self._id + " error: "  + appmsg)
                 
-        
+        try:
+            self._cinfo.dec_activities_value("screenCapture")
+        except:
+            None
         if not self.is_destroy():
             if err_msg is None:
                 appmsg = self._dskmain._capture_process.get_last_error()
@@ -1136,43 +1146,51 @@ class CaptureProcessClient(threading.Thread):
     
     def set_send_buffer_size(self, dm, sz):
         sid=self.get_id(dm)
-        apps=u"SET_SEND_BUFFER_SIZE:"+unicode(sid)+u";"+unicode(sz)
-        self._write_data(apps)
+        if sid is not None:
+            apps=u"SET_SEND_BUFFER_SIZE:"+unicode(sid)+u";"+unicode(sz)
+            self._write_data(apps)
     
     def received_frame(self, dm, tm):
         sid=self.get_id(dm)
-        apps=u"RECEIVED_FRAME:"+unicode(sid)+u";"+unicode(tm)
-        self._write_data(apps)        
+        if sid is not None:
+            apps=u"RECEIVED_FRAME:"+unicode(sid)+u";"+unicode(tm)
+            self._write_data(apps)        
     
     def init_audio(self, dm, v):
         sid=self.get_id(dm)
-        apps=u"INIT_AUDIO:"+unicode(sid)+u";"+unicode(v)
-        self._write_data(apps)
+        if sid is not None:
+            apps=u"INIT_AUDIO:"+unicode(sid)+u";"+unicode(v)
+            self._write_data(apps)
     
     def set_quality(self, dm, q):
         sid=self.get_id(dm)
-        apps=u"SET_QUALITY:"+unicode(sid)+u";"+unicode(q)
-        self._write_data(apps)
+        if sid is not None:
+            apps=u"SET_QUALITY:"+unicode(sid)+u";"+unicode(q)
+            self._write_data(apps)
     
     def set_monitor(self, dm, m):
         sid=self.get_id(dm)
-        apps=u"SET_MONITOR:"+unicode(sid)+u";"+unicode(m)
-        self._write_data(apps)
+        if sid is not None:
+            apps=u"SET_MONITOR:"+unicode(sid)+u";"+unicode(m)
+            self._write_data(apps)
     
     def set_frame_type(self, dm, tp):
         sid=self.get_id(dm)
-        apps=u"SET_FRAME_TYPE:"+unicode(sid)+u";"+unicode(tp)
-        self._write_data(apps)
+        if sid is not None:
+            apps=u"SET_FRAME_TYPE:"+unicode(sid)+u";"+unicode(tp)
+            self._write_data(apps)
     
     def set_slow_mode(self, dm, b):
         sid=self.get_id(dm)
-        apps=u"SET_SLOW_MODE:"+unicode(sid)+u";"+unicode(b)
-        self._write_data(apps)
+        if sid is not None:
+            apps=u"SET_SLOW_MODE:"+unicode(sid)+u";"+unicode(b)
+            self._write_data(apps)
     
     def set_audio_enable(self, dm, b):
         sid=self.get_id(dm)
-        apps=u"SET_AUDIO_ENABLE:"+unicode(sid)+u";"+unicode(b)
-        self._write_data(apps)
+        if sid is not None:
+            apps=u"SET_AUDIO_ENABLE:"+unicode(sid)+u";"+unicode(b)
+            self._write_data(apps)
     
     def inputs(self, dm, sinps):
         bok = True;
@@ -1181,17 +1199,20 @@ class CaptureProcessClient(threading.Thread):
                 bok = False
         if bok: 
             sid=self.get_id(dm)
-            apps=u"INPUTS:"+unicode(sid)+";"+unicode(sinps)
-            self._write_data(apps)
+            if sid is not None:
+                apps=u"INPUTS:"+unicode(sid)+";"+unicode(sinps)
+                self._write_data(apps)
     
     def copy_text(self, dm) :
         sid=self.get_id(dm)
-        self._write_data(u"COPY_TEXT:"+str(sid))
+        if sid is not None:
+            self._write_data(u"COPY_TEXT:"+str(sid))
     
     def paste_text(self, dm, s) :
         sid=self.get_id(dm)
-        if s is not None:
-            self._write_data(u"PASTE_TEXT:"+str(sid)+u";"+base64.b64encode(s.encode("utf8")))
+        if sid is not None:
+            if s is not None:
+                self._write_data(u"PASTE_TEXT:"+str(sid)+u";"+base64.b64encode(s.encode("utf8")))
 
 
 class CaptureProcessStdRedirect(object):
@@ -1641,6 +1662,7 @@ class CaptureProcessDebug(threading.Thread):
     def write(self, sdata):
         self._capture_process._on_request(sdata)
 
+           
 class CaptureProcess():
     
     def __init__(self):
@@ -1726,14 +1748,14 @@ class CaptureProcess():
                         apparid["screenThread"].destroy()
                     self._listids[appid]={"id": appid, "monitor": -1, "sound": "none"}
                     self._listids[appid]["screenThread"]=CaptureProcessSession(self, appid)
-                    self._listids[appid]["screenThread"].start()                        
+                    self._listids[appid]["screenThread"].start()
                 if ar[0]==u"TERMINATE":
                     appid=int(prms[0]);
                     if appid in self._listids:
                         apparid = self._listids[appid]
                         if "screenThread" in apparid:                                
                             apparid["screenThread"].destroy()
-                        del self._listids[appid]  
+                        del self._listids[appid]
                 elif ar[0]==u"RECEIVED_FRAME":
                     appid=int(prms[0]);
                     tm=float(prms[1])
@@ -1815,10 +1837,9 @@ class CaptureProcess():
         try:
             self._scr_libver = self._get_screen_module().version()
         except:
-            None            
+            None
         self._debug_print("Init capture process. (" + fname + ")")        
-        try:
-            
+        try:            
             self._sharedmem=sharedmem.Stream()
             self._sharedmem.connect(fname)            
             self._sharedmem_bw=self._sharedmem.get_buffer_writer()
@@ -1828,8 +1849,7 @@ class CaptureProcess():
             self._sharedmem_br.set_timeout_function(self._sharedmem_read_timeout)
             
             self._screen_thread = CaptureProcessScreen(self)
-            self._screen_thread.start()
-            
+            self._screen_thread.start()            
             try:                
                 if not (agent.is_windows() and (self._get_screen_module().isWinXP()==1 or self._get_screen_module().isWin2003Server()==1)):
                     if self._sound_enable:

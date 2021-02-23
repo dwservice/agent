@@ -752,7 +752,7 @@ void DWAGDINewWindow(int id, int tp, int x, int y, int w, int h, wchar_t* iconPa
 		nh+=dy;
 		ny+=(dy/2);
 	}
-	SetWindowPos(hwnd, NULL, nx, ny, nw, nh, SWP_NOZORDER | SWP_NOMOVE | SWP_NOACTIVATE) ;
+	SetWindowPos(hwnd, NULL, nx, ny, nw, nh, SWP_NOZORDER | SWP_NOACTIVATE) ;
 	addWindow(id, hwnd);
 }
 
@@ -761,6 +761,31 @@ void DWAGDIDestroyWindow(int id){
 	if (dwawin!=NULL){
 		dwawin->onCloseEvent=false;
 		PostMessageW(dwawin->hwnd,WM_CLOSE,NULL,NULL);
+	}
+}
+
+void DWAGDIPosSizeWindow(int id,int x, int y, int w, int h){
+	DWAWindow* dwawin=getWindowByID(id);
+	if (dwawin!=NULL){
+		SetWindowPos(dwawin->hwnd, NULL, 0, 0, w, h, SWP_NOZORDER | SWP_NOMOVE | SWP_NOACTIVATE) ;
+		RECT winRC,clientRC;
+		GetWindowRect(dwawin->hwnd,&winRC);
+		GetClientRect(dwawin->hwnd,&clientRC);
+		int dx = w-(clientRC.right-clientRC.left);
+		int dy = h-(clientRC.bottom-clientRC.top);
+		int nx=x;
+		int nw=w;
+		if (dx>0){
+			nw+=dx;
+			nx+=(dx/2);
+		}
+		int ny=y;
+		int nh=h;
+		if (dy>0){
+			nh+=dy;
+			ny+=(dy/2);
+		}
+		SetWindowPos(dwawin->hwnd, NULL, nx, ny, nw, nh, SWP_NOZORDER | SWP_NOACTIVATE) ;
 	}
 }
 

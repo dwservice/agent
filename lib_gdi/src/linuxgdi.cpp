@@ -424,6 +424,15 @@ void DWAGDINewWindow(int id,int tp, int x, int y, int w, int h, wchar_t* iconPat
 	dwa->y=y;
 }
 
+void DWAGDIPosSizeWindow(int id,int x, int y, int w, int h){
+	DWAWindow* dwa = getWindowByID(id);
+	if (dwa!=NULL){
+		dwa->x=x;
+		dwa->y=y;
+		XMoveResizeWindow(display, dwa->win, x, y, w, h);
+	}
+}
+
 void DWAGDIDestroyWindow(int id){
 	DWAWindow* dwa = getWindowByID(id);
 	if (dwa!=NULL){

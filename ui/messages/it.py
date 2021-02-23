@@ -178,5 +178,13 @@ data={
     'errorAgentMax':u'Superato numero massimo agenti.',
     'enterRunCode': u'Inserire il codice di connessione',
     'runWithoutInstallationOnlineTopPutCode':u'La sessione è attiva.' ,
-    'runWithoutInstallationOnlineBottomPutCode':u'ATTENZIONE:\nL\'agente è pronto ad accettare connessioni. Quindi se non sei sicuro di quello che stai facendo, chiudi questa applicazione.'
+    'runWithoutInstallationOnlineBottomPutCode':u'ATTENZIONE:\nL\'agente è pronto ad accettare connessioni. Quindi se non sei sicuro di quello che stai facendo, chiudi questa applicazione.',
+    'monitorCurrentActivities': u'Attività correnti',
+    'monitorNoActivities': u'Nessuna attività',
+    "monitorSession": u'Sessione',
+    "monitorScreenCapture": u'Cattura schermo',
+    "monitorShellSession": u'Terminale',
+    "monitorDownload": u'Donwload',
+    "monitorUpload": u'Upload',
+    "monitorActive": u"attiva ({0})"
 }

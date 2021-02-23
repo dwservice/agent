@@ -178,5 +178,13 @@ data={
     'welcomeSecurity':u'Security\nTo protect your privacy we don\'t store information from the agent on our servers. Communications between users, our servers and agents are encrypted so that third parties can\'t access them.',
     'welcomeSoftwareUpdates':u'Software updates\nThis software updates automatically',
     'windowsAdminPrivileges':u'You must have administrative privileges to install DWAgent.\nPlease right click the executable and click \'run as administrator\' to start the installer.',
-    'yes':u'Yes'
+    'yes':u'Yes',
+    'monitorCurrentActivities': u'Current activities',
+    'monitorNoActivities': u'No activities',
+    "monitorSession": u'Session',
+    "monitorScreenCapture": u'Screen capture',
+    "monitorShellSession": u'Shell',
+    "monitorDownload": u'Donwload',
+    "monitorUpload": u'Upload',
+    "monitorActive": u"active ({0})"
 }

@@ -34,12 +34,13 @@ class SharedMemServer(threading.Thread):
         fieldsdef=[]
         fieldsdef.append({"name":"counter","size":30})
         fieldsdef.append({"name":"state","size":5})
-        fieldsdef.append({"name":"connections","size":20})
+        fieldsdef.append({"name":"connections","size":20}) #TO REMOVE 2021-02-11
         fieldsdef.append({"name":"group","size":100*5})
         fieldsdef.append({"name":"name","size":100*5})        
         fieldsdef.append({"name":"request_pid","size":20})
         fieldsdef.append({"name":"request_data","size":1024*16})
-        fieldsdef.append({"name":"response_data","size":1024*16})
+        fieldsdef.append({"name":"response_data","size":1024*16})        
+        fieldsdef.append({"name":"sessions_status","size":1024*512})
         def fix_perm(fn):
             self._agent.get_osmodule().set_file_permission_everyone(fn)            
         self._prop.create("status_config", fieldsdef, fix_perm)
@@ -80,18 +81,23 @@ class SharedMemStatus(threading.Thread):
             try:
                 self._prop.set_property("counter", str(self._cnt))
                 self._prop.set_property("state", str(self._agent.get_status()))
-                self._prop.set_property("connections", str(self._agent.get_active_session_count())) #RIMASTO PER COMPATIBILITA DA ELIMINARE USARE RIGA SOTTO
-                #self._prop.set_property("sessions", str(self._agent.get_session_count()))
                 sapp = self._agent.get_group()
                 if sapp is None:
                     sapp=""
                 sapp=sapp.encode("unicode-escape");
                 self._prop.set_property("group", sapp)
+                
                 sapp = self._agent.get_name()
                 if sapp is None:
                     sapp=""
                 sapp=sapp.encode("unicode-escape");
-                self._prop.set_property("name", sapp)                
+                self._prop.set_property("name", sapp)
+                
+                jo = self._agent.get_active_sessions_status()                
+                self._prop.set_property("connections", str(len(jo))) #TO REMOVE 2021-02-11                
+                self._prop.set_property("sessions_status", json.dumps(jo))
+                
+                                
             except Exception as e:
                 if logwait>=60*10:
                     logwait=0

@@ -5,8 +5,10 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 */
 
 #include <string>
+#if defined OS_WINDOWS
+#else
 #include <sstream>
-
+#endif
 using namespace std;
 
 #ifndef JSONWRITER_H_
@@ -28,7 +30,6 @@ public:
 	void clear();
 	int length();
 	wstring getString();
-
 
 private:
 	wstring data;
