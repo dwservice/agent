@@ -11,16 +11,17 @@ import images
 _NOTIFY_ICON={"visible":False, "obj":None}
 
 def _test_notify(e):
-    if _NOTIFY_ICON["visible"]:
-        #_NOTIFY_ICON["obj"].update(images.get_image("monitor_red.bmp"),u"MSG LOGO")
-        _NOTIFY_ICON["obj"].destroy()
-        _NOTIFY_ICON["visible"]=False
-        _NOTIFY_ICON["obj"]=None        
-    else:         
-        _NOTIFY_ICON["obj"] = gdi.NotifyIcon(images.get_image("monitor_green.bmp"),u"MSG LOGO")
-        _NOTIFY_ICON["obj"].set_object("window",e["window"])
-        _NOTIFY_ICON["obj"].set_action(_test_notify_action)
-        _NOTIFY_ICON["visible"]=True
+    if e["action"]==u"MOUSECLICK":
+        if _NOTIFY_ICON["visible"]:
+            #_NOTIFY_ICON["obj"].update(images.get_image("monitor_red.bmp"),u"MSG LOGO")
+            _NOTIFY_ICON["obj"].destroy()
+            _NOTIFY_ICON["visible"]=False
+            _NOTIFY_ICON["obj"]=None        
+        else:         
+            _NOTIFY_ICON["obj"] = gdi.NotifyIcon(images.get_image("monitor_green.bmp"),u"MSG LOGO")
+            _NOTIFY_ICON["obj"].set_object("window",e["window"])
+            _NOTIFY_ICON["obj"].set_action(_test_notify_action)
+            _NOTIFY_ICON["visible"]=True
         
 
 def _test_notify_action(e):
@@ -32,28 +33,39 @@ def _test_notify_action(e):
         pp.add_item("show","show")
         pp.add_item("disable","disable")
         pp.add_item("configure","configure")        
-        pp.set_action(_test_other_window);        
+        pp.set_action(_test_popup_menu);        
         pp.show()
-    
+
+def _test_popup_menu(e):
+    if e["action"]==u"PERFORMED":
+        prnt=None
+        if "window" in e:
+            prnt=e["window"]
+        wwn = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_YESNO,gdi.DIALOGMESSAGE_LEVEL_WARN,prnt) 
+        wwn.set_title("Title MsgBox")
+        wwn.set_message(u"NAME:" + str(e["name"]))
+        wwn.show()
 
 def _test_other_window(e):
-    prnt=None
-    if "window" in e:
-        prnt=e["window"]
-    wwn = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_YESNO,gdi.DIALOGMESSAGE_LEVEL_WARN,prnt) 
-    wwn.set_title("Title MsgBox")
-    wwn.set_message(u"Test Message.\nThis is a test message. How are you?. " + str(e["action"]))
-    wwn.show()
+    if e["action"]==u"MOUSECLICK":
+        prnt=None
+        if "window" in e:
+            prnt=e["window"]
+        wwn = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_YESNO,gdi.DIALOGMESSAGE_LEVEL_WARN,prnt) 
+        wwn.set_title("Title MsgBox")
+        wwn.set_message(u"Test Message.\nThis is a test message. How are you?. " + str(e["action"]))
+        wwn.show()
 
 def _test_close_window(e):
-    wnd=None
-    if "window" in e:
-        if _NOTIFY_ICON["visible"]:
-            _NOTIFY_ICON["obj"].destroy()
-            _NOTIFY_ICON["visible"]=False
-            _NOTIFY_ICON["obj"]=None
-        wnd=e["window"]
-        wnd.destroy()
+    if e["action"]==u"MOUSECLICK":
+        wnd=None
+        if "window" in e:
+            if _NOTIFY_ICON["visible"]:
+                _NOTIFY_ICON["obj"].destroy()
+                _NOTIFY_ICON["visible"]=False
+                _NOTIFY_ICON["obj"]=None
+            wnd=e["window"]
+            wnd.destroy()
         
 
 def _test_window_action(e):

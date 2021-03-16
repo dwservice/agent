@@ -31,7 +31,10 @@ class Configure:
         self._agent_menu_sel=ui.VarString("configureChangeInstallKey")
         self._password_menu_sel=ui.VarString("configureSetPassword")
         self._name=None
-        
+        self._config_base_path=None
+    
+    def _set_config_base_path(self, pth):
+        self._config_base_path=pth
     
     def _get_message(self, key):
         smsg = messages.get_message(key)
@@ -43,7 +46,7 @@ class Configure:
     def send_req(self, req, prms=None):
         try:
             if self._sharedmemclient==None or self._sharedmemclient.is_close():
-                self._sharedmemclient=listener.SharedMemClient()
+                self._sharedmemclient=listener.SharedMemClient(path=self._config_base_path)
             return self._sharedmemclient.send_request("admin", self._password, req, prms);
         except: 
             return 'ERROR:REQUEST_TIMEOUT'
@@ -175,8 +178,7 @@ class Configure:
         chs.set_message(self._get_message('configureChooseOperation'))
         chs.add("configureAgent", self._get_message('configureAgent'))
         chs.add("configureProxy", self._get_message('configureProxy'))
-        #chs.add("configureMonitor", self._get_message('configureMonitor'))
-        chs.add("configurePassword", self._get_message('configurePassword'))
+        chs.add("configureMonitor", self._get_message('configureMonitor'))        #
         #chs.add("configureExit", self._get_message('configureExit'))
         chs.set_variable(self._main_menu_sel)
         chs.next_step(self.step_menu_main_selected)
@@ -190,8 +192,6 @@ class Configure:
             return self.step_configure_proxy_type(curui)
         elif curui.get_variable().get()=="configureMonitor":
             return self.step_menu_monitor(curui)
-        elif curui.get_variable().get()=="configurePassword":
-            return self.step_menu_password(curui)
         elif curui.get_variable().get()=="configureExit":
             return ui.Message(self._get_message('configureEnd'))
     
@@ -425,58 +425,72 @@ class Configure:
                 msg.next_step(self.step_menu_main)
                 return msg
             except:
-                    return ui.ErrorDialog(self._get_message('configureErrorConnection'))
+                return ui.ErrorDialog(self._get_message('configureErrorConnection'))
         else:
             return self.step_menu_agent(curui)
     
     def step_menu_monitor(self, curui):
         chs = ui.Chooser()
         chs.set_message(self._get_message('configureChooseOperation'))
-        chs.add("configureTrayIconVisibility", self._get_message('configureTrayIconVisibility'))
-        chs.set_variable(ui.VarString("configureTrayIconVisibility"))
-        chs.prev_step(self.step_menu_main)
+        chs.add("configurePassword", self._get_message('configurePassword'))
+        chs.add("configureDesktopNotification", self._get_message('configureDesktopNotification'))
+        #chs.add("configureTrayIconVisibility", self._get_message('configureTrayIconVisibility'))
+        chs.set_variable(ui.VarString("configurePassword"))
+        chs.prev_step(self.step_menu_main)        
         chs.next_step(self.step_menu_monitor_selected)
         return chs
     
-    def step_menu_monitor_selected(self, ui):
+    def step_menu_monitor_selected(self, curui):
+        try:
+            if curui.get_variable().get()=="configurePassword":
+                return self.step_menu_monitor_password(curui)
+            elif curui.get_variable().get()=="configureDesktopNotification":
+                return self.step_menu_monitor_desktop_notification(curui)
+        except:
+            return ui.ErrorDialog(self._get_message('configureErrorConnection'))
+       
+    def step_menu_monitor_desktop_notification(self, curui):
         try:
             chs = ui.Chooser()
-            chs.set_message(self._get_message('configureChooseMonitorTrayIconVisibility'))
-            chs.add("yes", self._get_message('yes'))
-            chs.add("no", self._get_message('no'))
-            if self.get_config("monitor_tray_icon")=="True":
-                chs.set_variable(ui.VarString("yes"))
+            chs.set_message(self._get_message('configureDesktopNotification') + "\n\n" + self._get_message('warningSpyingTool'))
+            chs.add("visible", self._get_message('desktopNotificationVisible'))
+            chs.add("autohide", self._get_message('desktopNotificationAutoHide'))
+            chs.add("none", self._get_message('desktopNotificationNone'))
+               
+            appv = self.get_config("monitor_desktop_notification")                     
+            if appv=="autohide":
+                chs.set_variable(ui.VarString("autohide"))
+            elif appv=="none":
+                chs.set_variable(ui.VarString("none"))
             else:
-                chs.set_variable(ui.VarString("no"))
+                chs.set_variable(ui.VarString("visible"))
+            
             chs.prev_step(self.step_menu_monitor)
-            chs.next_step(self.step_menu_monitor_procede)
+            chs.next_step(self.step_menu_monitor_desktop_notification_procede)
             return chs
         except:
             return ui.ErrorDialog(self._get_message('configureErrorConnection'))
     
-    def step_menu_monitor_procede(self, curui):
+    def step_menu_monitor_desktop_notification_procede(self, curui):
         try:
-            if curui.get_variable().get()=='yes':
-                self.set_config("monitor_tray_icon", "True")
-            else:
-                self.set_config("monitor_tray_icon", "False")
-            msg = ui.Message(self._get_message('configureTrayIconOK'))
+            self.set_config("monitor_desktop_notification", curui.get_variable().get())
+            msg = ui.Message(self._get_message('configureDesktopNotificationOK') + "\n\n" + self._get_message('warningLoginLogout'))
             msg.next_step(self.step_menu_main)
             return msg
         except:
             return ui.ErrorDialog(self._get_message('configureErrorConnection'))
-
-    def step_menu_password(self, curui):
+        
+    def step_menu_monitor_password(self, curui):
         chs = ui.Chooser()
         chs.set_message(self._get_message('configureChooseOperation'))
         chs.add("configureSetPassword", self._get_message('configureSetPassword'))
         chs.add("configureRemovePassword", self._get_message('configureRemovePassword'))
         chs.set_variable(self._password_menu_sel)
-        chs.prev_step(self.step_menu_main)
-        chs.next_step(self.step_config_password)
+        chs.prev_step(self.step_menu_monitor)
+        chs.next_step(self.step_config_monitor_password)
         return chs
 
-    def step_config_password(self, curui):
+    def step_config_monitor_password(self, curui):
         if curui.get_variable().get()=='configureSetPassword':
             self._change_pwd=ui.VarString("", True)
             self._change_repwd=ui.VarString("", True)
@@ -485,8 +499,8 @@ class Configure:
             ipt.set_message(self._get_message('configurePassword'))
             ipt.add('password', self._get_message('password'), self._change_pwd,  True)
             ipt.add('rePassword', self._get_message('rePassword'), self._change_repwd,  True)
-            ipt.prev_step(self.step_menu_password)
-            ipt.next_step(self.step_config_password_procede)
+            ipt.prev_step(self.step_menu_monitor_password)
+            ipt.next_step(self.step_config_monitor_password_procede)
             return ipt
         elif curui.get_variable().get()=='configureRemovePassword':
             chs = ui.Chooser()
@@ -496,11 +510,11 @@ class Configure:
             chs.add("no", self._get_message('no'))
             chs.set_variable(ui.VarString("no"))
             chs.set_accept_key("yes")
-            chs.prev_step(self.step_menu_password)
-            chs.next_step(self.step_config_password_procede)
+            chs.prev_step(self.step_menu_monitor_password)
+            chs.next_step(self.step_config_monitor_password_procede)
             return chs
     
-    def step_config_password_procede(self, curui):
+    def step_config_monitor_password_procede(self, curui):
         if curui.get_key() is not None and curui.get_key()=='set_password':
             if self._change_pwd.get()==self._change_repwd.get():
                 try:

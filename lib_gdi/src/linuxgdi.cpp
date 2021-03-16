@@ -427,6 +427,10 @@ void DWAGDINewWindow(int id,int tp, int x, int y, int w, int h, wchar_t* iconPat
 void DWAGDIPosSizeWindow(int id,int x, int y, int w, int h){
 	DWAWindow* dwa = getWindowByID(id);
 	if (dwa!=NULL){
+		XFreePixmap(display, dwa->dblbuffer);
+		XWindowAttributes wa;
+		XGetWindowAttributes(display, dwa->win, &wa);
+		dwa->dblbuffer = XCreatePixmap(display, dwa->win, w, h, wa.depth);
 		dwa->x=x;
 		dwa->y=y;
 		XMoveResizeWindow(display, dwa->win, x, y, w, h);

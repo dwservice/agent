@@ -17,7 +17,7 @@ import traceback
 #from Queue import Queue
 
 _WIDTH=760
-_HEIGHT=480
+_HEIGHT=500
 _HEIGHT_BOTTOM=55
 _WIDTH_LEFT=90
 _CONTENT_WIDTH=_WIDTH-_WIDTH_LEFT
@@ -137,6 +137,7 @@ class Chooser(BaseUI):
         self._selected_key=None
         self._variable=None
         self._message=None
+        self._message_hyperlink=[]
         self._message_height=100
         self._accept_key=None
         self._main=None
@@ -146,6 +147,9 @@ class Chooser(BaseUI):
     def set_message(self, m):
         self._message=m
     
+    def add_message_hyperlink(self, ps, ln, url):
+        self._message_hyperlink.append({"start":ps, "length":ln, "url": url})
+    
     def set_message_height(self, h):
         self._message_height=h
     
@@ -154,6 +158,9 @@ class Chooser(BaseUI):
     
     def get_message(self):
         return self._message
+    
+    def get_message_hyperlinks(self):
+        return self._message_hyperlink
     
     def set_accept_key(self, k):
         self._accept_key=k
@@ -825,6 +832,12 @@ class UI():
             l.set_wordwrap(True)
             l.set_text_align(gdi.TEXT_ALIGN_LEFTTOP)
             l.set_text(chs.get_message())
+            
+            if len(chs.get_message_hyperlinks())>0:
+                for i in range(len(chs.get_message_hyperlinks())):
+                    itm=chs.get_message_hyperlinks()[i]
+                    l.add_hyperlink("k" + str(i), itm["start"], itm["length"], itm["url"])  
+            
             l.set_position(_GAP_TEXT, _GAP_TEXT)
             l.set_size(w, h)
             

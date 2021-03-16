@@ -33,12 +33,12 @@ if __name__ == "__main__":
     #arij["installputcode"]=True    
     #arotps["install.json"]=arij
     
-    
     '''
     arij1={}
     arij1["lang"]="fr" 
     arotps["install.json"]=arij1
     '''
+    
     
     i = installer.Install()
     i.start(arotps)    

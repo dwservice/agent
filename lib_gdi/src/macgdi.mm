@@ -732,6 +732,15 @@ extern "C" void DWAGDIPosSizeWindow(int wid,int x, int y, int w, int h){
 	DWAWindow* dwa = getWindowByID(wid);
 	if (dwa!=NULL){
 		NSWindow *window = [dwa win];
+		[dwa setX:x];
+		[dwa setY:y];
+		[dwa setW:w];
+		[dwa setH:h];
+		if (dwa.boolInit){
+			GView *view = [window contentView];
+			[view setW:w];
+			[view setH:h];
+		}
 		NSRect sr = [[NSScreen mainScreen] frame];
 		NSRect svr = [[NSScreen mainScreen] visibleFrame];
 		NSPoint pos;
@@ -742,15 +751,6 @@ extern "C" void DWAGDIPosSizeWindow(int wid,int x, int y, int w, int h){
 		sz.width=w;
 		sz.height=h;
 		[window setContentSize:sz];
-		[dwa setX:x];
-		[dwa setY:y];
-		[dwa setW:w];
-		[dwa setH:h];
-		if (dwa.boolInit){
-			GView *view = [window contentView];
-			[view setW:w];
-			[view setH:h];
-		}
 	}
 }
 

@@ -12,6 +12,10 @@ if [ "$(id -u)" != "0" ]; then
 	echo "You must have root privileges to run this installer. Please try again, this time running the script using the root user." 
 	exit 1
 else
+
+	#FIX LIBZ 
+	unlink "${PATH_DWA_RUNTIME_LIBRARY}/libz.so.1.2.8"
+	
 	cd "${PATH_DWA}"
 	export LD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
 	export PYTHONIOENCODING=utf-8

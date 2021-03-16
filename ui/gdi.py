@@ -17,6 +17,7 @@ import messages
 import images
 import subprocess
 import json
+from __builtin__ import True
 
 WINDOW_TYPE_NORMAL=0
 WINDOW_TYPE_NORMAL_NOT_RESIZABLE=1
@@ -370,6 +371,11 @@ def loop():
         _ctypes.dlclose(gdwlib._handle)        
     del _gdimap["gdwlib"]
 
+def get_mouse_position():
+    pos_array = (ctypes.c_int * 2)()
+    gdw_lib().DWAGDIGetMousePosition(pos_array)
+    return {"x":(int)(pos_array[0]), "y":(int)(pos_array[1])}        
+
 def get_screen_size():
     return _gdimap["screensize"]
 
@@ -565,6 +571,23 @@ class NotifyIcon:
     def destroy(self):
         _destroy_notify_icon(self._id)
     
+class EventMouseDetect:
+    def __init__(self, s):
+        self._source=s
+        self._click_time=None
+    
+    def check(self,tp,x,y,b):
+        if tp=="MOVE":
+            self._source._fire_action({"action":"MOUSEMOVE", "x":x, "y":y, "button":b})
+        if tp=="BUTTON_DOWN":
+            self._source._fire_action({"action":"MOUSEBUTTONDOWN", "x":x, "y":y, "button":b})
+            self._click_time=time.time()
+        if tp=="BUTTON_UP":
+            self._source._fire_action({"action":"MOUSEBUTTONUP", "x":x, "y":y, "button":b})
+            if self._click_time is not None:
+                self._source._fire_action({"action":"MOUSECLICK", "x":x, "y":y})
+                self._click_time=None
+        
 
 class Window:
     def __init__(self,tp=WINDOW_TYPE_NORMAL_NOT_RESIZABLE,parentwin=None,logopath=None):
@@ -593,19 +616,24 @@ class Window:
         self._action=None
         self._object={}
         self._parent_window=parentwin
+        self._eventMouseDetect=EventMouseDetect(self)
         if self._parent_window is not None:
             self._parent_window._top_windows.append(self)
             self._title=parentwin.get_title()
         _init_window(self._id,self)
     
+    
     def _fire_action(self,e):
         if self._action is not None:
             e["source"]=self
+            if "window" not in e:
+                e["window"]=self
             self._action(e)
-        
+            
+    
     def set_action(self,f):
         self._action=f
-        
+    
     def get_action(self):
         return self._action
     
@@ -656,7 +684,8 @@ class Window:
         self._x=x;
         self._y=y;
         if self._show:
-            _update_pos_size(self._id)            
+            _update_pos_size(self._id)
+            #_repaint(self._id,0,0,self._w,self._h)
     
     def set_size(self,w,h):
         self._w=w
@@ -902,9 +931,7 @@ class Window:
     def on_mouse(self,tp,x,y,b):
         if self._disable:
             return
-        if tp=="BUTTON_UP":
-            if self._action is not None:
-                self._action({"window":self, "source":self, "action":"CLICK"});
+        self._eventMouseDetect.check(tp, x, y, b)
         #VERIFICA FOCUS
         if tp=="BUTTON_DOWN":
             for c in reversed(self._focus_sequence):
@@ -972,21 +999,20 @@ class DialogMessage(Window):
     def set_message(self, value):
         self._message = to_unicode(value)
 
-    def _fire_action(self,e):
-        Window._fire_action(self, e)
-        self.destroy()
-        
     def _ok_action(self,e):
         if e["action"]=="PERFORMED":
             self._fire_action({"action":"DIALOG_OK"})
+            self.destroy()
     
     def _yes_action(self,e):
         if e["action"]=="PERFORMED":
             self._fire_action({"action":"DIALOG_YES"})
+            self.destroy()
     
     def _no_action(self,e):
         if e["action"]=="PERFORMED":
             self._fire_action({"action":"DIALOG_NO"})
+            self.destroy()
     
     def show(self):
         gapLabel=6
@@ -1056,7 +1082,6 @@ class PopupMenu(Window):
         self._h=30;
         self._show_position=[POPUP_POSITION_BOTTONRIGHT, POPUP_POSITION_BOTTONLEFT, POPUP_POSITION_TOPRIGHT, POPUP_POSITION_TOPLEFT]
         #self._show_position=[POPUP_POSITION_TOPRIGHT]
-        self._action=None
         self._list=[]        
     
     def set_show_position(self,p):
@@ -1066,22 +1091,15 @@ class PopupMenu(Window):
         return self._show_position
 
     def _do_actions(self,e):
-        self.destroy()
-        if self._action is not None:
-            self._action({"source":self, "action":e["source"].get_name()});
-        
-    
-    def set_action(self,f):
-        self._action=f
-        
-    def get_action(self):
-        return self._action
+        if e["action"]=="MOUSECLICK":
+            self.destroy()
+            self._fire_action({"action":"PERFORMED", "name":e["source"].get_name()});
     
     def show(self):
         self._h=len(self._list)*30+4        
         pos_array = (ctypes.c_int * 2)()
         gdw_lib().DWAGDIGetMousePosition(pos_array)
-        appsz=_gdimap["screensize"]                    
+        appsz=_gdimap["screensize"]
         self._x=(int)(pos_array[0])
         self._y=(int)(pos_array[1])
         for p in self._show_position:
@@ -1183,6 +1201,7 @@ class Component:
         self._gradient_background_end=None
         self._gradient_direction=None
         self._action=None
+        self._eventMouseDetect=EventMouseDetect(self)
     
     def _destroy(self):
         self._window=None
@@ -1193,6 +1212,13 @@ class Component:
     def get_action(self):
         return self._action
     
+    def _fire_action(self, e):
+        if self._action is not None:
+            e["source"]=self
+            if "window" not in e:
+                e["window"]=self._window
+            self._action(e)
+        
     def add_component(self, c):
         if self._container:
             c._window=self._window;
@@ -1378,6 +1404,7 @@ class Component:
         else:
             return (x,y)
         
+        
     def repaint_parent(self):
         if self._parent is not None and self._window._id is not None:
             #print "repaint_parent"
@@ -1396,7 +1423,7 @@ class Component:
         if self._window is not None and self._window._id is not None:
             #print "repaint_area"
             xy=self._get_win_pos()
-            _repaint(self._window._id,xy[0]+x,xy[1]+y,w,h);
+            _repaint(self._window._id,xy[0]+x,xy[1]+y,w,h);            
     
     def _draw_background_gradient(self,pobj,x,y,w,h):
         rgbstart = getRGBColor(self._gradient_background_start);
@@ -1476,9 +1503,7 @@ class Component:
     
     def on_mouse(self,tp,x,y,b):
         if self.is_enable():
-            if tp=="BUTTON_UP":
-                if self._action is not None:
-                    self._action({"window":self._window, "source":self, "action":"CLICK"});    
+            self._eventMouseDetect.check(tp, x, y, b)                
         #print "tp: " + tp + " - x: " + str(x) + " - y: " + str(y) + " - b: " + str(b) + "  " + str(self)
 
 class Panel(Component):
@@ -1505,13 +1530,37 @@ class Label(Component):
         self._text=u""
         self._wordwrap=False
         self._text_align=TEXT_ALIGN_LEFTMIDDLE
-        self._highlight=False        
+        self._highlight=False
+        self._hyperlinks={}
+    
+    def _fire_action(self, e):
+        Component._fire_action(self, e)
+        if e["action"]=="MOUSECLICK":
+            for k in self._hyperlinks:
+                itm = self._hyperlinks[k]
+                for a in itm["clickareas"]:
+                    if e["x"]>=a["x1"] and e["x"]<=a["x2"] and e["y"]>=a["y1"] and e["y"]<=a["y2"]:
+                        try:
+                            import webbrowser
+                            webbrowser.open(itm["url"])
+                        except:
+                            None
+                        return
     
     def get_text(self):
         return self._text
 
     def set_text(self, value):
         self._text = to_unicode(value)
+        self._hyperlinks={}
+        self.repaint()
+    
+    def add_hyperlink(self, key, ps, ln, url):
+        self._hyperlinks[key]={"start":ps, "length":ln, "url": url , "clickareas":[]}
+        self.repaint()
+    
+    def del_hyperlink(self, key):
+        del self._hyperlinks[key]
         self.repaint()
     
     def get_text_align(self):
@@ -1519,7 +1568,7 @@ class Label(Component):
 
     def set_text_align(self, value):
         self._text_align = value
-        self.repaint()
+        self.repaint()    
         
     def set_wordwrap(self,b):
         self._wordwrap=b
@@ -1558,11 +1607,11 @@ class Label(Component):
         if s!=u"":
             pobj.pen_color(self._foreground)
             ar=[]
-            if not self._wordwrap:
-                ar = s.split(u"\n");
-            else:
-                appar = s.split(u"\n");
-                for appsr in appar:
+            appar = s.split(u"\n");
+            for appsr in appar:
+                if not self._wordwrap:
+                    ar.append(appsr)
+                else:
                     if appsr=="":
                         ar.append("")
                     else:
@@ -1580,21 +1629,44 @@ class Label(Component):
                             else:
                                 curs=news
                         if curs!=u"":
-                            ar.append(curs)
+                            ar.append(curs)                        
+            
+            
+            for k in self._hyperlinks:
+                itm = self._hyperlinks[k]
+                itm["clickareas"]=[]
             th=pobj.get_text_height()*len(ar);
             ty=2;
             if self._text_align==TEXT_ALIGN_LEFTMIDDLE or self._text_align==TEXT_ALIGN_CENTERMIDDLE or self._text_align==TEXT_ALIGN_RIGHTMIDDLE:
-                ty=(self._h/2)-(th/2)
+                ty=(self._h/2)-(th/2)            
+            cpos=0
             for sr in ar:
                 tx=gapw
+                srw=pobj.get_text_width(sr)
+                srh=pobj.get_text_height()
                 if self._text_align==TEXT_ALIGN_CENTERMIDDLE:
-                    tx=((self._w-(gapw*2))/2)-(pobj.get_text_width(sr)/2)
+                    tx=((self._w-(gapw*2))/2)-(srw/2)
                     if tx<gapw:
                         tx=gapw
                 elif self._text_align==TEXT_ALIGN_RIGHTMIDDLE:
-                    tx=(self._w-(gapw*2))-pobj.get_text_width(sr)
-                pobj.draw_text(sr,tx,ty);
-                ty+=pobj.get_text_height()
+                    tx=(self._w-(gapw*2))-srw
+                pobj.draw_text(sr,tx,ty);               
+                
+                if len(self._hyperlinks)>0:
+                    yhpl = ty+srh-1;
+                    ctx = tx                
+                    for apos in range(len(sr)):
+                        ltx = pobj.get_text_width(sr[apos:apos+1])
+                        for k in self._hyperlinks:
+                            itm = self._hyperlinks[k]
+                            p = cpos+apos
+                            if p>=itm["start"] and p<itm["start"]+itm["length"]: 
+                                pobj.draw_line(ctx,yhpl,ctx+ltx,yhpl)
+                                itm["clickareas"].append({"x1":ctx,"y1":ty,"x2":ctx+ltx,"y2":yhpl})                                
+                        ctx+=ltx
+                                
+                cpos+=len(sr)+1                
+                ty+=srh
         pobj.clear_clip_rectangle()
 
                     
@@ -1654,8 +1726,8 @@ class Button(Component):
             if tp=="BUTTON_DOWN":
                 self.focus()
             elif tp=="BUTTON_UP":
-                if self._enable and self._action is not None:
-                    self._action({"window":self._window, "source":self, "action":"PERFORMED"});
+                if self._enable:
+                    self._fire_action({"action":"PERFORMED"});
             
 
 class RadioButton(Component):
@@ -1745,8 +1817,8 @@ class RadioButton(Component):
                                             old_selected._repaint_check()
                     self._selected=True
                     self._repaint_check()
-                    if self._enable and self._action is not None:
-                        self._action({"window":self._window, "source":self, "action":"SELECTED", "old_selected":old_selected});
+                    if self._enable:
+                        self._fire_action({"action":"SELECTED", "old_selected":old_selected});
 
 
 class ProgressBar(Component):

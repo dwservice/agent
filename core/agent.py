@@ -658,6 +658,12 @@ class Agent():
                 return str(v)
         elif (key=="proxy_user"):
             return self.get_config(key, "")
+        elif (key=="monitor_desktop_notification"):
+            v = self.get_config(key)
+            if v=="visible" or v=="autohide" or v=="none": 
+                return self.get_config(key)
+            else:
+                return "visible"
         elif (key=="monitor_tray_icon"):
             v = self.get_config(key)
             if v is None or v is True:
@@ -688,6 +694,9 @@ class Agent():
             b=str2bool(val)
             self._set_config(key, b)
             self._reload_config()
+        elif (key=="monitor_desktop_notification"):
+            if val=="visible" or val=="autohide" or val=="none": 
+                self._set_config(key, val)
         elif (key=="monitor_tray_icon"):
             b=str2bool(val)
             self._set_config(key, b)
@@ -1763,7 +1772,7 @@ class Agent():
         try:
             if not rid in self._connections:
                 raise Exception("Connection not found (id: " + rid + ")")
-            sinfo=Session(self,self._connections[rid],sid,json.loads(msg["permissions"]))
+            sinfo=Session(self,self._connections[rid],sid,msg)
             self._sessions[sid]=sinfo                
         finally:
             self._connections_semaphore.release()
@@ -2194,6 +2203,11 @@ class MainMessage(Message):
                     self._agent._agent_group=msg["agentGroup"]
                 if "agentName" in msg:
                     self._agent._agent_name=msg["agentName"]
+            elif msg_name=="keepAlive":
+                m = {
+                    'name':  'okAlive' 
+                }
+                self.send_message(m)
             elif msg_name=="rebootOS":
                 self._agent._reboot_os()
             elif msg_name=="reboot":
@@ -2245,11 +2259,27 @@ class MainMessage(Message):
             
 class Session(Message):
     
-    def __init__(self, agent, conn, idses, perms):
+    def __init__(self, agent, conn, idses, msg):
         Message.__init__(self, agent, conn)
         self._bclose = False
         self._idsession= idses
-        self._permissions = perms
+        self._permissions = json.loads(msg["permissions"])
+        self._ipaddress = None        
+        if "ipAddress" in msg:
+            self._ipaddress = msg["ipAddress"]
+        self._country_code = None
+        if "countryCode" in msg:
+            self._country_code = msg["countryCode"]
+        self._country_name = None
+        if "countryName" in msg:
+            self._country_name = msg["countryName"]
+        self._user_name = None
+        if "userName" in msg:
+            self._user_name = msg["userName"]
+        self._access_type = None            
+        if "accessType" in msg:
+            self._access_type = msg["accessType"]            
+        
         self._activities = {}
         self._activities["screenCapture"] = False
         self._activities["shellSession"] = False
@@ -2284,6 +2314,13 @@ class Session(Message):
             msg_name = msg["name"]
             if msg_name=="request":
                 self.send_response(msg,self._request(msg))
+            elif msg_name=="keepalive":
+                m = {
+                    'name': 'response' , 
+                    'requestKey':  msg['requestKey'] , 
+                    'message':  "okalive"
+                }
+                self.send_message(m)
             elif msg_name=="download":
                 self.send_message(self._download(msg))
             elif msg_name=="upload":

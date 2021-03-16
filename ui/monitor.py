@@ -59,48 +59,100 @@ def get_user_dir():
         return utils.path_expanduser("~")
 
 
+class NotifyActivitiesHideEffect():
+    def __init__(self, dlg):
+        self._dlg = dlg
+        self._cancel=False
+        self._first=True
+    
+    def run(self):
+        if self._cancel:
+            return            
+        if self._first:
+            self._first=False
+            gdi.add_scheduler(4, self.run)
+        else:
+            cx = self._dlg.get_x()+2
+            self._dlg.set_position(cx,self._dlg.get_y())
+            ar = gdi.get_screen_size()
+            if cx>=ar["width"]:
+                self._dlg.hide()
+            else:            
+                gdi.add_scheduler(0.05, self.run)
+
+    def cancel(self):
+        self._cancel=True
+
 class NotifyActivities():
     def __init__(self, prt):
-        self._parent=prt
+        self._parent=prt        
         self._list=[u"screencapture",u"shell",u"transfers"]
         self._sessions=False
         self._cmps={}
         self._visible_cmps={}
         self._screen_w=0
-        self._screen_h=0                
-        self._dlg_w=25        
+        self._screen_h=0
+        self._dlg_y_gap=180                
+        self._dlg_w=21
+        self._move_y=None
+        self._skip_click=False
+        self._hide_effect=None
         self._dlg = gdi.Window(gdi.WINDOW_TYPE_POPUP)
         self._dlg.set_background("ffaa33")
         self._pnl = gdi.Panel()
         self._pnl.set_position(1, 1)      
-        self._pnl.set_size(self._dlg_w, 24)  
+        self._pnl.set_size(self._dlg_w, 20)  
         self._pnl.set_background("313536")
-        self._dlg.add_component(self._pnl)
+        self._dlg.add_component(self._pnl)        
         implogo = gdi.ImagePanel()
-        implogo.set_position(4, 4)
+        implogo.set_position(2, 2)
         implogo.set_filename(images.get_image(u"logo16x16.bmp"))
-        self._pnl.add_component(implogo)
+        self._pnl.add_component(implogo)        
         
         for k in self._list:
-            self._visible_cmps[k]=False
             self._cmps[k] = gdi.ImagePanel()        
-            self._cmps[k].set_filename(images.get_image(u"activities_" + k + u".bmp"))
+            self._cmps[k].set_filename(images.get_image(u"activities_" + k + u".bmp"))            
             self._dlg.add_component(self._cmps[k])
+            self._visible_cmps[k]=False
+            self._cmps[k].set_visible(False)
         
         self._sessions_last_update=self._sessions
         self._visible_cmps_last_update=self._visible_cmps.copy()
-        self._dlg.set_action(self.on_action)        
+        self._dlg.set_action(self.on_action)
+                
             
     def set_sessions(self, b):
         self._sessions=b
         
     def set_visible(self, k, b):        
         self._visible_cmps[k]=b
-        
+    
+    def _move_y_timer(self):
+        if self._move_y is not None:
+            mp = gdi.get_mouse_position()
+            ar = gdi.get_screen_size()
+            if mp["x"]<=ar["width"]-self._dlg.get_width():
+                self._move_y=None
+            else:
+                ny=mp["y"]-self._move_y            
+                if ny>=0 and ny<=ar["height"]-120 and self._dlg.get_y()!=ny:
+                    self._dlg.set_position(self._dlg.get_x(),ny)
+                    self._dlg_y_gap=ar["height"]-ny
+                self._skip_click=True
+                gdi.add_scheduler(0.1, self._move_y_timer)
+    
     def on_action(self,e):
-        if e["action"]=="CLICK":
-            self._parent._app.show()
-            self._parent._app.to_front()
+        if e["action"]=="MOUSEBUTTONDOWN":            
+            if e["button"]==1:
+                self._move_y=e["y"]
+                gdi.add_scheduler(0.1, self._move_y_timer)
+        if e["action"]=="MOUSEBUTTONUP":
+            self._move_y=None
+        if e["action"]=="MOUSECLICK":
+            if not self._skip_click:
+                self._parent._app.show()
+                self._parent._app.to_front()
+            self._skip_click=False
     
     def update(self):
         bok=False
@@ -116,28 +168,28 @@ class NotifyActivities():
             self._screen_h=ar["height"]
             bok=True 
         if bok:
+            if self._hide_effect is not None:
+                self._hide_effect.cancel()
             if self._sessions:
-                self._dlg_h=28
+                self._dlg_h=22
                 for k in self._list:
                     if self._visible_cmps[k]:
-                        self._cmps[k].set_position(5, self._dlg_h)
+                        self._cmps[k].set_position(3, self._dlg_h)
                         self._cmps[k].set_visible(True)
-                        self._dlg_h+=20                        
+                        self._dlg_h+=18
                     else:
                         self._cmps[k].set_visible(False)
-                if self._dlg_h==28:
-                    self._dlg_h=26
-                
-                ygap=100
-                if is_mac():
-                    ygap=140
-                self._dlg.set_position(self._screen_w-self._dlg_w,self._screen_h-self._dlg_h-ygap)
+                self._dlg.set_position(self._screen_w-self._dlg_w,self._screen_h-self._dlg_y_gap)
                 self._dlg.set_size(self._dlg_w, self._dlg_h)
                 self._dlg.show()                
-            else: 
+                if self._parent._monitor_desktop_notification=="autohide":                    
+                    self._hide_effect = NotifyActivitiesHideEffect(self._dlg)
+                    self._hide_effect.run()                                    
+            else:
                 self._dlg.hide()
                 for k in self._list:
                     self._visible_cmps[k]=False
+                    self._cmps[k].set_visible(False)
             self._sessions_last_update=self._sessions
             self._visible_cmps_last_update=self._visible_cmps.copy()
     
@@ -185,6 +237,9 @@ class Main():
     
     def _set_config_base_path(self, pth):
         self._config_base_path=pth
+        f = utils.file_open(self._config_base_path + os.sep + 'config.json')                
+        self._properties = json.loads(f.read())
+        f.close()
     
     def lock(self):
         self._homedir = get_user_dir() + utils.path_sep + u"." + self._name.lower()
@@ -301,7 +356,7 @@ class Main():
                         else:
                             csts = []
                         ret["sessions_status"] = csts
-                        if self._notifications_enabled:                            
+                        if self._monitor_desktop_notification!="none":                            
                             if self._notifyActivities is None:
                                 self._notifyActivities=NotifyActivities(self)                            
                             appar = self.get_activities(csts)
@@ -314,7 +369,7 @@ class Main():
                         None
                     return ret;
             else:
-                if self._notifications_enabled:
+                if self._monitor_desktop_notification!="none":
                     if self._notifyActivities is not None:                        
                         self._notifyActivities.set_sessions(False)
                         self._notifyActivities.update()
@@ -330,12 +385,16 @@ class Main():
         if self.check_stop():
             if self._notifyActivities is not None:
                 self._notifyActivities.destroy()
+            if self._monitor_tray_icon:
+                self._monitor_tray_obj.destroy()
             self._app.destroy()
             return
         if self.check_update():
             self._update=True
             if self._notifyActivities is not None:
                 self._notifyActivities.destroy()
+            if self._monitor_tray_icon:
+                self._monitor_tray_obj.destroy()
             self._app.destroy()
             return
         if self.check_show():
@@ -421,23 +480,23 @@ class Main():
                 apptxl=""
                 apptxr=""
                 apptxl+=self._get_message('monitorSession') + ":"
-                apptxr+=self._get_message('monitorActive').format(str(curact["sessions"]))
+                apptxr+=self._get_message('monitorActive') + " (" + str(curact["sessions"]) + ")"
                                 
                 if curact["screenCapture"]>0:
                     apptxl+="\n" + self._get_message('monitorScreenCapture') + ":"
-                    apptxr+="\n" + self._get_message('monitorActive').format(str(curact["screenCapture"]))
+                    apptxr+="\n" + self._get_message('monitorActive') + " (" + str(curact["screenCapture"]) + ")"
                 
                 if curact["shellSession"]>0:
                     apptxl+="\n" + self._get_message('monitorShellSession') + ":"
-                    apptxr+="\n" + self._get_message('monitorActive').format(str(curact["shellSession"]))
+                    apptxr+="\n" + self._get_message('monitorActive') + " (" + str(curact["shellSession"]) + ")"
                 
                 if curact["downloads"]>0:
                     apptxl+="\n" + self._get_message('monitorDownload') + ":"
-                    apptxr+="\n" + self._get_message('monitorActive').format(str(curact["downloads"]))
+                    apptxr+="\n" + self._get_message('monitorActive') + " (" + str(curact["downloads"]) + ")"
                 
                 if curact["uploads"]>0:
                     apptxl+="\n" + self._get_message('monitorUpload') + ":"
-                    apptxr+="\n" + self._get_message('monitorActive').format(str(curact["uploads"]))
+                    apptxr+="\n" + self._get_message('monitorActive') + " (" + str(curact["uploads"]) + ")"
                 
                 self._lbl_notificationsn.set_visible(False)
                 self._lbl_notificationsl.set_text(apptxl)
@@ -624,7 +683,7 @@ class Main():
         return len(po) > 0     
     
     def printInfo(self):
-        msgst=""
+        msgst=u""
         appar = self.get_info()
         s=appar["state"]
         if s=='0': #STATUS_OFFLINE 
@@ -637,29 +696,44 @@ class Main():
             msgst=self._get_message('monitorStatusUpdating')
         else:
             msgst=self._get_message('monitorStatusNoService')
-        print("Status: " + msgst)
-        print("Sessions: " + str(len(appar["sessions_status"])))    
+        print(self._get_message('monitorStatus') + u": " + msgst) 
+        print(self._get_message('monitorSession') + u" : " + self._get_message('monitorActive') + u" (" + str(appar["sessions"]) + u")")
+        if appar["screenCapture"]>0:
+            print(self._get_message('monitorScreenCapture')+ u": " + self._get_message('monitorActive') + u" (" + str(appar["screenCapture"]) + u")")            
+        
+        if appar["shellSession"]>0:
+            print(self._get_message('monitorShellSession')+ u": " + self._get_message('monitorActive') + u" (" + str(appar["shellSession"]) + u")")
+                    
+        if appar["downloads"]>0:
+            print(self._get_message('monitorDownload')+ u": " + self._get_message('monitorActive') + u" (" + str(appar["downloads"]) + u")")
+                    
+        if appar["uploads"]>0:
+            print(self._get_message('monitorUpload')+ u": " + self._get_message('monitorActive') + u" (" + str(appar["uploads"]) + u")")
+            
+            
     
     def _actions_systray(self,e):
-        if e["action"]=="show":
-            self._app.show()
-            self._app.to_front()
-        elif e["action"]=="hide":
-            self._app.hide()
-        elif e["action"]=="enable":
-            self.enable_disable(e)
-        elif e["action"]=="disable":
-            self.enable_disable(e)
-        elif e["action"]=="configure":
-            self.configure(e)
+        if e["action"]=="PERFORMED":
+            if e["name"]=="show":
+                self._app.show()
+                self._app.to_front()
+            elif e["name"]=="hide":
+                self._app.hide()
+            elif e["name"]=="enable":
+                self.enable_disable(e)
+            elif e["name"]=="disable":
+                self.enable_disable(e)
+            elif e["name"]=="configure":
+                self.configure(e)
     
     def _window_action(self,e):
         if e["action"]==u"ONCLOSE":
-            if self._notifyActivities is not None:
-                self._notifyActivities.destroy()
             if self._monitor_tray_icon:
                 e["source"].hide()
                 e["cancel"]=True        
+            elif self._notifyActivities is not None:
+                self._notifyActivities.destroy()
+            
     
     def notify_action(self, e):
         if e["action"]==u"ACTIVATE":
@@ -696,7 +770,7 @@ class Main():
             msgst=self._get_message('monitorStatusNoService')
             self._monitor_tray_obj=gdi.NotifyIcon(self.get_ico_file(u"monitor_warning"), self._name + " - " + msgst)
             self._monitor_tray_obj.set_object("window",self._app)
-            self._monitor_tray_obj.set_action(self.notify_action)
+            self._monitor_tray_obj.set_action(self.notify_action)            
             self._monitor_tray_icon=ti
     
     def prepare_window(self):
@@ -810,7 +884,7 @@ class Main():
         self._mode=mode
         self._monitor_tray_icon=False
         self._monitor_tray_obj=None
-        self._notifications_enabled=True
+        self._monitor_desktop_notification="visible"
         self._update=False
         if mode=="info":
             self.printInfo()
@@ -824,11 +898,11 @@ class Main():
                 time.sleep(2) #Attende finché il server non cancella l'update file o lo stop file
         
             try:
-                if 'monitor_notifications' in self._properties:
-                    self._notifications_enabled=self._properties['monitor_notifications']
+                if 'monitor_desktop_notification' in self._properties:
+                    self._monitor_desktop_notification=self._properties['monitor_desktop_notification']
             except Exception:
                 None
-        
+            
             #Carica Maschera 
             self.prepare_window()            
             if mode=="systray":

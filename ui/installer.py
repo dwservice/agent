@@ -1204,9 +1204,29 @@ class Install:
             if "welcometext" in self._options:
                 m=unicode(self._options["welcometext"])
             else:            
-                m=self._get_message('welcomeLicense') + "\n\n" + self._get_message('welcomeSecurity') + "\n\n" + self._get_message('welcomeSoftwareUpdates')
+                m=self._get_message('welcomeLicense') + "\n\n" 
+                m+=self._get_message('welcomeSecurity') + "\n\n" 
+                m+=self._get_message('welcomeSoftwareUpdates') + "\n\n\n"
+                m+=self._get_message('welcomePrivacyTerms')
+                                
+                p1 = m.index("https://www.dwservice.net/")
+                p2 = m.index(".html",p1)
+                surl= m[p1:p2+5]
+                chs.add_message_hyperlink(p1, len(surl), "https://www.dwservice.net/licenses-sources.html")
                 
-            chs.set_message(m)
+                mtc = self._get_message('termsAndConditions')                
+                ptc = m.index("#TERMSANDCONDITIONS")                
+                chs.add_message_hyperlink(ptc, len(mtc), "https://www.dwservice.net/terms-and-conditions.html")
+                m=m.replace("#TERMSANDCONDITIONS", mtc)
+                
+                mpp = self._get_message('privacyPolicy')
+                ppp = m.index("#PRIVACYPOLICY")                
+                chs.add_message_hyperlink(ppp, len(mpp), "https://www.dwservice.net/gdpr.html")
+                m=m.replace("#PRIVACYPOLICY", mpp)
+                
+                
+                
+            chs.set_message(m)            
             chs.set_message_height(300)
             if "mode" in self._options and self._options["mode"]=="install":
                 chs.add("install", self._get_message('install'))
