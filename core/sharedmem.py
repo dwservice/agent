@@ -725,7 +725,6 @@ class StreamBufferReader:
     
     def __init__(self, sr):
         self._stream = sr
-        self._lock = threading.Lock()
         self._buff = None
         self._timeout_function = None
     
@@ -780,63 +779,50 @@ class StreamBufferReader:
         return bfl
         
     def get_bytes(self):
-        self._lock.acquire()
-        try:
-            bts = self._get_fully(4)
-            if bts is None:
-                return None
-            return self._get_fully(bts.get_int(0))
-        finally:
-            self._lock.release()
+        bts = self._get_fully(4)
+        if bts is None:
+            return None
+        return self._get_fully(bts.get_int(0))
+        
             
     def get_str(self):
-        self._lock.acquire()
-        try:
-            bts = self._get_fully(4)
-            if bts is None:
-                return None
-            bts = self._get_fully(bts.get_int(0))
-            return bts.to_str()
-        finally:
-            self._lock.release()
+        bts = self._get_fully(4)
+        if bts is None:
+            return None
+        bts = self._get_fully(bts.get_int(0))
+        return bts.to_str()        
     
     def get_int(self):
-        self._lock.acquire()
-        try:
-            bts = self._get_fully(4)
-            if bts is None:
-                return None
-            return bts.get_int(0)
-        finally:
-            self._lock.release()
+        bts = self._get_fully(4)
+        if bts is None:
+            return None
+        return bts.get_int(0)
+        
     
     def get_pack(self, df):
-        self._lock.acquire()
-        try:
-            ar=[]
-            for i in range(len(df)):
-                s = df[i]
-                if s=="int":
-                    bts = self._get_fully(4)
-                    if bts is None:
-                        return None
-                    ar.append(bts.get_int(0))
-                elif s=="str":
-                    bts = self._get_fully(4)
-                    if bts is None:
-                        return None
-                    bts = self._get_fully(bts.get_int(0))
-                    ar.append(bts.to_str())            
-                elif s=="bytes":
-                    bts = self._get_fully(4)
-                    if bts is None:
-                        return None
-                    ar.append(self._get_fully(bts.get_int(0)))
-                else:
-                    raise Exception("Invalid def.")
-            return ar
-        finally:
-            self._lock.release()        
+        ar=[]
+        for i in range(len(df)):
+            s = df[i]
+            if s=="int":
+                bts = self._get_fully(4)
+                if bts is None:
+                    return None
+                ar.append(bts.get_int(0))
+            elif s=="str":
+                bts = self._get_fully(4)
+                if bts is None:
+                    return None
+                bts = self._get_fully(bts.get_int(0))
+                ar.append(bts.to_str())            
+            elif s=="bytes":
+                bts = self._get_fully(4)
+                if bts is None:
+                    return None
+                ar.append(self._get_fully(bts.get_int(0)))
+            else:
+                raise Exception("Invalid def.")
+        return ar
+                
 
 class StreamBufferWriter:
     
@@ -848,34 +834,71 @@ class StreamBufferWriter:
         self._autoflush_counter = None
         self._autoflush_timer = None
         self._buff=None
+        self._set_add_func()
     
     def set_autoflush_time(self,tm):
         self._autoflush_time=tm
         if self._autoflush_time>-1:
             self._autoflush_counter = utils.Counter()
         else:
-            self._autoflush_counter = None
-    
+            self._autoflush_counter = None        
+        self._set_add_func()
+
     def set_autoflush_size(self,sz):
         self._autoflush_size=sz
+        self._set_add_func()
     
-    def _add_buffer(self, ar):
+    def _set_add_func(self):
+        if self._autoflush_time==0 and self._autoflush_size==-1:
+            self._add_func=self._add_immediate_flush
+            self._add_list_func=self._add_list_immediate_flush            
+        else:
+            self._add_func=self._add_buffer
+            self._add_list_func=self._add_list_buffer
+    
+    def _add_immediate_flush(self, bts):
         self._lock.acquire()
-        try:                                
+        try:
+            self._buff=bts
+            self._flush()
+        finally:
+            self._lock.release()
+    
+    def _add_list_immediate_flush(self, ar):
+        self._lock.acquire()
+        try:
             for bts in ar:
                 if self._buff is None:
                     self._buff=bts
                 else:
                     self._buff.append_bytes(bts)
-            if self._autoflush_size>-1 and len(self._buff)>=self._autoflush_size:
-                self._flush()
-            elif self._autoflush_time>-1 and self._autoflush_counter.is_elapsed(self._autoflush_time):
-                self._flush()
-            elif self._autoflush_time>0 and self._autoflush_timer is None:
-                self._autoflush_timer = threading.Timer(self._autoflush_time, self._check_flush)
-                self._autoflush_timer.start()
+            self._flush()
         finally:
             self._lock.release()
+    
+    def _add_buffer(self, bts):
+        self._add_list_buffer([bts])
+    
+    def _add_list_buffer(self, ar):
+        self._lock.acquire()
+        try:
+            for bts in ar:
+                if self._buff is None:
+                    self._buff=bts
+                else:
+                    self._buff.append_bytes(bts)
+            self._add_buffer_flush()
+        finally:
+            self._lock.release()
+    
+    def _add_buffer_flush(self):
+        if self._autoflush_size>-1 and len(self._buff)>=self._autoflush_size:
+            self._flush()
+        elif self._autoflush_time>-1 and self._autoflush_counter.is_elapsed(self._autoflush_time):
+            self._flush()
+        elif self._autoflush_time>0 and self._autoflush_timer is None:
+            self._autoflush_timer = threading.Timer(self._autoflush_time, self._check_flush)
+            self._autoflush_timer.start()
     
     def _check_flush(self):
         self._lock.acquire()
@@ -903,15 +926,17 @@ class StreamBufferWriter:
             self._lock.release()
     
     def add_int(self, i):
-        self._add_buffer([utils.Bytes(utils._struct_I.pack(i))]);
+        self._add_func(utils.Bytes(utils._struct_I.pack(i)))
     
     def add_bytes(self, bts):
-        self._add_buffer([utils.Bytes(utils._struct_I.pack(len(bts))), bts])
+        bts.insert_int(0,len(bts))
+        self._add_func(bts)        
     
     def add_str(self, s):
         bts=utils.Bytes()
         bts.append_str(s)
-        self._add_buffer([utils.Bytes(utils._struct_I.pack(len(bts))), bts])
+        bts.insert_int(0,len(bts))
+        self._add_func(bts)        
     
     def add_pack(self,df,lst):
         ar=[]
@@ -923,14 +948,14 @@ class StreamBufferWriter:
             elif s=="str":
                 bts=utils.Bytes()
                 bts.append_str(o)
-                ar.append(utils.Bytes(utils._struct_I.pack(len(bts))))
-                ar.append(bts)            
+                bts.insert_int(0,len(bts))
+                ar.append(bts)                            
             elif s=="bytes":
-                ar.append(utils.Bytes(utils._struct_I.pack(len(o))))
-                ar.append(o)
+                o.insert_int(0,len(o))
+                ar.append(o)                
             else:
                 raise Exception("Invalid def.")
-        self._add_buffer(ar)
+        self._add_list_func(ar)
         
       
 class Property():
@@ -1453,8 +1478,8 @@ class TestThread(threading.Thread):
                 bfwr.set_autoflush_time(0.1)
                 #bfwr.set_autoflush_size(50000)
                 for i in range(num):
-                    #bfwr.add_bytes(utils.Bytes("TEST" + str(i+1)))
-                    bfwr.add_str("TEST" + str(i+1))
+                    bfwr.add_bytes(utils.Bytes("TEST" + str(i+1)))
+                    #bfwr.add_str("TEST" + str(i+1))
                 
                 #bfwr.flush()                
                 
@@ -1468,6 +1493,7 @@ class TestThread(threading.Thread):
             
             print "WAIT READ..."
             time.sleep(0.1)
+            #time.sleep(5)
             
             print "START READ"
             bfrd = m1.get_buffer_reader()
@@ -1475,8 +1501,8 @@ class TestThread(threading.Thread):
             tm=utils.get_time()
             ar=[]            
             while True:
-                #dt=bfrd.get_bytes()
-                dt=bfrd.get_str()
+                dt=bfrd.get_bytes()
+                #dt=bfrd.get_str()
                                 
                 if dt is None:
                     #time.sleep(8);
@@ -1493,7 +1519,7 @@ class TestThread(threading.Thread):
             print("READ TIME:" + str(utils.get_time()-tm))
             print "END READ"
             
-            if True:
+            if False:
                 print("READ CHECK...")
                 bok=True
                 for i in range(num):
@@ -1506,7 +1532,7 @@ class TestThread(threading.Thread):
                     print "READ CHECK OK"        
             else:
                 print "NO READ CHECK"
-                
+             
             m1.close()
             print "REMOVING FILE..."
             time.sleep(8);
@@ -1535,8 +1561,18 @@ if __name__ == "__main__":
     print t2.get_property("counter")
     t2.close()'''
     
+    import yappi    
+    #yappi.set_clock_type("wall")
+    yappi.start()
+    
     t1 = TestThread()
     t1.start()
+    t1.join()
+    
+    print "TOTAL TIME: " + str(yappi.get_clock_time())    
+    yappi.get_func_stats().print_all()
+    yappi.stop()
+    
     
     '''
     m1 = Stream()
@@ -1545,29 +1581,21 @@ if __name__ == "__main__":
     fname=m1.create()
     m2.connect(fname)
     
+    bw = m1.get_buffer_writer()
+    br = m2.get_buffer_reader()
     
-    m2.write_token("TOKEN123")
-    m2.write_token("TOKEN999")
-    m2.write_token("CIAO")
-    m2.write_token("PIPPO")
     
-    print(m1.read_token())
-    print(m1.read_token())
-    print(m1.read_token())
-    print(m1.read_token())
+    bw.add_int(3);
+    bw.add_str("012456789"*20000)
+    bw.flush()
+    
+    
+    print(str(br.get_int()))
+    print(str(len(br.get_str())))
+    
     
     m1.close()
     m2.close()
-    time.sleep(6)
     '''
-    
-        
-   
 
-    
-    
-        
-        
-        
-            
             
