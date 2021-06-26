@@ -383,7 +383,7 @@ class Configure:
             return self.step_check_install_code(curui)
         
     
-    def step_menu_agent_enable(self, ui):
+    def step_menu_agent_enable(self, curui):
         chs = ui.Chooser()
         chs.set_message(self._get_message('configureEnableAgentQuestion'))
         chs.add("yes", self._get_message('yes'))

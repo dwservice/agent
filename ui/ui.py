@@ -7,14 +7,11 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
 import messages
-import platform
 import os
-import shutil
 import sys
 import threading
 import gdi
 import traceback
-#from Queue import Queue
 
 _WIDTH=760
 _HEIGHT=500

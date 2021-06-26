@@ -535,28 +535,29 @@ class Main():
             raise Exception(sret[6:])
     
     def _enable_disable_action_pwd(self,e):
-        pwd = ""
-        for c in e["window"].get_components():
-            if c.get_name()=="txtPassword":
-                pwd=c.get_text()
-        
-        e["window"].destroy()        
-        val = "false"
-        mess_ok='monitorAgentDisabled'
-        if self._cur_status=="DISABLE":
-            val="true"
-            mess_ok='monitorAgentEnabled'
-        if self.check_auth(pwd):
-            self.set_config(pwd, "enabled", val)
-            dlg = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_OK,gdi.DIALOGMESSAGE_LEVEL_INFO,self._app)
-            dlg.set_title(self._get_message('monitorTitle'))
-            dlg.set_message(self._get_message(mess_ok))
-            dlg.show();
-        else:
-            dlg = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_OK,gdi.DIALOGMESSAGE_LEVEL_ERROR,self._app)
-            dlg.set_title(self._get_message('monitorTitle'))
-            dlg.set_message(self._get_message('monitorInvalidPassword'))
-            dlg.show();            
+        if e["action"]=="PERFORMED":
+            pwd = ""
+            for c in e["window"].get_components():
+                if c.get_name()=="txtPassword":
+                    pwd=c.get_text()
+            
+            e["window"].destroy()        
+            val = "false"
+            mess_ok='monitorAgentDisabled'
+            if self._cur_status=="DISABLE":
+                val="true"
+                mess_ok='monitorAgentEnabled'
+            if self.check_auth(pwd):
+                self.set_config(pwd, "enabled", val)
+                dlg = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_OK,gdi.DIALOGMESSAGE_LEVEL_INFO,self._app)
+                dlg.set_title(self._get_message('monitorTitle'))
+                dlg.set_message(self._get_message(mess_ok))
+                dlg.show();
+            else:
+                dlg = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_OK,gdi.DIALOGMESSAGE_LEVEL_ERROR,self._app)
+                dlg.set_title(self._get_message('monitorTitle'))
+                dlg.set_message(self._get_message('monitorInvalidPassword'))
+                dlg.show();            
     
     def _enable_disable_action(self,e):
         if e["action"]=="DIALOG_YES":
