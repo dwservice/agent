@@ -17,6 +17,7 @@ import platform
 import traceback
 import time
 import base64
+import ctypes
 
 path_sep=os.sep
 line_sep=os.linesep
@@ -38,6 +39,25 @@ _struct_Q=struct.Struct("!Q")
 _struct_f=struct.Struct("!f")
 _struct_d=struct.Struct("!d")
 
+
+_ws_data_b0 = 0;
+_ws_data_b0 |= 1 << 7;
+_ws_data_b0 |= 0x2 % 128;
+_ws_data_struct_1=struct.Struct("!BBI")
+_ws_data_struct_2=struct.Struct("!BBBBI")
+_ws_data_struct_3=struct.Struct("!BBII")
+
+_ws_ping_b0 = 0
+_ws_ping_b0 |= 1 << 7;
+_ws_ping_b0 |= 0x9 % 128;
+_ws_ping_struct=struct.Struct("!BBI")
+        
+_ws_close_b0 = 0;
+_ws_close_b0 |= 1 << 7;
+_ws_close_b0 |= 0x8 % 128;
+_ws_close_struct=struct.Struct("!BBI")
+
+_len_byte_struct=struct.Struct("!IB")
 
 def is_windows():
     return _biswindows
@@ -105,7 +125,13 @@ def unload_package(pknm):
     for nm in mdtorem:
         del sys.modules[nm]
 
+def convert_bytes_to_structure(st, byte):
+    ctypes.memmove(ctypes.addressof(st), byte, ctypes.sizeof(st))
 
+def convert_struct_to_bytes(st):
+    bf = ctypes.create_string_buffer(ctypes.sizeof(st))
+    ctypes.memmove(bf, ctypes.addressof(st), ctypes.sizeof(st))
+    return bf.raw
 
 ##############
 # FILESYSTEM #
@@ -361,7 +387,7 @@ class Bytes():
     
     def append_bytes(self, bts):
         self._pydata_to_bytearray()
-        self._pydata+=bts._pydata
+        self._pydata+=bts._pydata                
     
     def append_int(self, i):
         self._pydata_to_bytearray()
@@ -405,4 +431,32 @@ class Bytes():
         self._pydata_to_bytearray()
         return self._pydata[i]
                
+    def encode_ws_data(self):
+        self._pydata_to_bytearray()
+        length = len(self._pydata);
+        rnd=0 #random.randint(0,2147483647)
+        if length <= 125:
+            self._pydata[0:0]= _ws_data_struct_1.pack(_ws_data_b0, 0x80|length,rnd)
+        elif length <= 0xFFFF:
+            self._pydata[0:0]=_ws_data_struct_2.pack(_ws_data_b0, 0xFE,length >> 8 & 0xFF,length & 0xFF,rnd)
+        else: 
+            self._pydata[0:0]=_ws_data_struct_3.pack(_ws_data_b0, 0xFF,length,rnd)
+        
+    def encode_ws_ping(self):
+        self._pydata_to_bytearray()
+        if len(self._pydata)>0:
+            self._pydata=bytearray()
+        rnd=0 #random.randint(0,2147483647)
+        self._pydata[0:0]=_ws_ping_struct.pack(_ws_ping_b0, 0x80 | 0, rnd)
+            
+    def encode_ws_close(self):
+        self._pydata_to_bytearray()
+        if len(self._pydata)>0:
+            self._pydata=bytearray()
+        rnd=0 #random.randint(0,2147483647)
+        self._pydata[0:0]=_ws_close_struct.pack(_ws_close_b0, 0x80 | 0, rnd)
     
+    def encode_len_byte_data(self, b):
+        self._pydata_to_bytearray()
+        self._pydata[0:0] = _len_byte_struct.pack(len(self._pydata)+1,b);            
+   

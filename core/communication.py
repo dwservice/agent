@@ -286,11 +286,11 @@ def set_cacerts_path(path):
     global _cacerts_path
     _cacerts_path=path
 
-def _connect_socket(host, port, proxy_info):
+def _connect_socket(host, port, proxy_info, timeout=_SOCKET_TIMEOUT_READ):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        #sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        sock.settimeout(_SOCKET_TIMEOUT_READ)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        sock.settimeout(timeout)
         bprxdet=False
         prxi=proxy_info
         if prxi is None or prxi.get_type() is None or proxy_info.get_type()=='SYSTEM':
@@ -345,8 +345,8 @@ def _connect_socket(host, port, proxy_info):
                     release_detected_proxy()
                     sock.close()
                     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    #sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                    sock.settimeout(_SOCKET_TIMEOUT_READ)
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                    sock.settimeout(timeout)
                     sock.connect((host, port)) #PROVA A COLLEGARSI SENZA PROXY
                     _set_detected_proxy_none()
                     bprxdet=False
@@ -386,8 +386,8 @@ def _connect_socket(host, port, proxy_info):
                             release_detected_proxy()
                             sock.close()
                             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                            #sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                            sock.settimeout(_SOCKET_TIMEOUT_READ)
+                            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                            sock.settimeout(timeout)
                             sock.connect((host, port)) #PROVA A COLLEGARSI SENZA PROXY
                             _set_detected_proxy_none()
                             bprxdet=False
@@ -467,14 +467,12 @@ def download_url_file(urlsrc, fdest, proxy_info=None, response_transfer_progress
 
 def get_url_prop(url, proxy_info=None):
     sredurl=None
-    sp = _split_utl(url)
-    #Richiesta al server
+    sp = _split_utl(url)    
     sock = _connect_socket(sp["host"], sp["port"], proxy_info)
     try:
         req = Request("GET", sp["path"],  {'Host' : sp["host"] + ':' + str(sp["port"],),  'Connection' : 'close'})
         sock.sendall(req.to_message())
         
-        #Legge risposta
         prpresp = None;
         resp = Response(sock)
         if resp.get_code() == '200':
@@ -490,6 +488,25 @@ def get_url_prop(url, proxy_info=None):
         prpresp = get_url_prop(sredurl,proxy_info)
     return prpresp
 
+def ping_url(url, proxy_info=None):
+    tmret=-1
+    try:
+        tm=time.time()
+        sp = _split_utl(url)
+        sock = _connect_socket(sp["host"], sp["port"], proxy_info,timeout=2)
+        try:
+            req = Request("GET", sp["path"],  {'Host': sp["host"] + ':' + str(sp["port"],),  'Connection': 'close'})
+            sock.sendall(req.to_message())
+            resp = Response(sock)
+            if resp.get_code() == '200':
+                tmret=round(time.time()-tm,3)                
+        finally:
+            sock.shutdown(1)
+            sock.close();
+    except:
+        None
+    return tmret
+
 class ProxyInfo:
     def __init__(self):
         self._type="None"
@@ -498,8 +515,8 @@ class ProxyInfo:
         self._user=None
         self._password=None
         
-    def set_type(self, type):
-        self._type=type
+    def set_type(self, ptype):
+        self._type=ptype
     
     def set_host(self, host):
         self._host=host
@@ -685,7 +702,7 @@ class Worker(threading.Thread):
                 except Exception as e: 
                     self._parent.fire_except(e)
                 self._queue.task_done()
-    
+
 class ThreadPool():
     
     def __init__(self, name, queue_size, core_size , fexcpt):
@@ -925,12 +942,8 @@ class ConnectionCheckAlive(threading.Thread):
     def _send_keep_alive(self):
         try:
             if not self._connection.is_close():
-                self._connection._semaphore_send.acquire()
-                try:
-                    self._connection._send_ws_ping()
-                    #print "SESSION - PING INVIATO!"
-                finally:
-                    self._connection._semaphore_send.release()
+                self._connection._send_ws_ping()
+                #print "SESSION - PING INVIATO!"                
         except Exception:
             #traceback.print_exc()
             None
@@ -1042,7 +1055,7 @@ class ConnectionReader(threading.Thread):
                     else:
                         bfireclose=not self._connection.is_close()
                         break
-                    self._connection.fire_data(utils.Bytes(data))
+                    self._connection.fire_data(utils.Bytes(data))                    
                     
         except Exception as e:
             bfireclose=not self._connection.is_close()
@@ -1071,7 +1084,7 @@ class Connection:
             if "on_except" in events:
                 self._on_except = events["on_except"]
         self._semaphore = threading.Condition()
-        self._semaphore_send = threading.Condition()
+        self._lock_send = threading.Lock()
         self._proxy_info = None
         self._sock = None
         self._tdalive = None
@@ -1111,8 +1124,7 @@ class Connection:
                     raise Exception(resp.get_body())
                 else:
                     raise Exception("Server error.")
-            
-            
+                        
             self._close=False
             self._sock.settimeout(None)
             
@@ -1159,67 +1171,36 @@ class Connection:
             self._on_except(e) 
     
     def _send_ws_data(self,data):
-        self._semaphore_send.acquire()
+        if self._sock is None:
+            raise Exception('connection closed.')
+        data.encode_ws_data()
+        self._lock_send.acquire()
         try:
-            b0 = 0;
-            b0 |= 1 << 7;
-            b0 |= 0x2 % 128;
-            length = len(data);
-            rnd=0
-            if length <= 125:
-                data.insert_byte(0,b0)
-                data.insert_byte(1,0x80 | length)
-                data.insert_int(2,rnd)
-            elif length <= 0xFFFF:
-                data.insert_byte(0,b0)
-                data.insert_byte(1,0xFE)
-                data.insert_byte(2,length >> 8 & 0xFF)
-                data.insert_byte(3,length & 0xFF)
-                data.insert_int(4,rnd)
-            else: 
-                data.insert_byte(0,b0)
-                data.insert_byte(1,0xFF)
-                data.insert_int(2, length)
-                data.insert_int(3,rnd)
-            if self._sock is None:
-                raise Exception('connection closed.')
             utils.socket_sendall(self._sock,data)
         finally:
-            self._semaphore_send.release()               
+            self._lock_send.release()               
             
     def _send_ws_close(self):
-        self._semaphore_send.acquire()
-        try:
-            bts = utils.Bytes()
-            b0 = 0;
-            b0 |= 1 << 7;
-            b0 |= 0x8 % 128;
-            bts.append_byte(b0)
-            bts.append_byte(0x80 | 0)
-            rnd=0 #random.randint(0,2147483647)
-            bts.append_int(rnd)
-            if self._sock is None:
-                raise Exception('connection closed.')
+        if self._sock is None:
+            raise Exception('connection closed.')
+        bts = utils.Bytes()
+        bts.encode_ws_close()
+        self._lock_send.acquire()
+        try:            
             utils.socket_sendall(self._sock,bts)
         finally:
-            self._semaphore_send.release() 
+            self._lock_send.release() 
     
     def _send_ws_ping(self):
-        self._semaphore_send.acquire()
+        if self._sock is None:
+            raise Exception('connection closed.')
+        bts = utils.Bytes()
+        bts.encode_ws_ping()        
+        self._lock_send.acquire()
         try:
-            bts = utils.Bytes()
-            b0 = 0
-            b0 |= 1 << 7;
-            b0 |= 0x9 % 128;
-            bts.append_byte(b0)
-            bts.append_byte(0x80 | 0)
-            rnd=0 #random.randint(0,2147483647)
-            bts.append_int(rnd)
-            if self._sock is None:
-                raise Exception('connection closed.')
             utils.socket_sendall(self._sock,bts)
         finally:
-            self._semaphore_send.release()
+            self._lock_send.release()
 
     def is_close(self):
         bret = True

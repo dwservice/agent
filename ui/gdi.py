@@ -1617,9 +1617,11 @@ class Label(Component):
                     else:
                         wordar = appsr.split(" ");
                         curs=u""
+                        bfirst=True
                         for wsr in wordar:
                             news=None
-                            if curs==u"":
+                            if bfirst:
+                                bfirst=False
                                 news=wsr
                             else:
                                 news=curs + u" " + wsr
@@ -1650,22 +1652,32 @@ class Label(Component):
                         tx=gapw
                 elif self._text_align==TEXT_ALIGN_RIGHTMIDDLE:
                     tx=(self._w-(gapw*2))-srw
-                pobj.draw_text(sr,tx,ty);               
+                pobj.draw_text(sr,tx,ty);
                 
-                if len(self._hyperlinks)>0:
-                    yhpl = ty+srh-1;
-                    ctx = tx                
-                    for apos in range(len(sr)):
-                        ltx = pobj.get_text_width(sr[apos:apos+1])
-                        for k in self._hyperlinks:
-                            itm = self._hyperlinks[k]
-                            p = cpos+apos
-                            if p>=itm["start"] and p<itm["start"]+itm["length"]: 
-                                pobj.draw_line(ctx,yhpl,ctx+ltx,yhpl)
-                                itm["clickareas"].append({"x1":ctx,"y1":ty,"x2":ctx+ltx,"y2":yhpl})                                
-                        ctx+=ltx
-                                
-                cpos+=len(sr)+1                
+                for k in self._hyperlinks:
+                    itm = self._hyperlinks[k]
+                    lnpi = cpos
+                    lnpe = cpos+len(sr)
+                    klpi = itm["start"]
+                    klpe = itm["start"]+itm["length"]
+                    x1 = -1
+                    x2 = -1
+                    if klpi>=lnpi and klpi<=lnpe and klpe>=lnpi and klpe<=lnpe: #FULL INSIDE
+                        x1 = pobj.get_text_width(sr[0:(klpi-lnpi)])
+                        x2 = x1 + pobj.get_text_width(sr[(klpi-lnpi):(klpe-lnpi)])
+                    elif klpi>=lnpi and klpi<=lnpe: #START INSIDE
+                        x1 = pobj.get_text_width(sr[0:(klpi-lnpi)])
+                        x2 = x1 + pobj.get_text_width(sr[(klpi-lnpi):])
+                    elif klpe>=lnpi and klpe<=lnpe: #END INSIDE
+                        x1 = 0
+                        x2 = x1 + pobj.get_text_width(sr[0:(klpe-lnpi)])
+                    if x1!=-1 and x2 !=-1:
+                        y1 = ty
+                        y2 = ty+srh
+                        pobj.draw_line(x1+tx,y2,x2+tx,y2)
+                        itm["clickareas"].append({"x1":x1+tx,"y1":y1,"x2":x2+tx,"y2":y2})
+
+                cpos+=len(sr)+1                              
                 ty+=srh
         pobj.clear_clip_rectangle()
 
