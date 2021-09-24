@@ -22,6 +22,8 @@ ISetProcessDpiAwareness WindowsLoadLib::setProcessDpiAwarenessFunc=NULL;
 //USER32 LIB
 HINSTANCE WindowsLoadLib::user32dll=NULL;
 ISetProcessDPIAware WindowsLoadLib::setProcessDPIAwareFunc=NULL;
+IGetWindowDisplayAffinity WindowsLoadLib::getWindowDisplayAffinityFunc=NULL;
+ISetWindowDisplayAffinity WindowsLoadLib::setWindowDisplayAffinityFunc=NULL;
 
 //SAS LIB
 HINSTANCE WindowsLoadLib::sasdll;
@@ -30,6 +32,13 @@ ISendSas WindowsLoadLib::sendSasFunc=NULL;
 //WINSTA LIB
 HINSTANCE WindowsLoadLib::winstadll=NULL;
 IWinStationConnectW WindowsLoadLib::winStationConnectWFunc=NULL;
+
+//DXVA2 LIB
+HINSTANCE WindowsLoadLib::dxva2dll=NULL;
+IGetNumberOfPhysicalMonitorsFromHMONITOR WindowsLoadLib::getNumberOfPhysicalMonitorsFromHMONITORFunc=NULL;
+IGetPhysicalMonitorsFromHMONITOR WindowsLoadLib::getPhysicalMonitorsFromHMONITORFunc=NULL;
+ISetVCPFeature WindowsLoadLib::setVCPFeatureFunc=NULL;
+IGetVCPFeatureAndVCPFeatureReply WindowsLoadLib::getVCPFeatureAndVCPFeatureReplyFunc=NULL;
 
 
 WindowsLoadLib::WindowsLoadLib(){
@@ -53,6 +62,8 @@ WindowsLoadLib::WindowsLoadLib(){
 		WindowsLoadLib::user32dll = LoadLibrary("User32.dll");
 		if (WindowsLoadLib::user32dll){
 			WindowsLoadLib::setProcessDPIAwareFunc = (ISetProcessDPIAware)GetProcAddress(user32dll, "SetProcessDPIAware");
+			WindowsLoadLib::getWindowDisplayAffinityFunc = (IGetWindowDisplayAffinity)GetProcAddress(user32dll, "GetWindowDisplayAffinity");
+			WindowsLoadLib::setWindowDisplayAffinityFunc = (ISetWindowDisplayAffinity)GetProcAddress(user32dll, "SetWindowDisplayAffinity");
 		}
 
 		//SAS LIB
@@ -70,6 +81,16 @@ WindowsLoadLib::WindowsLoadLib(){
 		WindowsLoadLib::winstadll = LoadLibrary("winsta.dll");
 		if (WindowsLoadLib::winstadll){
 			WindowsLoadLib::winStationConnectWFunc = (IWinStationConnectW)GetProcAddress(winstadll, "WinStationConnectW");
+		}
+
+		//DXVA2 LIB
+		WindowsLoadLib::dxva2dll = LoadLibrary("Dxva2.dll");
+		if (WindowsLoadLib::dxva2dll){
+			WindowsLoadLib::getNumberOfPhysicalMonitorsFromHMONITORFunc = (IGetNumberOfPhysicalMonitorsFromHMONITOR)GetProcAddress(dxva2dll, "GetNumberOfPhysicalMonitorsFromHMONITOR");
+			WindowsLoadLib::getPhysicalMonitorsFromHMONITORFunc = (IGetPhysicalMonitorsFromHMONITOR)GetProcAddress(dxva2dll, "GetPhysicalMonitorsFromHMONITOR");
+			WindowsLoadLib::setVCPFeatureFunc = (ISetVCPFeature)GetProcAddress(dxva2dll, "SetVCPFeature");
+			WindowsLoadLib::getVCPFeatureAndVCPFeatureReplyFunc = (IGetVCPFeatureAndVCPFeatureReply)GetProcAddress(dxva2dll, "GetVCPFeatureAndVCPFeatureReply");
+
 		}
 
 		/*dmwdll = LoadLibrary("dwmapi.dll"); 
@@ -109,6 +130,11 @@ WindowsLoadLib::~WindowsLoadLib(){
 		if (WindowsLoadLib::winstadll){
 			FreeLibrary(WindowsLoadLib::winstadll);
 			WindowsLoadLib::winstadll=NULL;
+		}
+
+		if (WindowsLoadLib::dxva2dll){
+			FreeLibrary(WindowsLoadLib::dxva2dll);
+			WindowsLoadLib::dxva2dll=NULL;
 		}
 
 		/*if (dmwdll){
@@ -153,6 +179,14 @@ ISetProcessDPIAware WindowsLoadLib::SetProcessDPIAwareFunc(){
 	return WindowsLoadLib::setProcessDPIAwareFunc;
 }
 
+IGetWindowDisplayAffinity WindowsLoadLib::GetWindowDisplayAffinityFunc(){
+	return WindowsLoadLib::getWindowDisplayAffinityFunc;
+}
+
+ISetWindowDisplayAffinity WindowsLoadLib::SetWindowDisplayAffinityFunc(){
+	return WindowsLoadLib::setWindowDisplayAffinityFunc;
+}
+
 //SAS LIB
 bool WindowsLoadLib::isAvailableSas(){
 	return WindowsLoadLib::sasdll!=NULL;
@@ -170,5 +204,93 @@ bool WindowsLoadLib::isAvailableWinStation(){
 IWinStationConnectW WindowsLoadLib::WinStationConnectWFunc(){
 	return WindowsLoadLib::winStationConnectWFunc;
 }
+
+//DXVA2 LIB
+bool WindowsLoadLib::isAvailableDxva2(){
+	return WindowsLoadLib::dxva2dll!=NULL;
+}
+
+IGetNumberOfPhysicalMonitorsFromHMONITOR WindowsLoadLib::GetNumberOfPhysicalMonitorsFromHMONITORFunc(){
+	return WindowsLoadLib::getNumberOfPhysicalMonitorsFromHMONITORFunc;
+}
+
+IGetPhysicalMonitorsFromHMONITOR WindowsLoadLib::GetPhysicalMonitorsFromHMONITORFunc(){
+	return WindowsLoadLib::getPhysicalMonitorsFromHMONITORFunc;
+}
+
+ISetVCPFeature WindowsLoadLib::SetVCPFeatureFunc(){
+	return WindowsLoadLib::setVCPFeatureFunc;
+}
+
+IGetVCPFeatureAndVCPFeatureReply WindowsLoadLib::GetVCPFeatureAndVCPFeatureReplyFunc(){
+	return WindowsLoadLib::getVCPFeatureAndVCPFeatureReplyFunc;
+}
+
+
+//TMP PRIVACY MODE (BEGIN)
+#include <vector>
+WindowsLoadLib privacyModeLoadLib;
+const BYTE PowerMode = 0xD6;
+const DWORD PowerOn = 0x01;
+const DWORD PowerOff = 0x04;
+struct PrivacyModeMonitorDesc{
+    HANDLE hdl;
+    RECT rc;
+};
+std::vector<PrivacyModeMonitorDesc> privacyModeMonitors;
+bool privacyModeEnable=false;
+
+BOOL CALLBACK PrivacyModeMonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData){
+    std::vector<PrivacyModeMonitorDesc>* pMonitors = reinterpret_cast< std::vector<PrivacyModeMonitorDesc>* >(dwData);
+    DWORD nMonitorCount;
+    if(privacyModeLoadLib.GetNumberOfPhysicalMonitorsFromHMONITORFunc()(hMonitor, &nMonitorCount)){
+        PHYSICAL_MONITOR* pMons = new PHYSICAL_MONITOR[nMonitorCount];
+        if(privacyModeLoadLib.GetPhysicalMonitorsFromHMONITORFunc()(hMonitor, nMonitorCount, pMons)){
+            for(DWORD i=0; i<nMonitorCount; i++){
+                PrivacyModeMonitorDesc desc;
+                desc.hdl = pMons[i].hPhysicalMonitor;
+                desc.rc = *lprcMonitor;
+                pMonitors->push_back(desc);
+            }
+        }
+        delete[] pMons;
+    }
+    return TRUE;
+}
+
+DWORD WINAPI PrivacyModeThreadProc( LPVOID lpParam ){
+	while(privacyModeEnable){
+		for(auto& monitor : privacyModeMonitors){
+			DWORD pdwCurrentValue;
+			DWORD pdwMaximumValue;
+			if (privacyModeLoadLib.GetVCPFeatureAndVCPFeatureReplyFunc()(monitor.hdl, PowerMode, NULL, &pdwCurrentValue, &pdwMaximumValue)){
+				if (pdwCurrentValue==PowerOn){
+					privacyModeLoadLib.SetVCPFeatureFunc()(monitor.hdl, PowerMode, PowerOff);
+				}
+			}
+		}
+		Sleep(500);
+	}
+	for(auto& monitor : privacyModeMonitors){
+		privacyModeLoadLib.SetVCPFeatureFunc()(monitor.hdl, PowerMode, PowerOn);
+	}
+	return 1;
+}
+
+void WindowsLoadLibSetPrivacyMode(bool b){
+	if (privacyModeEnable==false){
+		privacyModeEnable=true;
+		if (privacyModeLoadLib.isAvailableDxva2()){
+			privacyModeMonitors.clear();
+			EnumDisplayMonitors(NULL, NULL, &PrivacyModeMonitorEnumProc, reinterpret_cast<LPARAM>(&privacyModeMonitors));
+			CreateThread(0, 0, PrivacyModeThreadProc, NULL, 0, NULL);
+		}
+	}else{
+		privacyModeEnable=false;
+	}
+
+}
+//TMP PRIVACY MODE (END)
+
 
 #endif

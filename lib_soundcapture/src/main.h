@@ -14,64 +14,42 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #include "rtaudio_c.h"
 #include "opus.h"
 
-#if defined OS_WINDOWS
-#include <windows.h>
-#else
-#include <pthread.h>
-#endif
+#define RESULT_DIFF_SIZE 56*1024
 
+typedef void (*CallbackRecord)(unsigned int, unsigned char*);
+typedef void (*CallbackEncodeResult)(unsigned int, unsigned char*);
 
 typedef struct{
-	OpusEncoder *enc;
-	int bufferSize;
-	unsigned char* buffer;
-	int ringBufferPos;
-	int enctype;
-	int quality;
+	unsigned int sampleRate;
+	unsigned int numChannels;
+	unsigned int bufferFrames;
+} AUDIO_CONFIG;
 
-} SESSION;
-
-#if defined OS_WINDOWS
-HANDLE mtx;
-#else
-pthread_mutex_t mtx;
-#endif
-
-bool bStarted=false;
-bool bStreamAlive=false;
-bool bStreamFirst=true;
-unsigned int sampleRate = 48000;
-unsigned int numChannels = 2;
-unsigned int bufferFrames = 0;
 unsigned int deviceCount = 0;
 unsigned int deviceOut = 0;
 
-rtaudio_t adc;
-int ringBufferSize=0;
-int ringBufferLimit=0;
-float* ringBuffer;
-float* ringBufferApp;
-std::map<int,SESSION> hmSession;
+struct AudioCaptureSessionInfo{
+	rtaudio_t adc;
+	bool bStreamAlive;
+	AUDIO_CONFIG* conf;
+	CallbackRecord callbackRecord;
+};
 
-void DWASoundCaptureLock();
-void DWASoundCaptureUnlock();
-void DWASoundCaptureCreateLock();
-void DWASoundCaptureDestroyLock();
-void DWASoundCaptureTermNoSync(int id);
-void DWASoundCaptureDestroyStream();
+struct OPUSEncoderSessionInfo{
+	int resultBufferSize;
+	unsigned char* resultBuffer;
+	OpusEncoder* enc;
+	AUDIO_CONFIG* conf;
+};
 
 extern "C" {
 	int DWASoundCaptureVersion();
-	unsigned int DWASoundCaptureGetSampleRate();
-	unsigned int DWASoundCaptureGetNumChannels();
-	unsigned int DWASoundCaptureGetBufferFrames();
-	int DWASoundCaptureGetDetectOutputName(char* bf, int sz);
-	void DWASoundCaptureStart();
-	void DWASoundCaptureDetectOutput();
-	void DWASoundCaptureStop();
-	int DWASoundCaptureInit(int id, int enctype, int quality);
-	int DWASoundCaptureGetData(int id, unsigned char** data);
-	void DWASoundCaptureTerm(int id);
+	int DWASoundCaptureStart(AUDIO_CONFIG* audioconf,CallbackRecord cbrec,void** capses);
+	void DWASoundCaptureStop(void* capses);
+	int DWASoundCaptureGetDetectOutputName(void* capses,char* bf, int sz);
+	int DWASoundCaptureOPUSEncoderInit(AUDIO_CONFIG* audioconf,void** encses);
+	void DWASoundCaptureOPUSEncoderTerm(void* encses);
+	int DWASoundCaptureOPUSEncode(void* encses, unsigned char* rawinput, int sizeinput, CallbackEncodeResult cbresult);
 }
 
 

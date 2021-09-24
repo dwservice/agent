@@ -10,20 +10,15 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #include <stdio.h>
 #include <stdarg.h>
 
-typedef void (*CallbackType)(char*);
+typedef void (*CallbackType)(wchar_t*);
 
-class DWDebugger{
+extern "C" {
+	void DWAScreenCaptureSetCallbackDebug(CallbackType callback);
+}
 
-public:
-	DWDebugger();
-	void print(const char *format, ...);
-	void setCallback(CallbackType callback);
-	void setTest();
+void DWDebuggerPrint(const wchar_t *format, ...);
 
-private:
-	CallbackType g_callback_debug;
-	bool btest;
-};
 
 #endif /* DWDEBBUGGER_H_ */
+
 

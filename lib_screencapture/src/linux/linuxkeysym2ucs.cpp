@@ -31,6 +31,7 @@
  *
  */
 #if defined OS_LINUX
+
 #include <X11/X.h>
 
 static struct codepair {

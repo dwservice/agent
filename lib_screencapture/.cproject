@@ -3,188 +3,6 @@
     	
     <storageModule moduleId="org.eclipse.cdt.core.settings">
         		
-        <cconfiguration id="cdt.managedbuild.config.gnu.exe.release.2036406229.256180974.1686923383">
-            			
-            <storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.config.gnu.exe.release.2036406229.256180974.1686923383" moduleId="org.eclipse.cdt.core.settings" name="bld_linux_release">
-                				
-                <externalSettings>
-                    					
-                    <externalSetting>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/baselib"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/agent-libscreencapture"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/agentlib-screencapture"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/libscreencapture"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/lib_screencapture"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/baselib/Release64"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/agent-libscreencapture/Linux_x86_64"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/agentlib-screencapture/linux_x86_64"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/libscreencapture/bld_linux_x86_64"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/lib_screencapture/bld_linux_release"/>
-                        						
-                        <entry flags="RESOLVED" kind="libraryFile" name="dwagscreencapture" srcPrefixMapping="" srcRootPath=""/>
-                        					
-                    </externalSetting>
-                    				
-                </externalSettings>
-                				
-                <extensions>
-                    					
-                    <extension id="org.eclipse.cdt.core.ELF" point="org.eclipse.cdt.core.BinaryParser"/>
-                    					
-                    <extension id="org.eclipse.cdt.core.GCCErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
-                    					
-                    <extension id="org.eclipse.cdt.core.GASErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
-                    					
-                    <extension id="org.eclipse.cdt.core.GLDErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
-                    					
-                    <extension id="org.eclipse.cdt.core.GmakeErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
-                    					
-                    <extension id="org.eclipse.cdt.core.CWDLocator" point="org.eclipse.cdt.core.ErrorParser"/>
-                    				
-                </extensions>
-                			
-            </storageModule>
-            			
-            <storageModule moduleId="cdtBuildSystem" version="4.0.0">
-                				
-                <configuration artifactExtension="so" artifactName="dwagscreencapture" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.sharedLib" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.sharedLib,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" cleanCommand="rm -rf" description="" errorParsers="org.eclipse.cdt.core.GmakeErrorParser;org.eclipse.cdt.core.CWDLocator;org.eclipse.cdt.core.GCCErrorParser;org.eclipse.cdt.core.GASErrorParser;org.eclipse.cdt.core.GLDErrorParser" id="cdt.managedbuild.config.gnu.exe.release.2036406229.256180974.1686923383" name="bld_linux_release" parent="cdt.managedbuild.config.gnu.exe.release" postannouncebuildStep="" postbuildStep="" preannouncebuildStep="" prebuildStep="">
-                    					
-                    <folderInfo id="cdt.managedbuild.config.gnu.exe.release.2036406229.256180974.1686923383." name="/" resourcePath="">
-                        						
-                        <toolChain errorParsers="" id="cdt.managedbuild.toolchain.gnu.exe.release.375757566" name="Linux GCC" superClass="cdt.managedbuild.toolchain.gnu.exe.release">
-                            							
-                            <targetPlatform binaryParser="org.eclipse.cdt.core.ELF" id="cdt.managedbuild.target.gnu.platform.exe.release.617150984" name="Debug Platform" superClass="cdt.managedbuild.target.gnu.platform.exe.release"/>
-                            							
-                            <builder buildPath="${workspace_loc:/baselib}/Release64" errorParsers="org.eclipse.cdt.core.GmakeErrorParser;org.eclipse.cdt.core.CWDLocator" id="cdt.managedbuild.target.gnu.builder.exe.release.1050570720" keepEnvironmentInBuildfile="false" name="Gnu Make Builder" superClass="cdt.managedbuild.target.gnu.builder.exe.release"/>
-                            							
-                            <tool id="cdt.managedbuild.tool.gnu.archiver.base.1854028221" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.base"/>
-                            							
-                            <tool command="g++" commandLinePattern="${COMMAND} ${FLAGS} ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}" errorParsers="org.eclipse.cdt.core.GCCErrorParser" id="cdt.managedbuild.tool.gnu.cpp.compiler.exe.release.628474611" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.exe.release">
-                                								
-                                <option id="gnu.cpp.compiler.exe.release.option.optimization.level.1211349974" name="Optimization Level" superClass="gnu.cpp.compiler.exe.release.option.optimization.level" useByScannerDiscovery="false" value="gnu.cpp.compiler.optimization.level.most" valueType="enumerated"/>
-                                								
-                                <option id="gnu.cpp.compiler.exe.release.option.debugging.level.454003803" name="Debug Level" superClass="gnu.cpp.compiler.exe.release.option.debugging.level" useByScannerDiscovery="false" value="gnu.cpp.compiler.debugging.level.none" valueType="enumerated"/>
-                                								
-                                <option id="gnu.cpp.compiler.option.other.other.911363080" name="Other flags" superClass="gnu.cpp.compiler.option.other.other" useByScannerDiscovery="false" value="-c -fmessage-length=0" valueType="string"/>
-                                								
-                                <option id="gnu.cpp.compiler.option.preprocessor.def.1472504107" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def" useByScannerDiscovery="false" valueType="definedSymbols">
-                                    									
-                                    <listOptionValue builtIn="false" value="OS_LINUX"/>
-                                    								
-                                </option>
-                                								
-                                <option id="gnu.cpp.compiler.option.other.pic.1475228648" name="Position Independent Code (-fPIC)" superClass="gnu.cpp.compiler.option.other.pic" useByScannerDiscovery="false" value="true" valueType="boolean"/>
-                                								
-                                <option id="gnu.cpp.compiler.option.dialect.std.1200302409" name="Language standard" superClass="gnu.cpp.compiler.option.dialect.std" useByScannerDiscovery="true" value="gnu.cpp.compiler.dialect.default" valueType="enumerated"/>
-                                								
-                                <option id="gnu.cpp.compiler.option.include.paths.1706315494" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
-                                    									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
-                                    								
-                                </option>
-                                								
-                                <inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1150320260" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
-                                							
-                            </tool>
-                            							
-                            <tool command="gcc" commandLinePattern="${COMMAND} ${FLAGS} ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}" errorParsers="org.eclipse.cdt.core.GCCErrorParser" id="cdt.managedbuild.tool.gnu.c.compiler.exe.release.872921747" name="GCC C Compiler" superClass="cdt.managedbuild.tool.gnu.c.compiler.exe.release">
-                                								
-                                <option defaultValue="gnu.c.optimization.level.most" id="gnu.c.compiler.exe.release.option.optimization.level.717139047" name="Optimization Level" superClass="gnu.c.compiler.exe.release.option.optimization.level" useByScannerDiscovery="false" valueType="enumerated"/>
-                                								
-                                <option id="gnu.c.compiler.exe.release.option.debugging.level.1667698017" name="Debug Level" superClass="gnu.c.compiler.exe.release.option.debugging.level" useByScannerDiscovery="false" value="gnu.c.debugging.level.none" valueType="enumerated"/>
-                                								
-                                <option id="gnu.c.compiler.option.misc.other.1560318850" name="Other flags" superClass="gnu.c.compiler.option.misc.other" useByScannerDiscovery="false" value="-c -fmessage-length=0" valueType="string"/>
-                                								
-                                <option id="gnu.c.compiler.option.misc.pic.1663626482" name="Position Independent Code (-fPIC)" superClass="gnu.c.compiler.option.misc.pic" useByScannerDiscovery="false" value="true" valueType="boolean"/>
-                                								
-                                <option id="gnu.c.compiler.option.include.paths.1617590365" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
-                                    									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
-                                    								
-                                </option>
-                                								
-                                <inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1488994534" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
-                                							
-                            </tool>
-                            							
-                            <tool id="cdt.managedbuild.tool.gnu.c.linker.exe.release.849098263" name="GCC C Linker" superClass="cdt.managedbuild.tool.gnu.c.linker.exe.release">
-                                								
-                                <option defaultValue="true" id="gnu.c.link.option.shared.45133087" name="Shared (-shared)" superClass="gnu.c.link.option.shared" valueType="boolean"/>
-                                							
-                            </tool>
-                            							
-                            <tool command="g++" commandLinePattern="${COMMAND} ${FLAGS} ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}" errorParsers="org.eclipse.cdt.core.GLDErrorParser" id="cdt.managedbuild.tool.gnu.cpp.linker.exe.release.787370437" name="GCC C++ Linker" superClass="cdt.managedbuild.tool.gnu.cpp.linker.exe.release">
-                                								
-                                <option id="gnu.cpp.link.option.flags.213698545" name="Linker flags" superClass="gnu.cpp.link.option.flags" useByScannerDiscovery="false" value="" valueType="string"/>
-                                								
-                                <option defaultValue="true" id="gnu.cpp.link.option.shared.824435281" name="Shared (-shared)" superClass="gnu.cpp.link.option.shared" useByScannerDiscovery="false" valueType="boolean"/>
-                                								
-                                <option id="gnu.cpp.link.option.paths.1692491265" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" useByScannerDiscovery="false" valueType="libPaths">
-                                    									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
-                                    								
-                                </option>
-                                								
-                                <option id="gnu.cpp.link.option.libs.1164500570" name="Libraries (-l)" superClass="gnu.cpp.link.option.libs" useByScannerDiscovery="false" valueType="libs">
-                                    									
-                                    <listOptionValue builtIn="false" value="X11"/>
-                                    									
-                                    <listOptionValue builtIn="false" value="dl"/>
-                                    									
-                                    <listOptionValue builtIn="false" value="z"/>
-                                    									
-                                    <listOptionValue builtIn="false" value="Xext"/>
-                                    									
-                                    <listOptionValue builtIn="false" value="Xtst"/>
-                                    								
-                                </option>
-                                								
-                                <inputType id="cdt.managedbuild.tool.gnu.cpp.linker.input.392679088" superClass="cdt.managedbuild.tool.gnu.cpp.linker.input">
-                                    									
-                                    <additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
-                                    									
-                                    <additionalInput kind="additionalinput" paths="$(LIBS)"/>
-                                    								
-                                </inputType>
-                                								
-                                <outputType id="cdt.managedbuild.tool.gnu.cpp.linker.output.so.1334627091" outputPrefix="" superClass="cdt.managedbuild.tool.gnu.cpp.linker.output.so"/>
-                                							
-                            </tool>
-                            							
-                            <tool command="as" commandLinePattern="${COMMAND} ${FLAGS} ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}" errorParsers="org.eclipse.cdt.core.GASErrorParser" id="cdt.managedbuild.tool.gnu.assembler.exe.release.334997595" name="GCC Assembler" superClass="cdt.managedbuild.tool.gnu.assembler.exe.release">
-                                								
-                                <inputType id="cdt.managedbuild.tool.gnu.assembler.input.1370036853" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
-                                							
-                            </tool>
-                            						
-                        </toolChain>
-                        					
-                    </folderInfo>
-                    					
-                    <sourceEntries>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
-                        					
-                    </sourceEntries>
-                    				
-                </configuration>
-                			
-            </storageModule>
-            			
-            <storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
-            		
-        </cconfiguration>
-        		
         <cconfiguration id="cdt.managedbuild.config.gnu.exe.debug.1675178057">
             			
             <storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.config.gnu.exe.debug.1675178057" moduleId="org.eclipse.cdt.core.settings" name="bld_linux_debug">
@@ -235,15 +53,17 @@
                                 								
                                 <option id="gnu.cpp.compiler.option.other.pic.1250213744" name="Position Independent Code (-fPIC)" superClass="gnu.cpp.compiler.option.other.pic" useByScannerDiscovery="false" value="true" valueType="boolean"/>
                                 								
-                                <option id="gnu.cpp.compiler.option.preprocessor.def.868414772" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def" useByScannerDiscovery="false" valueType="definedSymbols">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.compiler.option.preprocessor.def.868414772" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def" useByScannerDiscovery="false" valueType="definedSymbols">
                                     									
                                     <listOptionValue builtIn="false" value="OS_LINUX"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="OS_MAIN"/>
                                     								
                                 </option>
                                 								
                                 <option id="gnu.cpp.compiler.option.other.verbose.869566987" name="Verbose (-v)" superClass="gnu.cpp.compiler.option.other.verbose" useByScannerDiscovery="false" value="false" valueType="boolean"/>
                                 								
-                                <option id="gnu.cpp.compiler.option.include.paths.201759466" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.compiler.option.include.paths.201759466" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
                                     									
                                     <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
                                     								
@@ -267,7 +87,7 @@
                                 								
                                 <option id="gnu.c.compiler.option.misc.verbose.1573302017" name="Verbose (-v)" superClass="gnu.c.compiler.option.misc.verbose" useByScannerDiscovery="false" value="false" valueType="boolean"/>
                                 								
-                                <option id="gnu.c.compiler.option.include.paths.1747656640" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.include.paths.1747656640" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
                                     									
                                     <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
                                     								
@@ -283,9 +103,11 @@
                                 								
                                 <option id="gnu.cpp.link.option.shared.1620001110" name="Shared (-shared)" superClass="gnu.cpp.link.option.shared" useByScannerDiscovery="false" value="false" valueType="boolean"/>
                                 								
-                                <option id="gnu.cpp.link.option.libs.1904269518" name="Libraries (-l)" superClass="gnu.cpp.link.option.libs" useByScannerDiscovery="false" valueType="libs">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.link.option.libs.1904269518" name="Libraries (-l)" superClass="gnu.cpp.link.option.libs" useByScannerDiscovery="false" valueType="libs">
                                     									
                                     <listOptionValue builtIn="false" value="X11"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="turbojpeg"/>
                                     									
                                     <listOptionValue builtIn="false" value="dl"/>
                                     									
@@ -299,7 +121,7 @@
                                 								
                                 <option id="gnu.cpp.link.option.flags.1916505437" name="Linker flags" superClass="gnu.cpp.link.option.flags" useByScannerDiscovery="false" value="" valueType="string"/>
                                 								
-                                <option id="gnu.cpp.link.option.paths.1406734543" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" useByScannerDiscovery="false" valueType="libPaths">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.link.option.paths.1406734543" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" useByScannerDiscovery="false" valueType="libPaths">
                                     									
                                     <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
                                     								
@@ -332,184 +154,6 @@
             <storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
             			
             <storageModule moduleId="ilg.gnuarmeclipse.managedbuild.packs"/>
-            		
-        </cconfiguration>
-        		
-        <cconfiguration id="cdt.managedbuild.config.gnu.exe.release.2036406229.256180975.1686923383">
-            			
-            <storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.config.gnu.exe.release.2036406229.256180975.1686923383" moduleId="org.eclipse.cdt.core.settings" name="bld_macos_release">
-                				
-                <externalSettings>
-                    					
-                    <externalSetting>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/baselib"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/agent-libscreencapture"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/agentlib-screencapture"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/libscreencapture"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/lib_screencapture"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/baselib/Release64"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/agent-libscreencapture/macos_x86_64"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/agentlib-screencapture/macos_x86_64"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/libscreencapture/bld_macos_x86_64"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/lib_screencapture/bld_macos_release"/>
-                        						
-                        <entry flags="RESOLVED" kind="libraryFile" name="dwagscreencapture" srcPrefixMapping="" srcRootPath=""/>
-                        					
-                    </externalSetting>
-                    				
-                </externalSettings>
-                				
-                <extensions>
-                    					
-                    <extension id="org.eclipse.cdt.core.MachO64" point="org.eclipse.cdt.core.BinaryParser"/>
-                    					
-                    <extension id="org.eclipse.cdt.core.GCCErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
-                    					
-                    <extension id="org.eclipse.cdt.core.GASErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
-                    					
-                    <extension id="org.eclipse.cdt.core.GLDErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
-                    				
-                </extensions>
-                			
-            </storageModule>
-            			
-            <storageModule moduleId="cdtBuildSystem" version="4.0.0">
-                				
-                <configuration artifactExtension="so" artifactName="dwagscreencapture" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.sharedLib" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.sharedLib,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" cleanCommand="rm -rf" description="" errorParsers="org.eclipse.cdt.core.GCCErrorParser;org.eclipse.cdt.core.GASErrorParser;org.eclipse.cdt.core.GLDErrorParser" id="cdt.managedbuild.config.gnu.exe.release.2036406229.256180975.1686923383" name="bld_macos_release" parent="cdt.managedbuild.config.gnu.exe.release" postannouncebuildStep="" postbuildStep="" preannouncebuildStep="" prebuildStep="">
-                    					
-                    <folderInfo id="cdt.managedbuild.config.gnu.exe.release.2036406229.256180975.1686923383." name="/" resourcePath="">
-                        						
-                        <toolChain errorParsers="" id="cdt.managedbuild.toolchain.gnu.macosx.base.776758538" name="MacOSX GCC" superClass="cdt.managedbuild.toolchain.gnu.macosx.base">
-                            							
-                            <targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.MachO64" id="cdt.managedbuild.target.gnu.platform.macosx.base.1654863660" name="Debug Platform" osList="macosx" superClass="cdt.managedbuild.target.gnu.platform.macosx.base"/>
-                            							
-                            <builder buildPath="${workspace_loc:/lib_screencapture}/bld_macos_x86_64" id="org.eclipse.cdt.build.core.internal.builder.1117835673" keepEnvironmentInBuildfile="false" name="CDT Internal Builder" superClass="org.eclipse.cdt.build.core.internal.builder"/>
-                            							
-                            <tool id="cdt.managedbuild.tool.macosx.c.linker.macosx.base.1896728030" name="MacOS X C Linker" superClass="cdt.managedbuild.tool.macosx.c.linker.macosx.base">
-                                								
-                                <option defaultValue="true" id="macosx.c.link.option.nostart.1153844286" name="Do not use standard start files (-nostartfiles)" superClass="macosx.c.link.option.nostart" valueType="boolean"/>
-                                								
-                                <option defaultValue="true" id="macosx.c.link.option.nodeflibs.1161891281" name="Do not use default libraries (-nodefaultlibs)" superClass="macosx.c.link.option.nodeflibs" valueType="boolean"/>
-                                								
-                                <option defaultValue="true" id="macosx.c.link.option.shared.1107272710" name="Shared (-dynamiclib)" superClass="macosx.c.link.option.shared" valueType="boolean"/>
-                                							
-                            </tool>
-                            							
-                            <tool command="g++" commandLinePattern="${COMMAND} ${FLAGS} ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}" errorParsers="org.eclipse.cdt.core.GLDErrorParser" id="cdt.managedbuild.tool.macosx.cpp.linker.macosx.base.2113836616" name="MacOS X C++ Linker" superClass="cdt.managedbuild.tool.macosx.cpp.linker.macosx.base">
-                                								
-                                <option defaultValue="true" id="macosx.cpp.link.option.shared.698501039" name="Shared (-dynamiclib)" superClass="macosx.cpp.link.option.shared" useByScannerDiscovery="false" valueType="boolean"/>
-                                								
-                                <option id="macosx.cpp.link.option.flags.313188441" name="Linker flags" superClass="macosx.cpp.link.option.flags" useByScannerDiscovery="false" value="-framework ApplicationServices -framework SystemConfiguration -framework IOKit" valueType="string"/>
-                                								
-                                <option id="macosx.cpp.link.option.libs.2042899834" name="Libraries (-l)" superClass="macosx.cpp.link.option.libs" useByScannerDiscovery="false" valueType="libs">
-                                    									
-                                    <listOptionValue builtIn="false" value="z"/>
-                                    								
-                                </option>
-                                								
-                                <option id="macosx.cpp.link.option.paths.151639529" name="Library search path (-L)" superClass="macosx.cpp.link.option.paths" useByScannerDiscovery="false" valueType="libPaths">
-                                    									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
-                                    								
-                                </option>
-                                								
-                                <inputType id="cdt.managedbuild.tool.macosx.cpp.linker.input.683840433" superClass="cdt.managedbuild.tool.macosx.cpp.linker.input">
-                                    									
-                                    <additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
-                                    									
-                                    <additionalInput kind="additionalinput" paths="$(LIBS)"/>
-                                    								
-                                </inputType>
-                                								
-                                <outputType id="cdt.managedbuild.tool.macosx.cpp.linker.output.so.886175552" outputPrefix="" superClass="cdt.managedbuild.tool.macosx.cpp.linker.output.so"/>
-                                							
-                            </tool>
-                            							
-                            <tool command="as" commandLinePattern="${COMMAND} ${FLAGS} ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}" errorParsers="org.eclipse.cdt.core.GASErrorParser" id="cdt.managedbuild.tool.gnu.assembler.macosx.base.1593302185" name="GCC Assembler" superClass="cdt.managedbuild.tool.gnu.assembler.macosx.base">
-                                								
-                                <option id="gnu.both.asm.option.flags.577750895" name="Assembler flags" superClass="gnu.both.asm.option.flags" useByScannerDiscovery="false" value="" valueType="string"/>
-                                								
-                                <inputType id="cdt.managedbuild.tool.gnu.assembler.input.291237607" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
-                                							
-                            </tool>
-                            							
-                            <tool id="cdt.managedbuild.tool.gnu.archiver.macosx.base.1107170288" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.macosx.base"/>
-                            							
-                            <tool command="g++" commandLinePattern="${COMMAND} ${FLAGS} ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}" errorParsers="org.eclipse.cdt.core.GCCErrorParser" id="cdt.managedbuild.tool.gnu.cpp.compiler.macosx.base.1811603" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.macosx.base">
-                                								
-                                <option id="gnu.cpp.compiler.option.preprocessor.def.873035407" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def" useByScannerDiscovery="false" valueType="definedSymbols">
-                                    									
-                                    <listOptionValue builtIn="false" value="OS_MAC"/>
-                                    								
-                                </option>
-                                								
-                                <option id="gnu.cpp.compiler.option.optimization.level.782729724" name="Optimization Level" superClass="gnu.cpp.compiler.option.optimization.level" useByScannerDiscovery="false" value="gnu.cpp.compiler.optimization.level.most" valueType="enumerated"/>
-                                								
-                                <option id="gnu.cpp.compiler.option.debugging.level.1108193050" name="Debug Level" superClass="gnu.cpp.compiler.option.debugging.level" useByScannerDiscovery="false" value="gnu.cpp.compiler.debugging.level.none" valueType="enumerated"/>
-                                								
-                                <option id="gnu.cpp.compiler.option.other.other.1063276144" name="Other flags" superClass="gnu.cpp.compiler.option.other.other" useByScannerDiscovery="false" value="-c -fmessage-length=0" valueType="string"/>
-                                								
-                                <option id="gnu.cpp.compiler.option.dialect.std.921645155" name="Language standard" superClass="gnu.cpp.compiler.option.dialect.std" useByScannerDiscovery="true" value="gnu.cpp.compiler.dialect.default" valueType="enumerated"/>
-                                								
-                                <option id="gnu.cpp.compiler.option.dialect.flags.2002636502" name="Other dialect flags" superClass="gnu.cpp.compiler.option.dialect.flags" useByScannerDiscovery="true" value="" valueType="string"/>
-                                								
-                                <option id="gnu.cpp.compiler.option.include.paths.1515685368" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
-                                    									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
-                                    								
-                                </option>
-                                								
-                                <inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.172241128" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
-                                							
-                            </tool>
-                            							
-                            <tool command="gcc" commandLinePattern="${COMMAND} ${FLAGS} ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}" errorParsers="org.eclipse.cdt.core.GCCErrorParser" id="cdt.managedbuild.tool.gnu.c.compiler.macosx.base.91890959" name="GCC C Compiler" superClass="cdt.managedbuild.tool.gnu.c.compiler.macosx.base">
-                                								
-                                <option defaultValue="gnu.c.optimization.level.most" id="gnu.c.compiler.option.optimization.level.1686461159" name="Optimization Level" superClass="gnu.c.compiler.option.optimization.level" useByScannerDiscovery="false" valueType="enumerated"/>
-                                								
-                                <option id="gnu.c.compiler.option.debugging.level.1413196883" name="Debug Level" superClass="gnu.c.compiler.option.debugging.level" useByScannerDiscovery="false" value="gnu.c.debugging.level.none" valueType="enumerated"/>
-                                								
-                                <option id="gnu.c.compiler.option.misc.other.1629258319" name="Other flags" superClass="gnu.c.compiler.option.misc.other" useByScannerDiscovery="false" value="-c -fmessage-length=0" valueType="string"/>
-                                								
-                                <option id="gnu.c.compiler.option.dialect.std.1749470415" name="Language standard" superClass="gnu.c.compiler.option.dialect.std" useByScannerDiscovery="true" value="gnu.c.compiler.dialect.default" valueType="enumerated"/>
-                                								
-                                <option id="gnu.c.compiler.option.dialect.flags.833422960" name="Other dialect flags" superClass="gnu.c.compiler.option.dialect.flags" useByScannerDiscovery="true" value="" valueType="string"/>
-                                								
-                                <option id="gnu.c.compiler.option.include.paths.1707132020" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
-                                    									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
-                                    								
-                                </option>
-                                								
-                                <inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.543816484" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
-                                							
-                            </tool>
-                            						
-                        </toolChain>
-                        					
-                    </folderInfo>
-                    					
-                    <sourceEntries>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
-                        					
-                    </sourceEntries>
-                    				
-                </configuration>
-                			
-            </storageModule>
-            			
-            <storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
             		
         </cconfiguration>
         		
@@ -547,7 +191,7 @@
                             							
                             <targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.MachO64" id="cdt.managedbuild.target.gnu.platform.macosx.base.1021706892" name="Debug Platform" osList="macosx" superClass="cdt.managedbuild.target.gnu.platform.macosx.base"/>
                             							
-                            <builder buildPath="${workspace_loc:/baselib}/Debug" id="cdt.managedbuild.target.gnu.builder.base.1375776261" keepEnvironmentInBuildfile="false" name="Gnu Make Builder" superClass="cdt.managedbuild.target.gnu.builder.base"/>
+                            <builder buildPath="${workspace_loc:/lib_screencapture}/bld_macos_debug" id="cdt.managedbuild.target.gnu.builder.base.1364201626" keepEnvironmentInBuildfile="false" name="Gnu Make Builder" superClass="cdt.managedbuild.target.gnu.builder.base"/>
                             							
                             <tool id="cdt.managedbuild.tool.macosx.c.linker.macosx.base.1112129475" name="MacOS X C Linker" superClass="cdt.managedbuild.tool.macosx.c.linker.macosx.base"/>
                             							
@@ -555,15 +199,19 @@
                                 								
                                 <option id="macosx.cpp.link.option.flags.1928638141" name="Linker flags" superClass="macosx.cpp.link.option.flags" useByScannerDiscovery="false" value="-framework ApplicationServices -framework SystemConfiguration -framework IOKit" valueType="string"/>
                                 								
-                                <option id="macosx.cpp.link.option.libs.1744181901" name="Libraries (-l)" superClass="macosx.cpp.link.option.libs" useByScannerDiscovery="false" valueType="libs">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="macosx.cpp.link.option.libs.1744181901" name="Libraries (-l)" superClass="macosx.cpp.link.option.libs" useByScannerDiscovery="false" valueType="libs">
                                     									
                                     <listOptionValue builtIn="false" value="z"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="turbojpeg"/>
                                     								
                                 </option>
                                 								
-                                <option id="macosx.cpp.link.option.paths.509997378" name="Library search path (-L)" superClass="macosx.cpp.link.option.paths" useByScannerDiscovery="false" valueType="libPaths">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="macosx.cpp.link.option.paths.509997378" name="Library search path (-L)" superClass="macosx.cpp.link.option.paths" useByScannerDiscovery="false" valueType="libPaths">
                                     									
                                     <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_turbojpeg}&quot;"/>
                                     								
                                 </option>
                                 								
@@ -587,9 +235,11 @@
                             							
                             <tool id="cdt.managedbuild.tool.gnu.cpp.compiler.macosx.base.1489061604" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.macosx.base">
                                 								
-                                <option id="gnu.cpp.compiler.option.preprocessor.def.369510672" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def" useByScannerDiscovery="false" valueType="definedSymbols">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.compiler.option.preprocessor.def.369510672" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def" useByScannerDiscovery="false" valueType="definedSymbols">
                                     									
                                     <listOptionValue builtIn="false" value="OS_MAC"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="OS_MAIN"/>
                                     								
                                 </option>
                                 								
@@ -603,9 +253,11 @@
                                 								
                                 <option id="gnu.cpp.compiler.option.other.verbose.1390534468" name="Verbose (-v)" superClass="gnu.cpp.compiler.option.other.verbose" useByScannerDiscovery="false" value="true" valueType="boolean"/>
                                 								
-                                <option id="gnu.cpp.compiler.option.include.paths.967019501" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.compiler.option.include.paths.967019501" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
                                     									
                                     <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_turbojpeg}&quot;"/>
                                     								
                                 </option>
                                 								
@@ -625,9 +277,11 @@
                                 								
                                 <option id="gnu.c.compiler.option.misc.verbose.533074056" name="Verbose (-v)" superClass="gnu.c.compiler.option.misc.verbose" useByScannerDiscovery="false" value="true" valueType="boolean"/>
                                 								
-                                <option id="gnu.c.compiler.option.include.paths.618762561" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.include.paths.618762561" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
                                     									
                                     <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_turbojpeg}&quot;"/>
                                     								
                                 </option>
                                 								
@@ -693,13 +347,15 @@
                                 								
                                 <option id="gnu.cpp.compiler.mingw.exe.debug.option.debugging.level.148801833" name="Debug Level" superClass="gnu.cpp.compiler.mingw.exe.debug.option.debugging.level" useByScannerDiscovery="false" value="gnu.cpp.compiler.debugging.level.max" valueType="enumerated"/>
                                 								
-                                <option id="gnu.cpp.compiler.option.preprocessor.def.2090945987" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def" useByScannerDiscovery="false" valueType="definedSymbols">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.compiler.option.preprocessor.def.2090945987" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def" useByScannerDiscovery="false" valueType="definedSymbols">
                                     									
                                     <listOptionValue builtIn="false" value="OS_WINDOWS"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="OS_MAIN"/>
                                     								
                                 </option>
                                 								
-                                <option id="gnu.cpp.compiler.option.include.paths.1099701713" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.compiler.option.include.paths.1099701713" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
                                     									
                                     <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
                                     									
@@ -719,13 +375,15 @@
                                 								
                                 <option id="gnu.c.compiler.mingw.exe.debug.option.debugging.level.825343326" name="Debug Level" superClass="gnu.c.compiler.mingw.exe.debug.option.debugging.level" useByScannerDiscovery="false" value="gnu.c.debugging.level.max" valueType="enumerated"/>
                                 								
-                                <option id="gnu.c.compiler.option.preprocessor.def.symbols.984425411" name="Defined symbols (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.preprocessor.def.symbols.984425411" name="Defined symbols (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
                                     									
                                     <listOptionValue builtIn="false" value="OS_WINDOWS"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="OS_MAIN"/>
                                     								
                                 </option>
                                 								
-                                <option id="gnu.c.compiler.option.include.paths.233598134" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.include.paths.233598134" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
                                     									
                                     <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
                                     									
@@ -743,7 +401,7 @@
                             							
                             <tool id="cdt.managedbuild.tool.gnu.cpp.linker.mingw.exe.debug.1998426741" name="MinGW C++ Linker" superClass="cdt.managedbuild.tool.gnu.cpp.linker.mingw.exe.debug">
                                 								
-                                <option id="gnu.cpp.link.option.libs.604412319" name="Libraries (-l)" superClass="gnu.cpp.link.option.libs" useByScannerDiscovery="false" valueType="libs">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.link.option.libs.604412319" name="Libraries (-l)" superClass="gnu.cpp.link.option.libs" useByScannerDiscovery="false" valueType="libs">
                                     									
                                     <listOptionValue builtIn="false" value="gdi32"/>
                                     									
@@ -761,7 +419,7 @@
                                 								
                                 <option id="gnu.cpp.link.option.flags.2087217654" name="Linker flags" superClass="gnu.cpp.link.option.flags" useByScannerDiscovery="false" value="-municode" valueType="string"/>
                                 								
-                                <option id="gnu.cpp.link.option.paths.1966403119" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" useByScannerDiscovery="false" valueType="libPaths">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.link.option.paths.1966403119" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" useByScannerDiscovery="false" valueType="libPaths">
                                     									
                                     <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
                                     									
@@ -799,35 +457,11 @@
             		
         </cconfiguration>
         		
-        <cconfiguration id="cdt.managedbuild.config.gnu.mingw.exe.debug.284099608.951882491">
+        <cconfiguration id="cdt.managedbuild.config.gnu.mingw.exe.debug.284099608.1881147813">
             			
-            <storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.config.gnu.mingw.exe.debug.284099608.951882491" moduleId="org.eclipse.cdt.core.settings" name="bld_win_release">
+            <storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.config.gnu.mingw.exe.debug.284099608.1881147813" moduleId="org.eclipse.cdt.core.settings" name="bld_bitblt_debug">
                 				
-                <externalSettings>
-                    					
-                    <externalSetting>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/agent-libscreencapture"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/agentlib-screencapture"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/libscreencapture"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/lib_screencapture"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/agent-libscreencapture/win_x86_64"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/agentlib-screencapture/win_x86_64"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/libscreencapture/bld_win_x86_64"/>
-                        						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/lib_screencapture/bld_win_release"/>
-                        						
-                        <entry flags="RESOLVED" kind="libraryFile" name="dwagscreencapture" srcPrefixMapping="" srcRootPath=""/>
-                        					
-                    </externalSetting>
-                    				
-                </externalSettings>
+                <externalSettings/>
                 				
                 <extensions>
                     					
@@ -845,89 +479,73 @@
             			
             <storageModule moduleId="cdtBuildSystem" version="4.0.0">
                 				
-                <configuration artifactExtension="dll" artifactName="dwagscreencapture" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.sharedLib" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.sharedLib,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="rm -rf" description="" id="cdt.managedbuild.config.gnu.mingw.exe.debug.284099608.951882491" name="bld_win_release" parent="cdt.managedbuild.config.gnu.mingw.exe.debug">
+                <configuration artifactName="bitblt" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="rm -rf" description="" id="cdt.managedbuild.config.gnu.mingw.exe.debug.284099608.1881147813" name="bld_bitblt_debug" parent="cdt.managedbuild.config.gnu.mingw.exe.debug">
                     					
-                    <folderInfo id="cdt.managedbuild.config.gnu.mingw.exe.debug.284099608.951882491." name="/" resourcePath="">
+                    <folderInfo id="cdt.managedbuild.config.gnu.mingw.exe.debug.284099608.1881147813." name="/" resourcePath="">
                         						
-                        <toolChain id="cdt.managedbuild.toolchain.gnu.mingw.exe.debug.227458940" name="MinGW GCC" superClass="cdt.managedbuild.toolchain.gnu.mingw.exe.debug">
+                        <toolChain id="cdt.managedbuild.toolchain.gnu.mingw.exe.debug.1071965186" name="MinGW GCC" superClass="cdt.managedbuild.toolchain.gnu.mingw.exe.debug">
                             							
-                            <targetPlatform id="cdt.managedbuild.target.gnu.platform.mingw.exe.debug.74980688" name="Debug Platform" superClass="cdt.managedbuild.target.gnu.platform.mingw.exe.debug"/>
+                            <targetPlatform id="cdt.managedbuild.target.gnu.platform.mingw.exe.debug.1971349422" name="Debug Platform" superClass="cdt.managedbuild.target.gnu.platform.mingw.exe.debug"/>
                             							
-                            <builder buildPath="${workspace_loc:/prova}/Debug" id="cdt.managedbuild.tool.gnu.builder.mingw.base.1603309368" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="CDT Internal Builder" superClass="cdt.managedbuild.tool.gnu.builder.mingw.base"/>
+                            <builder buildPath="${workspace_loc:/prova}/Debug" id="cdt.managedbuild.tool.gnu.builder.mingw.base.437866404" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="CDT Internal Builder" superClass="cdt.managedbuild.tool.gnu.builder.mingw.base"/>
                             							
-                            <tool id="cdt.managedbuild.tool.gnu.assembler.mingw.exe.debug.369146745" name="GCC Assembler" superClass="cdt.managedbuild.tool.gnu.assembler.mingw.exe.debug">
+                            <tool id="cdt.managedbuild.tool.gnu.assembler.mingw.exe.debug.47815330" name="GCC Assembler" superClass="cdt.managedbuild.tool.gnu.assembler.mingw.exe.debug">
                                 								
-                                <inputType id="cdt.managedbuild.tool.gnu.assembler.input.1601378678" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
+                                <inputType id="cdt.managedbuild.tool.gnu.assembler.input.1138358102" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
                                 							
                             </tool>
                             							
-                            <tool id="cdt.managedbuild.tool.gnu.archiver.mingw.base.338119809" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.mingw.base"/>
+                            <tool id="cdt.managedbuild.tool.gnu.archiver.mingw.base.1331562865" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.mingw.base"/>
                             							
-                            <tool id="cdt.managedbuild.tool.gnu.cpp.compiler.mingw.exe.debug.860841669" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.mingw.exe.debug">
+                            <tool id="cdt.managedbuild.tool.gnu.cpp.compiler.mingw.exe.debug.1760656019" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.mingw.exe.debug">
                                 								
-                                <option id="gnu.cpp.compiler.mingw.exe.debug.option.optimization.level.1895239878" name="Optimization Level" superClass="gnu.cpp.compiler.mingw.exe.debug.option.optimization.level" useByScannerDiscovery="false" value="gnu.cpp.compiler.optimization.level.most" valueType="enumerated"/>
+                                <option id="gnu.cpp.compiler.mingw.exe.debug.option.optimization.level.1251576919" name="Optimization Level" superClass="gnu.cpp.compiler.mingw.exe.debug.option.optimization.level" useByScannerDiscovery="false" value="gnu.cpp.compiler.optimization.level.none" valueType="enumerated"/>
                                 								
-                                <option id="gnu.cpp.compiler.mingw.exe.debug.option.debugging.level.1421666957" name="Debug Level" superClass="gnu.cpp.compiler.mingw.exe.debug.option.debugging.level" useByScannerDiscovery="false" value="gnu.cpp.compiler.debugging.level.max" valueType="enumerated"/>
+                                <option id="gnu.cpp.compiler.mingw.exe.debug.option.debugging.level.1230718199" name="Debug Level" superClass="gnu.cpp.compiler.mingw.exe.debug.option.debugging.level" useByScannerDiscovery="false" value="gnu.cpp.compiler.debugging.level.max" valueType="enumerated"/>
                                 								
-                                <option id="gnu.cpp.compiler.option.preprocessor.def.1794580724" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def" useByScannerDiscovery="false" valueType="definedSymbols">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.compiler.option.preprocessor.def.623092300" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def" useByScannerDiscovery="false" valueType="definedSymbols">
                                     									
                                     <listOptionValue builtIn="false" value="OS_WINDOWS"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="OS_BITBLT"/>
                                     								
                                 </option>
                                 								
-                                <option id="gnu.cpp.compiler.option.dialect.std.542632859" name="Language standard" superClass="gnu.cpp.compiler.option.dialect.std" useByScannerDiscovery="true" value="gnu.cpp.compiler.dialect.default" valueType="enumerated"/>
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="true" id="gnu.cpp.compiler.option.include.paths.1634188828" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath"/>
                                 								
-                                <option id="gnu.cpp.compiler.option.include.paths.1636704447" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
-                                    									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
-                                    									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_turbojpeg}&quot;"/>
-                                    								
-                                </option>
+                                <option id="gnu.cpp.compiler.option.dialect.std.2009726652" name="Language standard" superClass="gnu.cpp.compiler.option.dialect.std" useByScannerDiscovery="true" value="gnu.cpp.compiler.dialect.default" valueType="enumerated"/>
                                 								
-                                <inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1191771334" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
+                                <inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.2093065560" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
                                 							
                             </tool>
                             							
-                            <tool id="cdt.managedbuild.tool.gnu.c.compiler.mingw.exe.debug.1387898803" name="GCC C Compiler" superClass="cdt.managedbuild.tool.gnu.c.compiler.mingw.exe.debug">
+                            <tool id="cdt.managedbuild.tool.gnu.c.compiler.mingw.exe.debug.670242657" name="GCC C Compiler" superClass="cdt.managedbuild.tool.gnu.c.compiler.mingw.exe.debug">
                                 								
-                                <option defaultValue="gnu.c.optimization.level.none" id="gnu.c.compiler.mingw.exe.debug.option.optimization.level.780065504" name="Optimization Level" superClass="gnu.c.compiler.mingw.exe.debug.option.optimization.level" useByScannerDiscovery="false" value="gnu.c.optimization.level.most" valueType="enumerated"/>
+                                <option defaultValue="gnu.c.optimization.level.none" id="gnu.c.compiler.mingw.exe.debug.option.optimization.level.1697254523" name="Optimization Level" superClass="gnu.c.compiler.mingw.exe.debug.option.optimization.level" useByScannerDiscovery="false" valueType="enumerated"/>
                                 								
-                                <option id="gnu.c.compiler.mingw.exe.debug.option.debugging.level.1218626258" name="Debug Level" superClass="gnu.c.compiler.mingw.exe.debug.option.debugging.level" useByScannerDiscovery="false" value="gnu.c.debugging.level.max" valueType="enumerated"/>
+                                <option id="gnu.c.compiler.mingw.exe.debug.option.debugging.level.764841795" name="Debug Level" superClass="gnu.c.compiler.mingw.exe.debug.option.debugging.level" useByScannerDiscovery="false" value="gnu.c.debugging.level.max" valueType="enumerated"/>
                                 								
-                                <option id="gnu.c.compiler.option.preprocessor.def.symbols.685838844" name="Defined symbols (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.preprocessor.def.symbols.2140406956" name="Defined symbols (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
                                     									
                                     <listOptionValue builtIn="false" value="OS_WINDOWS"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="OS_BITBLT"/>
                                     								
                                 </option>
                                 								
-                                <option id="gnu.c.compiler.option.dialect.std.1356639472" name="Language standard" superClass="gnu.c.compiler.option.dialect.std" useByScannerDiscovery="true" value="gnu.c.compiler.dialect.default" valueType="enumerated"/>
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="true" id="gnu.c.compiler.option.include.paths.766334492" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath"/>
                                 								
-                                <option id="gnu.c.compiler.option.include.paths.1327047733" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
-                                    									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
-                                    									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_turbojpeg}&quot;"/>
-                                    								
-                                </option>
+                                <option id="gnu.c.compiler.option.dialect.std.169171609" name="Language standard" superClass="gnu.c.compiler.option.dialect.std" useByScannerDiscovery="true" value="gnu.c.compiler.dialect.default" valueType="enumerated"/>
                                 								
-                                <inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1752767247" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
+                                <inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1646773024" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
                                 							
                             </tool>
                             							
-                            <tool id="cdt.managedbuild.tool.gnu.c.linker.mingw.exe.debug.1839713904" name="MinGW C Linker" superClass="cdt.managedbuild.tool.gnu.c.linker.mingw.exe.debug">
-                                								
-                                <option defaultValue="true" id="gnu.c.link.option.shared.1219503149" name="Shared (-shared)" superClass="gnu.c.link.option.shared" valueType="boolean"/>
-                                							
-                            </tool>
+                            <tool id="cdt.managedbuild.tool.gnu.c.linker.mingw.exe.debug.2113307184" name="MinGW C Linker" superClass="cdt.managedbuild.tool.gnu.c.linker.mingw.exe.debug"/>
                             							
-                            <tool id="cdt.managedbuild.tool.gnu.cpp.linker.mingw.exe.debug.1938376610" name="MinGW C++ Linker" superClass="cdt.managedbuild.tool.gnu.cpp.linker.mingw.exe.debug">
+                            <tool id="cdt.managedbuild.tool.gnu.cpp.linker.mingw.exe.debug.584596349" name="MinGW C++ Linker" superClass="cdt.managedbuild.tool.gnu.cpp.linker.mingw.exe.debug">
                                 								
-                                <option id="gnu.cpp.link.option.libs.2041618025" name="Libraries (-l)" superClass="gnu.cpp.link.option.libs" useByScannerDiscovery="false" valueType="libs">
-                                    									
-                                    <listOptionValue builtIn="false" value="zlib1"/>
-                                    									
-                                    <listOptionValue builtIn="false" value="turbojpeg"/>
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.link.option.libs.1364713354" name="Libraries (-l)" superClass="gnu.cpp.link.option.libs" useByScannerDiscovery="false" valueType="libs">
                                     									
                                     <listOptionValue builtIn="false" value="gdi32"/>
                                     									
@@ -935,21 +553,15 @@
                                     								
                                 </option>
                                 								
-                                <option defaultValue="true" id="gnu.cpp.link.option.shared.1517556278" name="Shared (-shared)" superClass="gnu.cpp.link.option.shared" useByScannerDiscovery="false" value="true" valueType="boolean"/>
+                                <option id="gnu.cpp.link.option.shared.1912641116" name="Shared (-shared)" superClass="gnu.cpp.link.option.shared" useByScannerDiscovery="false" value="false" valueType="boolean"/>
                                 								
-                                <option id="gnu.cpp.link.option.strip.44089223" name="Omit all symbol information (-s)" superClass="gnu.cpp.link.option.strip" useByScannerDiscovery="false" value="true" valueType="boolean"/>
+                                <option id="gnu.cpp.link.option.strip.466674297" name="Omit all symbol information (-s)" superClass="gnu.cpp.link.option.strip" useByScannerDiscovery="false" value="false" valueType="boolean"/>
                                 								
-                                <option id="gnu.cpp.link.option.flags.402527061" name="Linker flags" superClass="gnu.cpp.link.option.flags" useByScannerDiscovery="false" value="-static-libgcc -static-libstdc++ -municode" valueType="string"/>
+                                <option id="gnu.cpp.link.option.flags.202211877" name="Linker flags" superClass="gnu.cpp.link.option.flags" useByScannerDiscovery="false" value="-municode" valueType="string"/>
                                 								
-                                <option id="gnu.cpp.link.option.paths.1159708206" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" useByScannerDiscovery="false" valueType="libPaths">
-                                    									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_z}&quot;"/>
-                                    									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/make/tmp/lib_turbojpeg}&quot;"/>
-                                    								
-                                </option>
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="true" id="gnu.cpp.link.option.paths.631888808" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" useByScannerDiscovery="false" valueType="libPaths"/>
                                 								
-                                <inputType id="cdt.managedbuild.tool.gnu.cpp.linker.input.1562868952" superClass="cdt.managedbuild.tool.gnu.cpp.linker.input">
+                                <inputType id="cdt.managedbuild.tool.gnu.cpp.linker.input.982824870" superClass="cdt.managedbuild.tool.gnu.cpp.linker.input">
                                     									
                                     <additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
                                     									
@@ -957,7 +569,147 @@
                                     								
                                 </inputType>
                                 								
-                                <outputType id="cdt.managedbuild.tool.gnu.cpp.linker.mingw.so.output.base.1628819495" outputPrefix="" superClass="cdt.managedbuild.tool.gnu.cpp.linker.mingw.so.output.base"/>
+                                <outputType id="cdt.managedbuild.tool.gnu.cpp.linker.mingw.so.output.base.2110540612" outputPrefix="" superClass="cdt.managedbuild.tool.gnu.cpp.linker.mingw.so.output.base"/>
+                                							
+                            </tool>
+                            						
+                        </toolChain>
+                        					
+                    </folderInfo>
+                    					
+                    <sourceEntries>
+                        						
+                        <entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+                        					
+                    </sourceEntries>
+                    				
+                </configuration>
+                			
+            </storageModule>
+            			
+            <storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
+            		
+        </cconfiguration>
+        		
+        <cconfiguration id="cdt.managedbuild.config.gnu.mingw.exe.debug.284099608.1881147813.593236740">
+            			
+            <storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.config.gnu.mingw.exe.debug.284099608.1881147813.593236740" moduleId="org.eclipse.cdt.core.settings" name="bld_desktopduplication_debug">
+                				
+                <externalSettings/>
+                				
+                <extensions>
+                    					
+                    <extension id="org.eclipse.cdt.core.PE" point="org.eclipse.cdt.core.BinaryParser"/>
+                    					
+                    <extension id="org.eclipse.cdt.core.GASErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+                    					
+                    <extension id="org.eclipse.cdt.core.GLDErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+                    					
+                    <extension id="org.eclipse.cdt.core.GCCErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+                    				
+                </extensions>
+                			
+            </storageModule>
+            			
+            <storageModule moduleId="cdtBuildSystem" version="4.0.0">
+                				
+                <configuration artifactName="desktopduplication" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="rm -rf" description="" id="cdt.managedbuild.config.gnu.mingw.exe.debug.284099608.1881147813.593236740" name="bld_desktopduplication_debug" parent="cdt.managedbuild.config.gnu.mingw.exe.debug">
+                    					
+                    <folderInfo id="cdt.managedbuild.config.gnu.mingw.exe.debug.284099608.1881147813.593236740." name="/" resourcePath="">
+                        						
+                        <toolChain id="cdt.managedbuild.toolchain.gnu.mingw.exe.debug.1871251568" name="MinGW GCC" superClass="cdt.managedbuild.toolchain.gnu.mingw.exe.debug">
+                            							
+                            <targetPlatform id="cdt.managedbuild.target.gnu.platform.mingw.exe.debug.1174725079" name="Debug Platform" superClass="cdt.managedbuild.target.gnu.platform.mingw.exe.debug"/>
+                            							
+                            <builder buildPath="${workspace_loc:/prova}/Debug" id="cdt.managedbuild.tool.gnu.builder.mingw.base.1650693507" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="CDT Internal Builder" superClass="cdt.managedbuild.tool.gnu.builder.mingw.base"/>
+                            							
+                            <tool id="cdt.managedbuild.tool.gnu.assembler.mingw.exe.debug.215786273" name="GCC Assembler" superClass="cdt.managedbuild.tool.gnu.assembler.mingw.exe.debug">
+                                								
+                                <inputType id="cdt.managedbuild.tool.gnu.assembler.input.1755394170" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
+                                							
+                            </tool>
+                            							
+                            <tool id="cdt.managedbuild.tool.gnu.archiver.mingw.base.366128969" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.mingw.base"/>
+                            							
+                            <tool id="cdt.managedbuild.tool.gnu.cpp.compiler.mingw.exe.debug.1615729665" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.mingw.exe.debug">
+                                								
+                                <option id="gnu.cpp.compiler.mingw.exe.debug.option.optimization.level.1558411561" name="Optimization Level" superClass="gnu.cpp.compiler.mingw.exe.debug.option.optimization.level" useByScannerDiscovery="false" value="gnu.cpp.compiler.optimization.level.none" valueType="enumerated"/>
+                                								
+                                <option id="gnu.cpp.compiler.mingw.exe.debug.option.debugging.level.1740591585" name="Debug Level" superClass="gnu.cpp.compiler.mingw.exe.debug.option.debugging.level" useByScannerDiscovery="false" value="gnu.cpp.compiler.debugging.level.max" valueType="enumerated"/>
+                                								
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.compiler.option.preprocessor.def.510665413" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def" useByScannerDiscovery="false" valueType="definedSymbols">
+                                    									
+                                    <listOptionValue builtIn="false" value="OS_WINDOWS"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="OS_DESKTOPDUPLICATION"/>
+                                    								
+                                </option>
+                                								
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="true" id="gnu.cpp.compiler.option.include.paths.1662511750" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath"/>
+                                								
+                                <option id="gnu.cpp.compiler.option.dialect.std.1331590737" name="Language standard" superClass="gnu.cpp.compiler.option.dialect.std" useByScannerDiscovery="true" value="gnu.cpp.compiler.dialect.default" valueType="enumerated"/>
+                                								
+                                <inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1924367318" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
+                                							
+                            </tool>
+                            							
+                            <tool id="cdt.managedbuild.tool.gnu.c.compiler.mingw.exe.debug.782298254" name="GCC C Compiler" superClass="cdt.managedbuild.tool.gnu.c.compiler.mingw.exe.debug">
+                                								
+                                <option defaultValue="gnu.c.optimization.level.none" id="gnu.c.compiler.mingw.exe.debug.option.optimization.level.322196813" name="Optimization Level" superClass="gnu.c.compiler.mingw.exe.debug.option.optimization.level" useByScannerDiscovery="false" valueType="enumerated"/>
+                                								
+                                <option id="gnu.c.compiler.mingw.exe.debug.option.debugging.level.510754439" name="Debug Level" superClass="gnu.c.compiler.mingw.exe.debug.option.debugging.level" useByScannerDiscovery="false" value="gnu.c.debugging.level.max" valueType="enumerated"/>
+                                								
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.preprocessor.def.symbols.1441581623" name="Defined symbols (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
+                                    									
+                                    <listOptionValue builtIn="false" value="OS_WINDOWS"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="OS_DESKTOPDUPLICATION"/>
+                                    								
+                                </option>
+                                								
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="true" id="gnu.c.compiler.option.include.paths.18993302" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath"/>
+                                								
+                                <option id="gnu.c.compiler.option.dialect.std.1379310277" name="Language standard" superClass="gnu.c.compiler.option.dialect.std" useByScannerDiscovery="true" value="gnu.c.compiler.dialect.default" valueType="enumerated"/>
+                                								
+                                <inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.219235881" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
+                                							
+                            </tool>
+                            							
+                            <tool id="cdt.managedbuild.tool.gnu.c.linker.mingw.exe.debug.275410177" name="MinGW C Linker" superClass="cdt.managedbuild.tool.gnu.c.linker.mingw.exe.debug"/>
+                            							
+                            <tool id="cdt.managedbuild.tool.gnu.cpp.linker.mingw.exe.debug.742133751" name="MinGW C++ Linker" superClass="cdt.managedbuild.tool.gnu.cpp.linker.mingw.exe.debug">
+                                								
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.link.option.libs.60348329" name="Libraries (-l)" superClass="gnu.cpp.link.option.libs" useByScannerDiscovery="false" valueType="libs">
+                                    									
+                                    <listOptionValue builtIn="false" value="gdi32"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="userenv"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="ole32"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="d3d11"/>
+                                    									
+                                    <listOptionValue builtIn="false" value="dxgi"/>
+                                    								
+                                </option>
+                                								
+                                <option id="gnu.cpp.link.option.shared.1385878968" name="Shared (-shared)" superClass="gnu.cpp.link.option.shared" useByScannerDiscovery="false" value="false" valueType="boolean"/>
+                                								
+                                <option id="gnu.cpp.link.option.strip.2111384829" name="Omit all symbol information (-s)" superClass="gnu.cpp.link.option.strip" useByScannerDiscovery="false" value="false" valueType="boolean"/>
+                                								
+                                <option id="gnu.cpp.link.option.flags.1712692495" name="Linker flags" superClass="gnu.cpp.link.option.flags" useByScannerDiscovery="false" value="-municode" valueType="string"/>
+                                								
+                                <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="true" id="gnu.cpp.link.option.paths.1120311590" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" useByScannerDiscovery="false" valueType="libPaths"/>
+                                								
+                                <inputType id="cdt.managedbuild.tool.gnu.cpp.linker.input.1331008455" superClass="cdt.managedbuild.tool.gnu.cpp.linker.input">
+                                    									
+                                    <additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
+                                    									
+                                    <additionalInput kind="additionalinput" paths="$(LIBS)"/>
+                                    								
+                                </inputType>
+                                								
+                                <outputType id="cdt.managedbuild.tool.gnu.cpp.linker.mingw.so.output.base.347548716" outputPrefix="" superClass="cdt.managedbuild.tool.gnu.cpp.linker.mingw.so.output.base"/>
                                 							
                             </tool>
                             						
@@ -1003,7 +755,19 @@
             		
         </configuration>
         		
+        <configuration configurationName="bld_bitblt_debug">
+            			
+            <resource resourceType="PROJECT" workspacePath="/lib_screencapture"/>
+            		
+        </configuration>
+        		
         <configuration configurationName="bld_linux_x86_32"/>
+        		
+        <configuration configurationName="bld_desktopduplication_debug">
+            			
+            <resource resourceType="PROJECT" workspacePath="/lib_screencapture"/>
+            		
+        </configuration>
         		
         <configuration configurationName="bld_macos_x86_32"/>
         		
@@ -1017,9 +781,9 @@
         		
         <configuration configurationName="win_x86_32"/>
         		
-        <configuration configurationName="bld_macos_release"/>
-        		
         <configuration configurationName="bld_macos_debug"/>
+        		
+        <configuration configurationName="bld_macos_release"/>
         		
         <configuration configurationName="linux_x86_64"/>
         		

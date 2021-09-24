@@ -6,117 +6,86 @@
 
 #include "main.h"
 
+int DWASoundCaptureVersion(){
+	return 4;
+}
+
+int shortToArray(unsigned char* buffer,int p,short s){
+	buffer[p] = (s >> 8) & 0xFF;
+	buffer[p+1] = s & 0xFF;
+	return 2;
+}
+
+bool checkzero(unsigned char *s, int l) {
+	for(int i = 0; i < l; i++) {
+		if(s[i] != 0) return false;
+	}
+	return true;
+}
+
 int record(void *outputBuffer, void *inputBuffer, unsigned int nBufferFrames,
 		double streamTime, rtaudio_stream_status_t status, void *userData) {
+	AudioCaptureSessionInfo* cs = (AudioCaptureSessionInfo*)userData;
 	if (status){
-		printf("Stream overflow!\n");
+		//printf("Stream overflow!\n");
 	}else if (inputBuffer != NULL){
-		//printf("nBufferFrames %d\n",nBufferFrames);
-		DWASoundCaptureLock();
-		float *rptr = (float*)inputBuffer;
-		bool bok=false;
-		int oldrbl=ringBufferLimit;
-		for( unsigned int i=0; i<nBufferFrames*numChannels; i++ ){
-			if( inputBuffer == NULL ){
-				ringBuffer[ringBufferLimit]=0.0f;
-			}else{
-				ringBuffer[ringBufferLimit]=*rptr++;
-			}
-			if (ringBuffer[ringBufferLimit]!=0.0f){
-				bok=true;
-			}
-			ringBufferLimit++;
-			if (ringBufferLimit>=ringBufferSize){
-				ringBufferLimit=0;
-			}
+		unsigned char* s = (unsigned char*)inputBuffer;
+		unsigned int l = nBufferFrames*cs->conf->numChannels*sizeof(float);
+		if (!checkzero(s,l)){
+			cs->callbackRecord(l,s);
 		}
-		if (!bok){
-			ringBufferLimit=oldrbl;
-		}
-		DWASoundCaptureUnlock();
 	}
 	return 0;
 }
 
-int DWASoundCaptureVersion(){
-	return 0;
-}
+int DWASoundCaptureStart(AUDIO_CONFIG* audioconf,CallbackRecord cbrec,void** capses){
+	AudioCaptureSessionInfo* cs = new AudioCaptureSessionInfo();
+	cs->bStreamAlive=false;
+	cs->callbackRecord=NULL;
 
-void DWASoundCaptureCreateLock(){
 #if defined OS_WINDOWS
-	mtx=CreateMutex(NULL,FALSE,NULL);
+	cs->adc = rtaudio_create(RTAUDIO_API_WINDOWS_WASAPI);
+#elif defined OS_LINUX
+	cs->adc = rtaudio_create(RTAUDIO_API_LINUX_PULSE);
 #else
-	pthread_mutex_init(&mtx, NULL);
+	cs->adc = rtaudio_create(RTAUDIO_API_MACOSX_CORE);
 #endif
+	if (cs->adc==NULL){
+		return -91;
+	}
+	deviceCount = rtaudio_device_count(cs->adc);
+	deviceOut = rtaudio_get_default_output_device(cs->adc);
+	if (deviceCount==0 || deviceOut>deviceCount-1){
+		rtaudio_destroy(cs->adc);
+		return -92;
+	}else{
+		rtaudio_stream_parameters parameters;
+		parameters.device_id = deviceOut;
+		parameters.num_channels = audioconf->numChannels;
+		parameters.first_channel = 0;
+		cs->conf=audioconf;
+		cs->callbackRecord=cbrec;
+		int iret=rtaudio_open_stream(cs->adc, NULL, &parameters, RTAUDIO_FORMAT_FLOAT32, audioconf->sampleRate, &audioconf->bufferFrames, &record, cs, NULL, NULL);
+		if (iret==0){
+			iret=rtaudio_start_stream(cs->adc);
+		}
+		if (iret==0){
+			*capses = cs;
+			return 0;
+		}
+		return iret;
+	}
+	return -90;
 }
 
-void DWASoundCaptureDestroyLock(){
-#if defined OS_WINDOWS
-	CloseHandle(mtx);
-#else
-	pthread_mutex_lock(&mtx);
-#endif
-}
-
-void DWASoundCaptureLock(){
-#if defined OS_WINDOWS
-		WaitForSingleObject(mtx, INFINITE);
-#else
-		pthread_mutex_lock(&mtx);
-#endif
-}
-
-void DWASoundCaptureUnlock(){
-#if defined OS_WINDOWS
-		ReleaseMutex(mtx);
-#else
-		pthread_mutex_unlock(&mtx);
-#endif
-}
-
-unsigned int DWASoundCaptureGetSampleRate(){
-	return sampleRate;
-}
-
-unsigned int DWASoundCaptureGetNumChannels(){
-	return numChannels;
-}
-
-unsigned int DWASoundCaptureGetBufferFrames(){
-	return bufferFrames;
-}
-
-int DWASoundCaptureGetDetectOutputName(char* bf, int sz){
-	rtaudio_device_info_t di = rtaudio_get_device_info(adc,rtaudio_get_default_output_device(adc));
+int DWASoundCaptureGetDetectOutputName(void* capses,char* bf, int sz){
+	AudioCaptureSessionInfo* cs = (AudioCaptureSessionInfo*)capses;
+	rtaudio_device_info_t di = rtaudio_get_device_info(cs->adc,rtaudio_get_default_output_device(cs->adc));
 	strncpy(bf,di.name,sz);
 	return strlen(di.name);
 }
 
-void DWASoundCaptureStart(){
-	if (!bStarted){
-		DWASoundCaptureCreateLock();
-#if defined OS_WINDOWS
-		adc = rtaudio_create(RTAUDIO_API_WINDOWS_WASAPI);
-#elif defined OS_LINUX
-		adc = rtaudio_create(RTAUDIO_API_LINUX_PULSE);
-#else
-		adc = rtaudio_create(RTAUDIO_API_MACOSX_CORE);
-#endif
-		bStarted=true;
-		DWASoundCaptureDetectOutput();
-	}
-}
-
-void DWASoundCaptureStop(){
-	if (bStarted){
-		DWASoundCaptureDestroyStream();
-		rtaudio_destroy(adc);
-		DWASoundCaptureDestroyLock();
-		bStarted=false;
-	}
-}
-
-void DWASoundCaptureDetectOutput(){
+/*void DWASoundCaptureDetectOutput(){
 	if (bStarted){
 		bool bload=true;
 		unsigned int devcnt = 0;
@@ -171,129 +140,76 @@ void DWASoundCaptureDetectOutput(){
 				//adc.openStream(NULL, &parameters, RTAUDIO_FLOAT32, sampleRate, &bufferFrames, &record, NULL); rtaudio_cb_t
 				if (iret==0){
 					iret=rtaudio_start_stream(adc);
-
 				}
-				if (iret==0){
-					bStreamAlive=true;
-				}else{
-					bStreamAlive=false;
-					ringBufferSize=0;
-					bufferFrames=0;
-					free(ringBuffer);
-				}
+				bStreamAlive = (iret==0);
 			}
 
 		}
 	}
 }
+*/
 
-void DWASoundCaptureDestroyStream(){
-	if (bStreamAlive){
-		bStreamAlive=false;
-		rtaudio_stop_stream(adc);
-		if (rtaudio_is_stream_open(adc)==1){
-			rtaudio_close_stream(adc);
-		}
-		free(ringBuffer);
-		free(ringBufferApp);
-		ringBufferSize=0;
-		bufferFrames=0;
+void DWASoundCaptureStop(void* capses){
+	AudioCaptureSessionInfo* cs = (AudioCaptureSessionInfo*)capses;
+	rtaudio_stop_stream(cs->adc);
+	if (rtaudio_is_stream_open(cs->adc)==1){
+		rtaudio_close_stream(cs->adc);
 	}
+	rtaudio_destroy(cs->adc);
+	cs->callbackRecord=NULL;
+	cs->adc=NULL;
+	delete cs;
 }
 
-int shortToArray(unsigned char* buffer,int p,short s){
-	buffer[p] = (s >> 8) & 0xFF;
-	buffer[p+1] = s & 0xFF;
-	return 2;
+
+int DWASoundCaptureOPUSEncoderInit(AUDIO_CONFIG* audioconf,void** encses){
+	OPUSEncoderSessionInfo* oe = new OPUSEncoderSessionInfo();
+	int err;
+	oe->enc = opus_encoder_create(audioconf->sampleRate, audioconf->numChannels, OPUS_APPLICATION_RESTRICTED_LOWDELAY, &err);
+	if(err != OPUS_OK || oe->enc==NULL){
+		printf("opus_encoder_create ERROR!!");
+		delete oe;
+		return -2;
+	}
+	//opus_encoder_ctl(oe->enc, OPUS_SET_MAX_BANDWIDTH(OPUS_BANDWIDTH_NARROWBAND));
+	opus_encoder_ctl(oe->enc, OPUS_SET_BITRATE(OPUS_AUTO)); // OPUS_AUTO
+	oe->resultBufferSize = RESULT_DIFF_SIZE;
+	oe->resultBuffer = (unsigned char*)calloc(oe->resultBufferSize,sizeof(unsigned char));
+	oe->conf=audioconf;
+	*encses=oe;
+	return 0;
 }
 
-int DWASoundCaptureGetData(int id, unsigned char** data) {
-	int iret=0;
+void DWASoundCaptureOPUSEncoderTerm(void* encses){
+	OPUSEncoderSessionInfo* oe = (OPUSEncoderSessionInfo*)encses;
+	opus_encoder_destroy(oe->enc);
+	free(oe->resultBuffer);
+	oe->enc=NULL;
+	delete oe;
+}
+
+int DWASoundCaptureOPUSEncode(void* encses, unsigned char* rawinput, int sizeinput, CallbackEncodeResult cbresult){
+	OPUSEncoderSessionInfo* oe = (OPUSEncoderSessionInfo*)encses;
+	float* frawinput=(float*)rawinput;
 	int p=0;
-	int cnt=0;
-	if (bStarted) {
-		DWASoundCaptureLock();
-		if (!bStreamAlive){
-			DWASoundCaptureUnlock();
-			return iret;
+	int cnt=(sizeinput/sizeof(float));
+	int iret=2;
+	while (p<cnt){
+		if (oe->resultBufferSize-iret<RESULT_DIFF_SIZE){
+			oe->resultBuffer = (unsigned char*)realloc(oe->resultBuffer,oe->resultBufferSize*sizeof(unsigned char));
 		}
-		std::map<int,SESSION>::iterator itmap = hmSession.find(id);
-		if (itmap==hmSession.end()){
-			DWASoundCaptureUnlock();
-			return iret;
+		int c = opus_encode_float(oe->enc, frawinput+p, oe->conf->bufferFrames, oe->resultBuffer+iret+2, oe->resultBufferSize-iret-2);
+		if (c>0){
+			iret += shortToArray(oe->resultBuffer,iret,(short)c);
+			iret += c;
+		}else{
+			return c;
 		}
-		SESSION &ses = itmap->second;
-		if (ses.ringBufferPos>ringBufferLimit){
-			int appcnt=ringBufferSize-ses.ringBufferPos;
-			memcpy(ringBufferApp, ringBuffer+ses.ringBufferPos, appcnt*sizeof(float));
-			ses.ringBufferPos=0;
-			cnt+=appcnt;
-		}
-		if (ses.ringBufferPos<ringBufferLimit){
-			int appcnt=ringBufferLimit-ses.ringBufferPos;
-			memcpy(ringBufferApp+cnt, ringBuffer+ses.ringBufferPos, appcnt*sizeof(float));
-			ses.ringBufferPos=ringBufferLimit;
-			cnt+=appcnt;
-		}
-		DWASoundCaptureUnlock();
-		while (p<cnt){
-			int c = opus_encode_float(ses.enc, ringBufferApp+p, bufferFrames, ses.buffer+iret+2, ses.bufferSize-iret-2);
-			if (c>0){
-				iret += shortToArray(ses.buffer,iret,(short)c);
-				iret += c;
-			}else{
-				//printf("iret %d\n",iret);
-			}
-			p+=bufferFrames*numChannels;
-		}
-		*data = ses.buffer;
+		p+=oe->conf->bufferFrames*oe->conf->numChannels;
 	}
+	shortToArray(oe->resultBuffer,0,810);
+	cbresult(iret,oe->resultBuffer);
 	return iret;
 }
 
-int DWASoundCaptureInit(int id, int enctype, int quality) {
-	if (bStarted) {
-		int err;
-		OpusEncoder* enc = opus_encoder_create(sampleRate, numChannels, OPUS_APPLICATION_RESTRICTED_LOWDELAY, &err);
-		if(err != OPUS_OK || enc==NULL){
-			printf("opus_encoder_create ERROR!!");
-			return 2;
-		}
-		//opus_encoder_ctl(enc, OPUS_SET_MAX_BANDWIDTH(OPUS_BANDWIDTH_NARROWBAND));
-		opus_encoder_ctl(enc, OPUS_SET_BITRATE(OPUS_AUTO)); // OPUS_AUTO
-		DWASoundCaptureLock();
-		DWASoundCaptureTermNoSync(id);
-		hmSession[id].enc=enc;
-		hmSession[id].enctype=enctype;
-		hmSession[id].quality=quality;
-		hmSession[id].ringBufferPos=0;
-		hmSession[id].bufferSize=ringBufferSize*sizeof(float)*2;
-		hmSession[id].buffer=(unsigned char*)malloc(sizeof(unsigned char)*hmSession[id].bufferSize);
-		DWASoundCaptureUnlock();
-		return 0;
-	}else{
-		return 1;
-	}
 
-}
-
-void DWASoundCaptureTermNoSync(int id) {
-	std::map<int,SESSION>::iterator itmap = hmSession.find(id);
-	if (itmap!=hmSession.end()){
-		if (itmap->second.buffer!=NULL){
-			free(itmap->second.buffer);
-			itmap->second.buffer=NULL;
-		}
-		if (itmap->second.enc!=NULL){
-			opus_encoder_destroy(itmap->second.enc);
-			itmap->second.enc=NULL;
-		}
-		hmSession.erase(itmap);
-	}
-}
-
-void DWASoundCaptureTerm(int id) {
-	DWASoundCaptureLock();
-	DWASoundCaptureTermNoSync(id);
-	DWASoundCaptureUnlock();
-}
