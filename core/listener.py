@@ -11,26 +11,27 @@ from urlparse import urlparse, parse_qs
 import threading
 import time
 import sys
-import sharedmem
+import ipc
 import json
 import os
 import hashlib
 import base64
+import utils
 
 
-####################################
-######### SHAREDMEMSERVER ##########
-####################################
-class SharedMemServer(threading.Thread):
+##############################
+######### IPCSERVER ##########
+##############################
+class IPCServer(threading.Thread):
     def __init__(self,agent):
-        threading.Thread.__init__(self, name="SharedMemServer")
+        threading.Thread.__init__(self, name="ListenerIPCServer")
         self._agent=agent
         self._prop = None
         self._status = None
         self._config = None
     
     def start(self):
-        self._prop = sharedmem.Property()
+        self._prop = ipc.Property()
         fieldsdef=[]
         fieldsdef.append({"name":"counter","size":30})
         fieldsdef.append({"name":"state","size":5})
@@ -48,9 +49,9 @@ class SharedMemServer(threading.Thread):
         self._prop.set_property("request_data","")
         self._prop.set_property("request_pid","")
         
-        self._status=SharedMemStatus(self._agent,self._prop)
+        self._status=IPCStatus(self._agent,self._prop)
         self._status.start();
-        self._config=SharedMemConfig(self._agent,self._prop)
+        self._config=IPCConfig(self._agent,self._prop)
         self._config.start();
     
     def close(self):
@@ -62,9 +63,9 @@ class SharedMemServer(threading.Thread):
             self._status.join(5000)
         self._prop.close()
 
-class SharedMemStatus(threading.Thread):
+class IPCStatus(threading.Thread):
     def __init__(self,agent,prop):
-        threading.Thread.__init__(self, name="SharedMemStatus")
+        threading.Thread.__init__(self, name="ListenerIPCStatus")
         self.daemon=True
         self._agent=agent
         self._prop=prop
@@ -98,7 +99,8 @@ class SharedMemStatus(threading.Thread):
                 self._prop.set_property("sessions_status", json.dumps(jo))
                 
                                 
-            except Exception as e:
+            except:
+                e=utils.get_exception()
                 if logwait>=60*10:
                     logwait=0
                     self._agent.write_except(e)                    
@@ -111,10 +113,10 @@ class SharedMemStatus(threading.Thread):
         self._bclose=True
         
 
-class SharedMemConfig(threading.Thread):
+class IPCConfig(threading.Thread):
     
     def __init__(self,agent,prop):
-        threading.Thread.__init__(self, name="SharedMemConfig")
+        threading.Thread.__init__(self, name="ListenerIPCConfig")
         self.daemon=True
         self._agent=agent
         self._prop=prop
@@ -143,7 +145,8 @@ class SharedMemConfig(threading.Thread):
                             if self._prop.get_property("request_data")=="":
                                 break
                             time.sleep(0.1)
-                except Exception as e:
+                except:
+                    e=utils.get_exception()
                     self._agent.write_except(e);
                 self._prop.set_property("response_data","")
                 self._prop.set_property("request_data","")
@@ -159,7 +162,8 @@ class SharedMemConfig(threading.Thread):
                 func = getattr(self,  '_req_' + req)
                 try:
                     return func(prms)
-                except Exception as e:
+                except:
+                    e=utils.get_exception()
                     return "ERROR:" + str(e)
             except:
                 return "ERROR:INVALID_REQUEST"
@@ -247,10 +251,10 @@ class SharedMemConfig(threading.Thread):
     def close(self):
         self._bclose=True
 
-class SharedMemClient():
+class IPCClient():
     
     def __init__(self,path=None):
-        self._prop=sharedmem.Property()
+        self._prop=ipc.Property()
         self._prop.open("status_config",bpath=path)
     
     def close(self):

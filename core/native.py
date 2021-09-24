@@ -13,7 +13,7 @@ import stat
 import subprocess
 import sys
 import time
-import sharedmem
+import ipc
 import threading
 import signal
 import json
@@ -179,12 +179,39 @@ class Windows():
         bret=self._dwaglib.isTaskRunning(pid);
         return bret==1
     
-    def set_file_permission_everyone(self,file):
-        self._dwaglib.setFilePermissionEveryone(file)    
+    def set_file_permission_everyone(self,fl):
+        self._dwaglib.setFilePermissionEveryone(fl)    
     
     def fix_file_permissions(self,operation,path,path_src=None):
         None
-               
+        
+    def is_win_xp(self):
+        return self._dwaglib.isWinXP()
+        
+    def is_win_2003_server(self):
+        return self._dwaglib.isWin2003Server()
+    
+    def is_user_in_admin_group(self):
+        return self._dwaglib.isUserInAdminGroup()
+    
+    def is_run_as_admin(self):
+        return self._dwaglib.isRunAsAdmin()
+        
+    def is_process_elevated(self):
+        return self._dwaglib.isProcessElevated()
+    
+    def get_active_console_id(self):
+        return self._dwaglib.getActiveConsoleId();
+    
+    def start_process(self, scmd, spythonHome):
+        return self._dwaglib.startProcess(scmd, spythonHome);
+    
+    def start_process_in_active_console(self, scmd, spythonHome):
+        return self._dwaglib.startProcessInActiveConsole(scmd, spythonHome);
+    
+    def win_station_connect(self):
+        self._dwaglib.winStationConnect()
+    
     def is_gui(self):
         return True 
     
@@ -507,17 +534,20 @@ class Mac():
     def is_gui(self):
         return True
     
+    def get_console_user_id(self):
+        return self._dwaglib.getConsoleUserId();
+    
     #GESTIONE GUI LAUNCHER
     def _signal_handler(self, signal, frame):
         self._propguilnc_stop=True
-        
+    
     def start_guilnc(self):
         self._propguilnc_stop=False
         signal.signal(signal.SIGTERM, self._signal_handler)
         bload=False
         suid=str(os.getuid())
         spid=str(os.getpid())
-        lnc = sharedmem.Property()
+        lnc = ipc.Property()
         prcs = []
         try:
             while not self._propguilnc_stop and utils.path_exists("guilnc.run"):
@@ -593,7 +623,7 @@ class Mac():
                 suid=str(uid)
                 lnc = None
                 if suid not in self._propguilnc:
-                    lnc = sharedmem.Property()
+                    lnc = ipc.Property()
                     fieldsdef=[]
                     fieldsdef.append({"name":"pid","size":20})
                     fieldsdef.append({"name":"state","size":20}) # ""=NESSUNA OPERAZIONE; "LNC"="ESEGUI"; "NUM"=PID ESEGUITO 

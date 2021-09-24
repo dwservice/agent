@@ -19,7 +19,7 @@ class Configure:
     def __init__(self):
         #self._config_port = 7950
         #self._path_config='config.json'
-        self._sharedmemclient=None
+        self._ipc_client=None
         self._install_code=ui.VarString()
         self._proxy_type=ui.VarString("SYSTEM")
         self._proxy_host=ui.VarString("")
@@ -45,15 +45,15 @@ class Configure:
     
     def send_req(self, req, prms=None):
         try:
-            if self._sharedmemclient==None or self._sharedmemclient.is_close():
-                self._sharedmemclient=listener.SharedMemClient(path=self._config_base_path)
-            return self._sharedmemclient.send_request("admin", self._password, req, prms);
+            if self._ipc_client==None or self._ipc_client.is_close():
+                self._ipc_client=listener.IPCClient(path=self._config_base_path)
+            return self._ipc_client.send_request("admin", self._password, req, prms);
         except: 
             return 'ERROR:REQUEST_TIMEOUT'
     
     def close_req(self):
-        if self._sharedmemclient!=None and not self._sharedmemclient.is_close():
-            self._sharedmemclient.close()
+        if self._ipc_client!=None and not self._ipc_client.is_close():
+            self._ipc_client.close()
             
     def check_auth(self):
         sret=self.send_req("check_auth", None)

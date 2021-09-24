@@ -22,7 +22,7 @@ import gdi
 import importlib
 import zlib
 import base64
-import sharedmem
+import ipc
 import ctypes
 import subprocess
 import utils
@@ -1054,7 +1054,7 @@ class Install:
         self._proxy_user=ui.VarString("")
         self._proxy_password=ui.VarString("", True)
         self._proxy = None
-        self._sharedmemclient = None
+        self._ipc_client = None
         self._name = None
         self._listen_port = 7950
         self._runWithoutInstall = False
@@ -1485,7 +1485,7 @@ class Install:
         
         if not (self._runWithoutInstall and utils.path_exists(pth + utils.path_sep + u"config.json") 
                 and utils.path_exists(pth + utils.path_sep + u"fileversions.json") and utils.path_exists(pth + utils.path_sep + u"agent.pyc") 
-                and utils.path_exists(pth + utils.path_sep + u"communication.pyc") and utils.path_exists(pth + utils.path_sep + u"sharedmem.pyc")):
+                and utils.path_exists(pth + utils.path_sep + u"communication.pyc") and utils.path_exists(pth + utils.path_sep + u"ipc.pyc")):
             msg=dwnmsg.format('files.xml')
             self._uinterface.wait_message(msg, iniperc,  pstart)
             prpfiles = communication.get_url_prop(self._get_main_url() + "getAgentFile.dw?name=files.xml", self._proxy )
@@ -1761,15 +1761,15 @@ class Install:
     
     def send_req(self, req, prms=None):
         try:
-            if self._sharedmemclient==None or self._sharedmemclient.is_close():
-                self._sharedmemclient=listener.SharedMemClient(self._install_path.get())
-            return self._sharedmemclient.send_request("admin", "", req, prms)
+            if self._ipc_client==None or self._ipc_client.is_close():
+                self._ipc_client=listener.IPCClient(self._install_path.get())
+            return self._ipc_client.send_request("admin", "", req, prms)
         except: 
             return 'ERROR:REQUEST_TIMEOUT'
     
     def close_req(self):
-        if self._sharedmemclient!=None and not self._sharedmemclient.is_close():
-            self._sharedmemclient.close()
+        if self._ipc_client!=None and not self._ipc_client.is_close():
+            self._ipc_client.close()
     
     def _send_password_config(self):
         if "configPassword" in self._options:
@@ -2137,7 +2137,7 @@ class Install:
         self._runWithoutInstallAgentCloseEnd=False
         runcode_notfound=False
         runcode_connected=False
-        pstsharedmem=None
+        pstipc=None
         try:   
             while self._runWithoutInstallAgentAlive:
                 self._uinterface.wait_message(self._get_message("runWithoutInstallationStarting"))
@@ -2188,12 +2188,12 @@ class Install:
                 self._append_log(u"Started.")
                 
                 #GESTISCE STATO
-                pstsharedmem = sharedmem.Property()
-                pstsharedmem.open("runonfly")
-                agpid=int(pstsharedmem.get_property("pid"))
+                pstipc = ipc.Property()
+                pstipc.open("runonfly")
+                agpid=int(pstipc.get_property("pid"))
                 curst=""
                 while self._native.is_task_running(agpid) and (ponfly is None or ponfly.poll() is None):
-                    st = pstsharedmem.get_property("status")
+                    st = pstipc.get_property("status")
                     if st!=curst:
                         curst=st
                         if st=="CONNECTED":
@@ -2201,9 +2201,9 @@ class Install:
                                 runcode_connected=True
                                 self._step_runonfly_conn_msg(None,None)
                             else:            
-                                usr=pstsharedmem.get_property("user")
+                                usr=pstipc.get_property("user")
                                 usr=usr[0:3] + u"-" + usr[3:6] + u"-" + usr[6:9] + u"-" + usr[9:]
-                                self._step_runonfly_conn_msg(usr, pstsharedmem.get_property("password"))                            
+                                self._step_runonfly_conn_msg(usr, pstipc.get_property("password"))                            
                         elif st=="CONNECTING":
                             self._uinterface.wait_message(self._get_message("runWithoutInstallationConnecting"), allowclose=True)
                         elif st=="RUNCODE_NOTFOUND":
@@ -2236,17 +2236,17 @@ class Install:
                     if cnt>5: #5 Secondi
                         break
                 
-                pstsharedmem.close()
-                pstsharedmem=None
+                pstipc.close()
+                pstipc=None
                 time.sleep(1)
                 
         except Exception as e:
             f = utils.file_open(u"dwagent.stop", 'wb')
             f.close()
             try:
-                if pstsharedmem is not None:
-                    pstsharedmem.close()
-                    pstsharedmem=None
+                if pstipc is not None:
+                    pstipc.close()
+                    pstipc=None
             except:
                 None
             utils.system_changedir(self._current_path)

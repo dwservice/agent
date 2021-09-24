@@ -1368,7 +1368,7 @@ class MapFile():
         return FILE2_3_SIZE_BYTE
     
 
-class Manager(threading.Thread):
+class ProcessManager(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self,name="SharedMemManager")
         self.daemon=True
@@ -1444,7 +1444,7 @@ class Manager(threading.Thread):
         except:
             None #A volte allo shutdown (most likely raised during interpreter shutdown) errore: <type 'exceptions.TypeError'>: 'NoneType' object is not callable 
         
-sharedmem_manager=Manager()
+sharedmem_manager=ProcessManager()
 sharedmem_manager.start()
 
 

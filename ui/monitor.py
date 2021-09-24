@@ -330,29 +330,29 @@ class Main():
         ret={"state": "-1","sessions_status":[]}
         self._semaphore.acquire()
         try:
-            if self._sharedmemclient==None or self._sharedmemclient.is_close():                
-                self._sharedmemclient=listener.SharedMemClient(path=self._config_base_path)
+            if self._ipc_client==None or self._ipc_client.is_close():                
+                self._ipc_client=listener.IPCClient(path=self._config_base_path)
                 self._status_cnt=-1
 
-            cnt=long(self._sharedmemclient.get_property("counter"))
+            cnt=long(self._ipc_client.get_property("counter"))
             if self._status_cnt!=cnt:
                 if self._status_cnt==-1: #SKIP FIRST READ
                     self._status_cnt=cnt
                     return ret;
                 else:
                     self._status_cnt=cnt                
-                    ret["state"] = self._sharedmemclient.get_property("state")
+                    ret["state"] = self._ipc_client.get_property("state")
                     try:
-                        ret["group"] = self._sharedmemclient.get_property("group").decode("unicode-escape")
+                        ret["group"] = self._ipc_client.get_property("group").decode("unicode-escape")
                     except:
                         None
                     try:
-                        ret["name"] = self._sharedmemclient.get_property("name").decode("unicode-escape")
+                        ret["name"] = self._ipc_client.get_property("name").decode("unicode-escape")
                     except:
                         None
                     try:
                         if ret["state"]=='1':
-                            csts = json.loads(self._sharedmemclient.get_property("sessions_status"))
+                            csts = json.loads(self._ipc_client.get_property("sessions_status"))
                         else:
                             csts = []
                         ret["sessions_status"] = csts
@@ -511,9 +511,9 @@ class Main():
     def send_req(self, usr, pwd, req, prms=None):
         self._semaphore.acquire()
         try:
-            if self._sharedmemclient==None or self._sharedmemclient.is_close():
-                self._sharedmemclient=listener.SharedMemClient()
-            return self._sharedmemclient.send_request(usr, pwd, req, prms);
+            if self._ipc_client==None or self._ipc_client.is_close():
+                self._ipc_client=listener.IPCClient()
+            return self._ipc_client.send_request(usr, pwd, req, prms);
         except: 
             return 'ERROR:REQUEST_TIMEOUT'
         finally:
@@ -881,7 +881,7 @@ class Main():
         
     def start(self, mode):        
         self._semaphore = threading.Condition()
-        self._sharedmemclient = None
+        self._ipc_client = None
         self._mode=mode
         self._monitor_tray_icon=False
         self._monitor_tray_obj=None
@@ -921,8 +921,8 @@ class Main():
             self.unlock()
             if self._update:
                 self.run_update()
-        if self._sharedmemclient is not None:
-            self._sharedmemclient.close()
+        if self._ipc_client is not None:
+            self._ipc_client.close()
 
 def fmain(args): #SERVE PER MACOS APP
     try:

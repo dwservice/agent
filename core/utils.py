@@ -109,7 +109,17 @@ def get_stacktrace_string():
             except:
                 return unicode(s, errors='replace')
     except:
-        return "Unexpected error."
+        return "Unexpected error (get_stacktrace_string)."
+
+def get_exception():
+    try:
+        ar = sys.exc_info()
+        if len(ar)>1 and sys.exc_info()[1] is not None:
+            return sys.exc_info()[1]
+        else:
+            return sys.exc_info()[0]
+    except:
+        return Exception("Unexpected error (get_exception).")
 
 def get_time():
     if is_windows():
@@ -299,10 +309,19 @@ def mmap_read(mmap,i,sz):
 class Counter:
     
     def __init__(self, v=None):
-        #self._semaphore = threading.Condition()
         self._current_elapsed = 0
         self._current_time = get_time()
         self._time_to_elapsed=v
+        self._stopped=False
+
+    def start(self):
+        if self._stopped:
+            self._current_time = get_time()
+            self._stopped=False
+    
+    def stop(self):
+        if not self._stopped:
+            self._stopped=True
 
     def reset(self):
         self._current_elapsed = 0
@@ -314,6 +333,8 @@ class Counter:
         return self.get_value()>=v
    
     def get_value(self):
+        if self._stopped:
+            return self._current_elapsed
         apptm=get_time()
         elp=apptm-self._current_time
         if elp>=0:

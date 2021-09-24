@@ -22,11 +22,9 @@ import platform
 import logging.handlers
 import hashlib
 import listener
-import traceback
 import ctypes
 import shutil
-import sharedmem
-#import ipc
+import ipc
 import importlib 
 import urllib
 import applications
@@ -64,12 +62,6 @@ def get_os_type_code():
         return 2
     else:
         return -1
-
-def load_osmodule():
-    return native.get_instance()
-
-def unload_osmodule(omdl):
-    omdl.unload_library()
 
 def get_prop(prop,key,default=None):
     if key in prop:
@@ -116,11 +108,13 @@ def read_config_file():
     c=None
     try:
         f = utils.file_open("config.json")
-    except Exception as e:
+    except:
+        e = utils.get_exception()
         raise Exception("Error reading config file. " + utils.exception_to_string(e))
     try:
         c = json.loads(f.read())
-    except Exception as e:
+    except:
+        e = utils.get_exception()
         raise Exception("Error parse config file: " + utils.exception_to_string(e))
     finally:
         f.close()
@@ -164,7 +158,7 @@ class Agent():
         self._runonfly_user=None
         self._runonfly_password=None
         self._runonfly_runcode=None
-        self._runonfly_sharedmem=None        
+        self._runonfly_ipc=None        
         self._runonfly_action=None #COMPATIBILITY WITH OLD FOLDER RUNONFLY        
         for arg in args: 
             if arg=='-runonfly':
@@ -203,7 +197,7 @@ class Agent():
             self._cnt_max=30
         self._cnt_random=0
         self._cnt=self._cnt_max
-        self._sharedmemserver=None
+        self._listenerserver=None
         self._httpserver=None
         self._proxy_info=None        
         self._agent_conn = None
@@ -241,17 +235,8 @@ class Agent():
         self._agent_native_suffix=None
         self._agent_profiler=None
         self._config_semaphore = threading.Condition()
-        self._osmodule = load_osmodule()
-        self._svcpid=None
-                
-        #Inizializza il path delle shared mem
-        sharedmem.init_path()
-        #ipc.init_path()
-    
-    def unload_library(self):
-        if self._osmodule is not None:
-            unload_osmodule(self._osmodule)
-            self._osmodule=None
+        self._osmodule = native.get_instance()
+        self._svcpid=None        
     
     #RIMASTO PER COMPATIBILITA' CON VECCHIE CARTELLE RUNONFLY
     def set_runonfly_action(self,action):
@@ -273,7 +258,8 @@ class Agent():
                     smsg = unicode(msg.decode('ascii', 'ignore'))
                 else:
                     smsg = str(msg)
-            except Exception as e:
+            except:
+                e = utils.get_exception()
                 smsg = u"EXCEPTION:" + unicode(utils.exception_to_string(e))
             if len(smsg)>sz:
                 smsg=smsg[0:sz] + u" ..."
@@ -356,7 +342,8 @@ class Agent():
                         if event == "call":
                             debug_indent += 1
                         self._debug_info[thdn]["indent"]=debug_indent
-            except Exception as e:
+            except:
+                e = utils.get_exception()
                 self.write_except(e)
     
     def _write_config_file(self):
@@ -367,7 +354,8 @@ class Agent():
         try:
             try:
                 self._config = read_config_file()
-            except Exception as e:
+            except:
+                e = utils.get_exception()
                 self.write_err(str(e))
                 self._config = None
         finally:
@@ -487,7 +475,8 @@ class Agent():
                         self._runonfly_user=get_prop(prp_url, 'userLogin', None)
                         self._runonfly_password=get_prop(prp_url, 'userPassword', None)
                                         
-            except Exception as e:
+            except:
+                e = utils.get_exception()
                 self.write_info("Error reading agentUrlPrimary: " + utils.exception_to_string(e))
                 return False
                 
@@ -517,7 +506,8 @@ class Agent():
             self.write_info("Proxy: " + self.get_proxy_info().get_type())
             self.write_info("Readed agent properties.")
             return True
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             self.write_info("Error reading agentUrlPrimary: " + utils.exception_to_string(e))
             return False
     
@@ -774,14 +764,16 @@ class Agent():
                 stopfile= utils.file_open("monitor.update", "w")
                 stopfile.close()
                 time.sleep(5)
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             self.write_except(e)
     
     def _monitor_update_file_delete(self):
         try:
             if utils.path_exists("monitor.update"):
                 utils.path_remove("monitor.update") 
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             self.write_except(e)
                 
     def _check_update(self):
@@ -849,7 +841,8 @@ class Agent():
                 if self._agent_url_node is None or self._agent_url_node=="":
                     self.write_info("Checking update: Error read files.xml: Node not available.")
                     return False
-            except Exception as e:
+            except:
+                e = utils.get_exception()
                 self.write_info("Checking update: Error read files.xml: " + utils.exception_to_string(e))
                 return False            
 
@@ -914,7 +907,8 @@ class Agent():
                 self.write_info("Update ready: Needs reboot.")
                 self._update_ready=True
                 return False
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             if utils.path_exists("updateTMP"):
                 shutil.rmtree("updateTMP")
             self.write_except(e)
@@ -1031,6 +1025,7 @@ class Agent():
     
     def start(self):
         self.write_info("Start agent manager")
+        ipc.initialize()
         
         #Start Profiler
         profcfg = None
@@ -1038,7 +1033,7 @@ class Agent():
             profcfg = read_config_file()
             if not "profiler_enable" in profcfg or not profcfg["profiler_enable"]:
                 profcfg = None
-        except Exception as e:
+        except:
             None
         if profcfg is not None:
             self._agent_profiler = AgentProfiler(profcfg)
@@ -1070,12 +1065,12 @@ class Agent():
             fieldsdef.append({"name":"user","size":30})
             fieldsdef.append({"name":"password","size":20})
             fieldsdef.append({"name":"pid","size":20})
-            self._runonfly_sharedmem=sharedmem.Property()
-            self._runonfly_sharedmem.create("runonfly", fieldsdef)
-            self._runonfly_sharedmem.set_property("status", "CONNECTING")
-            self._runonfly_sharedmem.set_property("user", "")
-            self._runonfly_sharedmem.set_property("password", "")
-            self._runonfly_sharedmem.set_property("pid", str(os.getpid()))
+            self._runonfly_ipc=ipc.Property()
+            self._runonfly_ipc.create("runonfly", fieldsdef)
+            self._runonfly_ipc.set_property("status", "CONNECTING")
+            self._runonfly_ipc.set_property("user", "")
+            self._runonfly_ipc.set_property("password", "")
+            self._runonfly_ipc.set_property("pid", str(os.getpid()))
         
         if not self._runonfly or self._runonfly_action is None:
             #Legge pid
@@ -1087,7 +1082,7 @@ class Agent():
                     spid = f.read()
                     f.close()
                     self._svcpid = int(spid)
-                except Exception:
+                except:
                     None
             
             if self._noctrlfile==False:
@@ -1099,7 +1094,8 @@ class Agent():
         if is_mac() and not self._runonfly:
             try:
                 self.get_osmodule().init_guilnc(self)
-            except Exception as ge:
+            except:
+                ge = utils.get_exception()
                 self.write_except(ge, "INIT GUI LNC: ")
                 
         #Crea cartelle necessarie
@@ -1112,99 +1108,113 @@ class Agent():
         #Avvia agent status
         if not self._runonfly:
             try:
-                self._sharedmemserver=listener.SharedMemServer(self)
-                self._sharedmemserver.start()
-            except Exception as asc:
+                self._listenerserver=listener.IPCServer(self)
+                self._listenerserver.start()
+            except:
+                asc = utils.get_exception()
                 self.write_except(asc, "INIT STATUSCONFIG LISTENER: ")
         self._update_ready=False
         
-        bfirstreadconfig=True
-        while self.is_run() is True and not self._is_reboot_agent() and not self._update_ready:
-            if self._elapsed_max():
-                communication.release_detected_proxy()
-                if self._runonfly:
-                    self._update_onfly_status("CONNECTING")
-                #Ricarica il config file
-                if self._is_reload_config():
-                    self._read_config_file()
+        try:
+            bfirstreadconfig=True
+            while self.is_run() is True and not self._is_reboot_agent() and not self._update_ready:
+                if self._elapsed_max():
+                    communication.release_detected_proxy()
+                    if self._runonfly:
+                        self._update_onfly_status("CONNECTING")
+                    #Ricarica il config file
+                    if self._is_reload_config():
+                        self._read_config_file()
+                        if self._config is not None:
+                            self._reload_config_reset()
+                            if bfirstreadconfig:
+                                bfirstreadconfig=False
+                                #CARICA DEBUG MODE
+                                self._agent_debug_mode = self.get_config('debug_mode',False)
+                                self._debug_indentation_max = self.get_config('debug_indentation_max',self._debug_indentation_max)
+                                self._debug_thread_filter = self.get_config('debug_thread_filter',self._debug_thread_filter)
+                                self._debug_class_filter = self.get_config('debug_class_filter',self._debug_class_filter)
+                                if self._agent_debug_mode:
+                                    self._logger.setLevel(logging.DEBUG)
+                                    self._debug_path=os.getcwdu()
+                                    if not self._debug_path.endswith(utils.path_sep):
+                                        self._debug_path+=utils.path_sep
+                                    threading.setprofile(self._debug_func)
+                                
+                                
+                            
+                    
+                    #Avvia il listener (PER USI FUTURI)
+                    if not self._runonfly:
+                        if self._httpserver is None:
+                            try:
+                                self._httpserver = listener.HttpServer(self.get_config('listen_port', 7950), self)
+                                self._httpserver.start()                
+                            except:
+                                ace = utils.get_exception()
+                                self.write_except(ace, "INIT LISTENER: ")
+                            
+                    self._reboot_agent_reset()
+                    
+                    #Legge la configurazione
+                    skiponflyretry=False
                     if self._config is not None:
-                        self._reload_config_reset()
-                        if bfirstreadconfig:
-                            bfirstreadconfig=False
-                            #CARICA DEBUG MODE
-                            self._agent_debug_mode = self.get_config('debug_mode',False)
-                            self._debug_indentation_max = self.get_config('debug_indentation_max',self._debug_indentation_max)
-                            self._debug_thread_filter = self.get_config('debug_thread_filter',self._debug_thread_filter)
-                            self._debug_class_filter = self.get_config('debug_class_filter',self._debug_class_filter)
-                            if self._agent_debug_mode:
-                                self._logger.setLevel(logging.DEBUG)
-                                self._debug_path=os.getcwdu()
-                                if not self._debug_path.endswith(utils.path_sep):
-                                    self._debug_path+=utils.path_sep
-                                threading.setprofile(self._debug_func)
-                            
-                            
-                        
-                
-                #Avvia il listener (PER USI FUTURI)
-                if not self._runonfly:
-                    if self._httpserver is None:
-                        try:
-                            self._httpserver = listener.HttpServer(self.get_config('listen_port', 7950), self)
-                            self._httpserver.start()                
-                        except Exception as ace:
-                            self.write_except(ace, "INIT LISTENER: ")
-                        
-                self._reboot_agent_reset()
-                
-                #Legge la configurazione
-                skiponflyretry=False
-                if self._config is not None:
-                    self._agent_enabled = self.get_config('enabled',True)
-                    if self._agent_enabled is False:
-                        if self._agent_status != self._STATUS_DISABLE:
-                            self.write_info("Agent disabled")
-                            self._agent_status = self._STATUS_DISABLE
-                    elif self._load_config() is True:
-                        if self._runonfly or (self._agent_key is not None and self._agent_password is not None):
-                            self._agent_missauth=False
-                            self.write_info("Agent enabled")
-                            self._agent_status = self._STATUS_UPDATING
-                            #Verifica se ci sono aggiornamenti
-                            if self._check_update() is True:
-                                if self._load_agent_properties() is True:
-                                    if self._agent_conn_version>=11865:
-                                        if self._run_agent() is True and self.get_config('enabled',True):
-                                            self._cnt = self._cnt_max
-                                            self._cnt_random = random.randrange(self._cnt_min, self._cnt_max) #Evita di avere connessioni tutte assieme
-                                            skiponflyretry=True
-                                    else:
-                                        '''
-                                        ##############################
-                                        DACANC OLD NODE
-                                        '''
-                                        if self.OLD_run_agent() is True and self.get_config('enabled',True):
-                                            self._cnt = self._cnt_max
-                                            self._cnt_random = random.randrange(self._cnt_min, self._cnt_max) #Evita di avere connessioni tutte assieme
-                                            skiponflyretry=True
-                                        '''
-                                        ##############################
-                                        '''
-                                        
-                        elif not self._agent_missauth:
-                            self.write_info("Missing agent authentication configuration.")
-                            self._agent_missauth=True
-                        self._agent_status = self._STATUS_OFFLINE
-                if not self._update_ready and self._runonfly:                    
-                    appst=self._runonfly_sharedmem.get_property("status")
-                    if self._runonfly_runcode is not None and appst=="RUNCODE_NOTFOUND":
-                        while self.is_run() is True and not self._is_reboot_agent() and not self._update_ready: #ATTENDE CHIUSURA INSTALLER
-                            time.sleep(1)
-                    elif skiponflyretry==False:
-                        self._runonfly_conn_retry+=1
-                        self._update_onfly_status("WAIT:" + str(self._runonfly_conn_retry))
-            time.sleep(1)
-
+                        self._agent_enabled = self.get_config('enabled',True)
+                        if self._agent_enabled is False:
+                            if self._agent_status != self._STATUS_DISABLE:
+                                self.write_info("Agent disabled")
+                                self._agent_status = self._STATUS_DISABLE
+                            try:
+                                self._close_all_sessions()
+                            except:
+                                None
+                        elif self._load_config() is True:
+                            if self._runonfly or (self._agent_key is not None and self._agent_password is not None):
+                                self._agent_missauth=False
+                                self.write_info("Agent enabled")
+                                self._agent_status = self._STATUS_UPDATING
+                                #Verifica se ci sono aggiornamenti
+                                if self._check_update() is True:
+                                    if self._load_agent_properties() is True:
+                                        if self._agent_conn_version>=11865:
+                                            if self._run_agent() is True and self.get_config('enabled',True):
+                                                self._cnt = self._cnt_max
+                                                self._cnt_random = random.randrange(self._cnt_min, self._cnt_max) #Evita di avere connessioni tutte assieme
+                                                skiponflyretry=True
+                                        else:
+                                            '''
+                                            ##############################
+                                            DACANC OLD NODE
+                                            '''
+                                            if self.OLD_run_agent() is True and self.get_config('enabled',True):
+                                                self._cnt = self._cnt_max
+                                                self._cnt_random = random.randrange(self._cnt_min, self._cnt_max) #Evita di avere connessioni tutte assieme
+                                                skiponflyretry=True
+                                            '''
+                                            ##############################
+                                            '''
+                                            
+                            elif not self._agent_missauth:
+                                self.write_info("Missing agent authentication configuration.")
+                                self._agent_missauth=True
+                            self._agent_status = self._STATUS_OFFLINE
+                    if not self._update_ready and self._runonfly:                    
+                        appst=self._runonfly_ipc.get_property("status")
+                        if self._runonfly_runcode is not None and appst=="RUNCODE_NOTFOUND":
+                            while self.is_run() is True and not self._is_reboot_agent() and not self._update_ready: #ATTENDE CHIUSURA INSTALLER
+                                time.sleep(1)
+                        elif skiponflyretry==False:
+                            self._runonfly_conn_retry+=1
+                            self._update_onfly_status("WAIT:" + str(self._runonfly_conn_retry))
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self.destroy()            
+        except:
+            ex=utils.get_exception()
+            self.destroy()
+            self.write_except(ex, "AGENT: ")
+            
+            
         if self._agent_conn_version>=11865:
             self._close_all_sessions()            
         self._task_pool.destroy()
@@ -1213,33 +1223,38 @@ class Agent():
         if self._httpserver is not None:
             try:
                 self._httpserver.close()
-            except Exception as ace:
+            except:
+                ace = utils.get_exception()
                 self.write_except(ace, "TERM LISTENER: ")
         
-        if self._sharedmemserver is not None:
+        if self._listenerserver is not None:
             try:
-                self._sharedmemserver.close()
-            except Exception as ace:
+                self._listenerserver.close()
+            except:
+                ace = utils.get_exception()
                 self.write_except(ace, "TERM STATUSCONFIG LISTENER: ")
         
-        if self._runonfly_sharedmem is not None:
+        if self._runonfly_ipc is not None:
             try:
-                self._runonfly_sharedmem.close()
-                self._runonfly_sharedmem=None
-            except Exception as ace:
+                self._runonfly_ipc.close()
+                self._runonfly_ipc=None
+            except:
+                ace = utils.get_exception()
                 self.write_except(ace, "CLOSE RUNONFLY SHAREDMEM: ")
         
         
         if is_mac() and not self._runonfly:
             try:
                 self.get_osmodule().term_guilnc()
-            except Exception as ge:
+            except:
+                ge = utils.get_exception()
                 self.write_except(ge, "TERM GUI LNC: ")
         
         if self._agent_profiler is not None:
             self._agent_profiler.destroy()
             self._agent_profiler=None
         
+        ipc.terminate()
         self.write_info("Stop agent manager")
         
     def _check_pid(self, pid):
@@ -1276,10 +1291,11 @@ class Agent():
         self._brun=False
     
     def kill(self):
-        if self._sharedmemserver is not None:
+        if self._listenerserver is not None:
             try:
-                self._sharedmemserver.close()
-            except Exception as ace:
+                self._listenerserver.close()
+            except:
+                ace = utils.get_exception()
                 self.write_except(ace, "TERM STATUS LISTENER: ")
 
     def _write_log(self, level, msg):
@@ -1318,19 +1334,19 @@ class Agent():
     
     def _update_onfly_status(self,st):
         if self._runonfly:
-            if self._runonfly_sharedmem is not None:
+            if self._runonfly_ipc is not None:
                 if st!="ISRUN":
-                    self._runonfly_sharedmem.set_property("status", st)
+                    self._runonfly_ipc.set_property("status", st)
                     if st=="CONNECTED":
                         if self._runonfly_user is not None and self._runonfly_password is not None:
-                            self._runonfly_sharedmem.set_property("user", self._runonfly_user)
-                            self._runonfly_sharedmem.set_property("password", self._runonfly_password)
+                            self._runonfly_ipc.set_property("user", self._runonfly_user)
+                            self._runonfly_ipc.set_property("password", self._runonfly_password)
                         else:                            
-                            self._runonfly_sharedmem.set_property("user", "")
-                            self._runonfly_sharedmem.set_property("password", "")
+                            self._runonfly_ipc.set_property("user", "")
+                            self._runonfly_ipc.set_property("password", "")
                     else:
-                        self._runonfly_sharedmem.set_property("user", "")
-                        self._runonfly_sharedmem.set_property("password", "")
+                        self._runonfly_ipc.set_property("user", "")
+                        self._runonfly_ipc.set_property("password", "")
             
             #RIMASTO PER COMPATIBILITA' CON VECCHIE CARTELLE RUNONFLY
             if self._runonfly_action is not None:
@@ -1379,7 +1395,8 @@ class Agent():
                             'supportedApplications': self._suppapps
                         }                
                         self._agent_conn.send_message(m)
-            except Exception as e:
+            except:
+                e = utils.get_exception()
                 self.write_except(e)
     
     def _get_sys_info(self):
@@ -1421,7 +1438,8 @@ class Agent():
                 prop_conn["password"]=self._agent_password
                 appconn = Connection(self, None, prop_conn, self.get_proxy_info())
                 self._agent_conn=AgentConn(self, appconn)                
-            except Exception as ee:
+            except:
+                ee = utils.get_exception()
                 if appconn is not None:
                     appconn.close()
                 raise ee
@@ -1459,7 +1477,11 @@ class Agent():
                 self._runonfly_user=None
                 self._runonfly_password=None
             return True
-        except Exception as inst:
+        except KeyboardInterrupt:
+            self.destroy()
+            return True
+        except:
+            inst = utils.get_exception()
             self.write_except(inst)
             return False
         finally:
@@ -1484,7 +1506,8 @@ class Agent():
             try:
                 appconn = OLDConnection(self, None, 'AG' + self._agent_key, self._agent_password)
                 self._agent_conn=OLDMainMessage(self, appconn)
-            except Exception as ee:
+            except:
+                ee = utils.get_exception()
                 if appconn is not None:
                     appconn.close()
                 raise ee
@@ -1529,11 +1552,12 @@ class Agent():
                 self._runonfly_user=None
                 self._runonfly_password=None
             return True
-        except Exception as inst:
+        except:
+            inst = utils.get_exception()
             self.write_except(inst)
             return False
         finally:
-            self._close_all_sessions()
+            self.OLDclose_all_sessions()
             if self._agent_conn is not None:
                 self.write_info("Terminated agent (key: " + self._agent_key + ", node: " + self._agent_server + ")." )
                 appmm = self._agent_conn
@@ -1542,6 +1566,22 @@ class Agent():
                 self._unload_apps()
                 appmm.close()                
             self._reload_agent_reset()
+    
+    def OLDclose_all_sessions(self):
+        self._sessions_semaphore.acquire()
+        try:
+            for sid in self._sessions.keys():
+                try:
+                    #self._fire_close_conn_apps(sid)
+                    self._sessions[sid].close()
+                    #del conn[sid]
+                except:
+                    ex = utils.get_exception()
+                    self.write_err(str(ex))
+            self._sessions={}
+        finally:
+            self._sessions_semaphore.release()        
+        self._unload_apps()
     
     def OLDopen_connection(self, msg):
         self._sessions_semaphore.acquire()
@@ -1619,7 +1659,8 @@ class Agent():
             try:
                 app_url = self._agent_url_node + "getAgentFile.dw?name=files.xml"
                 self._node_files_info = communication.get_url_prop(app_url, self.get_proxy_info())
-            except Exception as e:
+            except:
+                e = utils.get_exception()
                 self._node_files_info=None
                 raise Exception("Error read files.xml: "  + utils.exception_to_string(e))
             if "error" in self._node_files_info:
@@ -1670,7 +1711,8 @@ class Agent():
 
             else:
                 None #OS not needs of this lib or app
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             raise Exception("Error update " + tp + " " + name + ": " + utils.exception_to_string(e) + " Please reboot the agent or OS.")
     
     def _update_lib_dependencies(self,name):
@@ -1687,7 +1729,8 @@ class Agent():
                 if appcnf is not None:
                     appcnf["refcount"]=0
                     self._libs[name]=appcnf                    
-        except Exception as e:            
+        except:    
+            e = utils.get_exception()        
             raise e
     
     def load_lib(self, name):
@@ -1707,7 +1750,8 @@ class Agent():
                     self.write_info("Lib " + name + " loaded.")
                     return cnflib["refobject"]
             return None
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             self.write_except("Lib " + name + " load error: " + utils.exception_to_string(e))
             raise e
         finally:
@@ -1728,7 +1772,8 @@ class Agent():
                         cnflib["refobject"]=None
                         del self._libs[name]
                         self.write_info("Lib " + name + " unloaded.")
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             self.write_except("Lib " + name + " unload error: " + utils.exception_to_string(e))
             raise e
         finally:
@@ -1759,7 +1804,8 @@ class Agent():
                 for appmn in self._apps_to_reload:
                     if self._apps_to_reload[appmn]==True:
                         self._reload_app(torem,appmn,bforce)
-        except Exception as e:         
+        except:
+            e = utils.get_exception()         
             self.write_except(e)
         finally:
             try:
@@ -1838,7 +1884,8 @@ class Agent():
             return bret
         except AttributeError:
             return True
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             self.write_except("App " + name + " unload error: " + utils.exception_to_string(e))
             return False
                    
@@ -1853,7 +1900,8 @@ class Agent():
                 ret = func(self)
                 self._apps[name]=ret;
                 self.write_info("App " + name + " loaded.")
-            except Exception as e:
+            except:
+                e = utils.get_exception()
                 raise Exception("App " + name + " load error: " + utils.exception_to_string(e))
     
     def get_app(self,name):
@@ -1861,7 +1909,8 @@ class Agent():
         try:
             self._init_app(name)
             return self._apps[name]
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             self.write_except(e)
             raise e
         finally:
@@ -1888,7 +1937,8 @@ class Agent():
                     None
                 if func is not None:
                     func(idconn)
-            except Exception as e:
+            except:
+                e = utils.get_exception()
                 self.write_except(e)
     
     def _close_all_sessions(self):
@@ -1896,10 +1946,13 @@ class Agent():
         try:
             for sid in self._sessions.keys():
                 try:
-                    #self._fire_close_conn_apps(sid)
-                    self._sessions[sid].close()
-                    #del conn[sid]
-                except Exception as ex:
+                    ses = self._sessions[sid]
+                    sht = ses.get_host()
+                    self._fire_close_conn_apps(sid)
+                    ses.close()
+                    self.write_info("Close session (id: " + sid + ", node: " + sht  + ")")                    
+                except:
+                    ex = utils.get_exception()
                     self.write_err(str(ex))
             self._sessions={}
         finally:
@@ -1946,7 +1999,8 @@ class Agent():
             finally:
                 self._sessions_semaphore.release()
             self.write_info("Open session (id: " + sinfo.get_idsession() + ", node: " + sinfo.get_host() + ")")
-        except Exception as ee:
+        except:
+            ee = utils.get_exception()
             if appconn is not None:
                 appconn.close()
             raise ee        
@@ -2102,7 +2156,7 @@ class Connection():
                         self._raw=appraw
                         brecon = True
                         break
-                    except Exception as e:
+                    except:
                         None
                 else:
                     time.sleep(0.2)
@@ -2303,7 +2357,8 @@ class Message():
                     msg=json.loads(dt.to_str("utf8"))                    
                     if self._check_recovery_msg(msg):
                         self._agent._task_pool.execute(self._fire_msg, msg)
-                except Exception as e:
+                except:
+                    e = utils.get_exception()
                     self._agent.write_except(e)
                 finally:
                     self._clear_temp_msg()
@@ -2408,7 +2463,8 @@ class Message():
                 appm.insert_int(0, len(appm))
                 self._send_conn(self._conn, appm)
                 break
-            except Exception as e:                
+            except:
+                e = utils.get_exception()                
                 if not self._conn.wait_recovery():
                     raise e
            
@@ -2531,7 +2587,8 @@ class AgentConn(Message):
                 resp=self._agent.open_session(msg)
             if resp is not None:
                 self.send_response(msg, resp)
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             self._agent.write_except(e)
             if 'requestKey' in msg:
                 m = {
@@ -2673,7 +2730,7 @@ class OLDConnection():
                         self._raw=appraw
                         brecon = True
                         break
-                    except Exception as e:
+                    except:
                         None
                 else:
                     time.sleep(0.2)
@@ -2788,7 +2845,8 @@ class OLDMainMessage(Message):
                 resp=self._agent.OLDopen_session(msg)
             if resp is not None:
                 self.send_response(msg, resp)
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             self._agent.write_except(e)
             if 'requestKey' in msg:
                 m = {
@@ -2876,7 +2934,8 @@ class OLDSession(Message):
                 self.send_message(self._websocketsimulate(msg))
             else:
                 raise Exception("Invalid message name: " + msg_name)                
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             self._agent.write_except(e)
             if 'requestKey' in msg:
                 m = {
@@ -2903,7 +2962,8 @@ class OLDSession(Message):
                 resp = ":".join(["K", resp])
             else:
                 resp = "K:null"
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             m = utils.exception_to_string(e)
             self._agent.write_debug(m)
             resp=  ":".join(["E", m])
@@ -2924,7 +2984,8 @@ class OLDSession(Message):
             self._agent.invoke_app(msg['module'],  "websocket",  self,  wsock)            
             if not wsock.is_accept():
                 raise Exception("WebSocket not accepted")
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             try:
                 wsock.close()
             except:
@@ -2949,7 +3010,8 @@ class OLDSession(Message):
             self._agent.invoke_app(msg['module'],  "websocket",  self,  wsock)
             if not wsock.is_accept():
                 raise Exception("WebSocket not accepted")
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             try:
                 wsock.close()
             except:
@@ -2985,7 +3047,8 @@ class OLDSession(Message):
                 resp["Length"] = str(fdownload.get_length())
             else:
                 raise Exception("Download file not accepted")
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             try:
                 fdownload.close()
             except:
@@ -3010,7 +3073,8 @@ class OLDSession(Message):
             self._agent.invoke_app(msg['module'],  "upload",  self,  fupload)
             if not fupload.is_accept():
                 raise Exception("Upload file not accepted")
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             try:
                 fupload.close()
             except:
@@ -3122,7 +3186,8 @@ class Session(Message):
                 self.send_message(self._websocketsimulate(msg))
             else:
                 raise Exception("Invalid message name: " + msg_name)                
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             self._agent.write_except(e)
             if 'requestKey' in msg:
                 m = {
@@ -3149,7 +3214,8 @@ class Session(Message):
                 resp = ":".join(["K", resp])
             else:
                 resp = "K:null"
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             m = utils.exception_to_string(e)
             self._agent.write_debug(m)
             resp=  ":".join(["E", m])
@@ -3166,7 +3232,8 @@ class Session(Message):
             self._agent.invoke_app(msg['module'],  "websocket",  self,  wsock)            
             if not wsock.is_accept():
                 raise Exception("WebSocket not accepted")
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             try:
                 wsock.close()
             except:
@@ -3187,7 +3254,8 @@ class Session(Message):
             self._agent.invoke_app(msg['module'],  "websocket",  self,  wsock)
             if not wsock.is_accept():
                 raise Exception("WebSocket not accepted")
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             try:
                 wsock.close()
             except:
@@ -3219,7 +3287,8 @@ class Session(Message):
                 resp["Length"] = str(fdownload.get_length())
             else:
                 raise Exception("Download file not accepted")
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             try:
                 fdownload.close()
             except:
@@ -3240,7 +3309,8 @@ class Session(Message):
             self._agent.invoke_app(msg['module'],  "upload",  self,  fupload)
             if not fupload.is_accept():
                 raise Exception("Upload file not accepted")
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             try:
                 fupload.close()
             except:
@@ -3490,7 +3560,7 @@ class WebSocketSimulate:
                             self.close()
                             if self._on_close is not None:
                                 self._on_close()
-            except Exception as e:
+            except:
                 self.close()
                 if self._on_close is not None:
                     self._on_close()
@@ -3647,7 +3717,7 @@ class Download():
                 self._parent._send_conn(self._conn,bts)
                 self._calcbps.add(ln)
                 #print "DOWNLOAD - NAME:" + self._name + " SZ: " + str(len(s)) + " LEN: " + str(self._calcbps.get_transfered()) +  "  BPS: " + str(self._calcbps.get_bps())
-        except Exception:
+        except:
             self._status="E"
         finally:
             self.close()
@@ -3726,7 +3796,8 @@ class Upload():
             self._enddatafile=False
             self._baccept=True
             self._last_time_transfered = 0
-        except Exception as e:
+        except:
+            e = utils.get_exception()
             self._remove_temp_file()
             raise e
         self._parent.inc_activities_value("uploads")
@@ -3787,7 +3858,7 @@ class Upload():
                             bts = utils.Bytes()
                             bts.append_str(self._status, "utf8")
                             self._parent._send_conn(self._conn,bts)
-                        except Exception:
+                        except:
                             self._status = "E"
                             bts = utils.Bytes()
                             bts.append_str(self._status, "utf8")
@@ -3926,8 +3997,6 @@ def fmain(args): #SERVE PER MACOS APP
     
     main = Agent(args)
     main.start()
-    main.unload_library()    
-    
     sys.exit(0)
     
 
@@ -3942,8 +4011,7 @@ if __name__ == "__main__":
             name=a1[4:]
             sys.argv.remove(a1)
             if name=="ipc":
-                None
-                #ipc.run_main(sys.argv)
+                ipc.fmain(sys.argv)
             else:
                 #COMPATIBILITY OLD VERSION 05/05/2021
                 objlib = importlib.import_module("app_" + name)

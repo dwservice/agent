@@ -322,22 +322,22 @@ def _connect_socket(host, port, proxy_info, timeout=_SOCKET_TIMEOUT_READ):
             try:
                 sock.connect((prxi.get_host(), prxi.get_port()))
                 func_prx=_connect_proxy_http
-            except Exception as ep:
-                conn_ex=ep
+            except:
+                conn_ex=utils.get_exception()
         elif prxi.get_type()=='SOCKS4' or prxi.get_type()=='SOCKS4A' or prxi.get_type()=='SOCKS5':
             try:
                 sock.connect((prxi.get_host(), prxi.get_port()))
                 func_prx=_connect_proxy_socks
-            except Exception as ep:
-                conn_ex=ep
+            except:
+                conn_ex=utils.get_exception()
         else:
             sock.connect((host, port))
         
         if func_prx is not None:
             try:
                 func_prx(sock, host, port, prxi)
-            except Exception as ep:
-                conn_ex=ep
+            except:
+                conn_ex=utils.get_exception()
         
         if conn_ex is not None:
             if bprxdet:
@@ -379,7 +379,8 @@ def _connect_socket(host, port, proxy_info, timeout=_SOCKET_TIMEOUT_READ):
                     else:
                         sock = ssl.wrap_socket(sock, ssl_version=_get_ssl_ver())
                 break
-            except Exception as conn_ex:
+            except:
+                conn_ex=utils.get_exception()
                 if bprxdet:
                     if "CERTIFICATE_VERIFY_FAILED" in str(conn_ex):
                         try: 
@@ -399,7 +400,8 @@ def _connect_socket(host, port, proxy_info, timeout=_SOCKET_TIMEOUT_READ):
                     raise conn_ex  
             
             
-    except Exception as e:
+    except:
+        e=utils.get_exception()
         sock.close()
         raise e
     return sock
@@ -699,7 +701,8 @@ class Worker(threading.Thread):
             if func is not None:
                 try: 
                     func(*args, **kargs)
-                except Exception as e: 
+                except: 
+                    e=utils.get_exception()
                     self._parent.fire_except(e)
                 self._queue.task_done()
 
@@ -944,7 +947,7 @@ class ConnectionCheckAlive(threading.Thread):
             if not self._connection.is_close():
                 self._connection._send_ws_ping()
                 #print "SESSION - PING INVIATO!"                
-        except Exception:
+        except:
             #traceback.print_exc()
             None
 
@@ -1057,7 +1060,8 @@ class ConnectionReader(threading.Thread):
                         break
                     self._connection.fire_data(utils.Bytes(data))                    
                     
-        except Exception as e:
+        except:
+            e=utils.get_exception()
             bfireclose=not self._connection.is_close()
             #traceback.print_exc()
             self._connection.fire_except(e) 
@@ -1083,7 +1087,7 @@ class Connection:
                 self._on_close = events["on_close"]
             if "on_except" in events:
                 self._on_except = events["on_except"]
-        self._semaphore = threading.Condition()
+        self._lock_status = threading.Lock()
         self._lock_send = threading.Lock()
         self._proxy_info = None
         self._sock = None
@@ -1137,7 +1141,8 @@ class Connection:
             self._tdread.start()
             return resp            
                             
-        except Exception as e:
+        except:
+            e=utils.get_exception()
             self.shutdown()
             raise e
     
@@ -1154,15 +1159,12 @@ class Connection:
             
     def fire_close(self,connlost):        
         onc=None
-        self._semaphore.acquire()
-        try:
+        with self._lock_status:
             self._connection_lost=connlost
             onc=self._on_close
             self._on_data= None
             self._on_close = None
             self._on_except = None
-        finally:
-            self._semaphore.release()
         if onc is not None:
             onc()
     
@@ -1204,36 +1206,26 @@ class Connection:
 
     def is_close(self):
         bret = True
-        self._semaphore.acquire()
-        try:
+        with self._lock_status:
             bret = self._close
-        finally:
-            self._semaphore.release()
         return bret
     
     def is_connection_lost(self):
         bret = True
-        self._semaphore.acquire()
-        try:
+        with self._lock_status:
             bret = self._connection_lost
-        finally:
-            self._semaphore.release()
         return bret        
     
     def is_shutdown(self):
         bret = True
-        self._semaphore.acquire()
-        try:
+        with self._lock_status:
             bret = self._shutdown
-        finally:
-            self._semaphore.release()
         return bret
     
     def close(self):
         bsendclose=False
         try:
-            self._semaphore.acquire()
-            try:
+            with self._lock_status:
                 if not self._close:
                     self._close=True
                     bsendclose=True
@@ -1241,8 +1233,6 @@ class Connection:
                     self._on_close = None
                     self._on_except = None
                     #print "session send stream close."
-            finally:
-                self._semaphore.release()
             if bsendclose:
                 self._send_ws_close();
                 #Attende lo shutdown
@@ -1257,14 +1247,11 @@ class Connection:
     
     def shutdown(self):
         
-        self._semaphore.acquire()
-        try:
+        with self._lock_status:
             if self._shutdown:
                 return
             self._close=True
             self._shutdown=True
-        finally:
-            self._semaphore.release()
         
         if self._sock is not None:
             #Chiude thread alive
