@@ -21,7 +21,7 @@ class Compile(compile_generic.Compile):
             conf["cpp_include_paths"]=[self.get_path_tmp() + os.sep + "lib_rtaudio", self.get_path_tmp() + os.sep + "lib_opus"]
             conf["cpp_library_paths"]=conf["cpp_include_paths"]
             conf["linker_flags"]="-shared"
-            conf["libraries"]=["rtaudio", "opus", "pthread"]
+            conf["libraries"]=["rtaudio", "opus"]
         elif osn=="linux":
             conf={}
             conf["outname"]="dwagsoundcapture.so" 

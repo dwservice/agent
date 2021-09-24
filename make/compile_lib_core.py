@@ -19,8 +19,8 @@ class Compile(compile_generic.Compile):
             conf["outname"]="dwaglib.dll" 
             conf["cpp_include_paths"]=[] 
             conf["cpp_library_paths"]=conf["cpp_include_paths"]
-            conf["libraries"]=[]
-            conf["linker_flags"]="-static-libgcc -static-libstdc++"
+            conf["libraries"]=["userenv"]
+            conf["linker_flags"]="-shared -static-libgcc -static-libstdc++"
         elif osn=="linux":
             conf={}
             conf["outname"]="dwaglib.so" 
@@ -32,12 +32,14 @@ class Compile(compile_generic.Compile):
             conf["outname"]="dwaglib.dylib" 
             conf["cpp_include_paths"]=[] 
             conf["cpp_library_paths"]=conf["cpp_include_paths"]
+            conf["frameworks"]=["ApplicationServices","SystemConfiguration"]
             conf["libraries"]=[]
         return conf
     
     
 if __name__ == "__main__":
     m = Compile()
+    #m.set_32bit()
     m.run()
     
     

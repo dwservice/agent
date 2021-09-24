@@ -10,13 +10,17 @@ import utils
 
 class Compile():
     
-    def __init__(self,nm):
+    def __init__(self,nm,lbl=None):
         self._conf={}
         self._name=nm
+        self._label=lbl
         self._b32bit=False
     
     def get_name(self):
-        return self._name;    
+        if self._label is not None:
+            return self._name + " (" + self._label + ")"; 
+        else:
+            return self._name;    
     
     def get_os_config(self,osn):
         None

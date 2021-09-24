@@ -21,20 +21,24 @@ class Compile(compile_generic.Compile):
             conf["cpp_include_paths"]=[self.get_path_tmp() + os.sep + "lib_z", self.get_path_tmp() + os.sep + "lib_turbojpeg"]
             conf["cpp_library_paths"]=conf["cpp_include_paths"]
             conf["libraries"]=["zlib1", "turbojpeg", "gdi32", "userenv"]
-            conf["linker_flags"]="-static-libgcc -static-libstdc++" #DA RIMUOVERE E CORREGGERE config.json "lib_dependencies": ["stdcpp",...
+            conf["linker_flags"]="-shared"
+            conf["cpp_compiler_flags"]="-DOS_MAIN"
         elif osn=="linux":
             conf={}
             conf["outname"]="dwagscreencapture.so" 
             conf["cpp_include_paths"]=[self.get_path_tmp() + os.sep + "lib_z", self.get_path_tmp() + os.sep + "lib_turbojpeg"] 
             conf["cpp_library_paths"]=conf["cpp_include_paths"]
-            conf["libraries"]=["X11", "z", "turbojpeg", "Xext", "dl", "Xtst"]
+            conf["libraries"]=["z", "turbojpeg", "dl"]
+            conf["cpp_compiler_flags"]="-DOS_MAIN"
         elif osn=="mac":
             conf={}
             conf["outname"]="dwagscreencapture.dylib" 
             conf["cpp_include_paths"]=[self.get_path_tmp() + os.sep + "lib_z", self.get_path_tmp() + os.sep + "lib_turbojpeg"] 
             conf["cpp_library_paths"]=conf["cpp_include_paths"]
             conf["libraries"]=["z", "turbojpeg"]
-            conf["frameworks"]=["ApplicationServices","SystemConfiguration","IOKit","Carbon"]
+            #conf["frameworks"]=["IOKit","Carbon"]
+            conf["frameworks"]=["SystemConfiguration","IOKit","Carbon"] #TO REMOVE 16/08/2021 (SystemConfiguration)
+            conf["cpp_compiler_flags"]="-DOS_MAIN"
         return conf
         
     def before_copy_to_native(self,osn):
@@ -45,6 +49,7 @@ class Compile(compile_generic.Compile):
 
 if __name__ == "__main__":    
     m = Compile()
+    #m.set_32bit()
     m.run()
     
     
