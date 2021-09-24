@@ -14,10 +14,15 @@ import compile_lib_core
 import compile_lib_gdi
 import compile_lib_osutil
 import compile_lib_screencapture
+import compile_lib_screencapture_bitblt
+import compile_lib_screencapture_xorg
+import compile_lib_screencapture_quartzdisplay
+import compile_lib_screencapture_desktopduplication
 import compile_lib_soundcapture
 import compile_os_win_launcher
 import compile_os_win_service
 import compile_os_win_updater
+
 
 
 class CompileAll():
@@ -48,7 +53,7 @@ class CompileAll():
         try:
             if utils.is_windows():
                 self._dependency("lib_gcc", "8.1.0", arstatus)
-                self._dependency("lib_stdcpp", "8.1.0", arstatus)            
+                self._dependency("lib_stdcpp", "8.1.0", arstatus)
             self._dependency("lib_z", "1.2.11", arstatus)
             self._dependency("lib_turbojpeg", "2.0.3", arstatus)
             self._dependency("lib_opus", "21.3.1", arstatus)
@@ -69,6 +74,13 @@ class CompileAll():
                     self._compile(compile_os_win_service,arstatus)
                     self._compile(compile_os_win_updater,arstatus)
                 self._compile(compile_lib_screencapture,arstatus)
+                if utils.is_windows():
+                    self._compile(compile_lib_screencapture_bitblt,arstatus)
+                    self._compile(compile_lib_screencapture_desktopduplication,arstatus)
+                if utils.is_linux():
+                    self._compile(compile_lib_screencapture_xorg,arstatus)
+                if utils.is_mac():
+                    self._compile(compile_lib_screencapture_quartzdisplay,arstatus)
                 self._compile(compile_lib_soundcapture,arstatus)
                 utils.info("END COMPILE ALL")
             except:

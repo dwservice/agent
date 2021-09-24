@@ -118,7 +118,24 @@ class ShellManager(threading.Thread):
         self._semaphore = threading.Condition()
         self._shell_list = {}
         self._websocket.accept(10,{"on_close": self._on_close,"on_data":self._on_data})
+        
+        ##### TO FIX 22/09/2021
+        try:
+            import utils
+            utils.Bytes()
+            self._decode_data=self._decode_data_OLD
+        except:
+            self._decode_data=self._decode_data_NEW
+        ##### TO FIX 22/09/2021
                
+    
+    ##### TO FIX 22/09/2021
+    def _decode_data_OLD(self,data):
+        return data.to_str("utf8")
+    
+    def _decode_data_NEW(self,data):        
+        return data.decode("utf8")
+    ##### TO FIX 22/09/2021
     
     def get_id(self):
         return self._id
@@ -133,7 +150,7 @@ class ShellManager(threading.Thread):
                 try:
                     self._timeout_cnt=0;
                     self._last_timeout=long(time.time() * 1000)
-                    prprequest = json.loads(data.to_str("utf8"))
+                    prprequest = json.loads(self._decode_data(data))
                     if prprequest["type"]==ShellManager.REQ_TYPE_INITIALIZE:
                         sid=prprequest["id"]
                         if agent.is_windows():
@@ -205,7 +222,7 @@ class ShellManager(threading.Thread):
                                     snd["id"]=idx
                                     snd["data"]=upd
                                     appsend = json.dumps(snd)
-                                    self._websocket.send_string(appsend)
+                                    self._websocket.send_string(appsend)                                    
                                     '''print("*****************************************************************************\n")
                                     print("*****************************************************************************\n")
                                     print("*****************************************************************************\n")

@@ -185,7 +185,29 @@ def copy_to_native(pathnative, mainconf):
         os.remove(pdst)
     shutil.copy2(psrc, pdst)
     
-    
+
+def compile_lib_path(cconf,pathsrc,pathdst,srcfiles):
+    dsrc = os.listdir(pathsrc)
+    for f in dsrc:
+        if os.path.isdir(pathsrc + os.sep + f):
+            compile_lib_path(cconf,pathsrc + os.sep + f,pathdst,srcfiles)
+        elif f.endswith(".cpp") or (is_mac() and (f.endswith(".m") or f.endswith(".mm"))):
+            srcname=f
+            scmd=cconf["cpp_compiler"]
+            apprs=""
+            if "cpp_include_paths" in cconf:
+                for i in range(len(cconf["cpp_include_paths"])):
+                    if i>0:
+                        apprs+=" "
+                    apprs+="-I\"" + os.path.abspath(cconf["cpp_include_paths"][i]) + "\""
+            scmd=scmd.replace("%INCLUDE_PATH%", apprs)
+            scmd=scmd.replace("%NAMED%", srcname.split(".")[0] + ".d")
+            scmd=scmd.replace("%NAMEO%", srcname.split(".")[0] + ".o")
+            scmd=scmd.replace("%NAMECPP%", pathsrc + os.sep + srcname)        
+            if not system_exec(scmd,pathdst):
+                raise Exception("Compiler error.")
+            srcfiles.append(srcname.split(".")[0] + ".o ")   
+
 def compile_lib(mainconf):
     
     init_path(mainconf["pathdst"])
@@ -223,7 +245,7 @@ def compile_lib(mainconf):
         if "linker_flags" in cconf:
             lflgs=cconf["linker_flags"]
         cconf["cpp_compiler"]="g++ " + cflgs + " -DOS_MAC %INCLUDE_PATH% -O3 -Wall -c -fmessage-length=0 -o \"%NAMEO%\" \"%NAMECPP%\""
-        cconf["linker"]="g++ " + lflgs + " %LIBRARY_PATH% -s -dynamiclib -o %OUTNAME% %SRCFILES% %LIBRARIES% %FRAMEWORKS%"
+        cconf["linker"]="g++ " + lflgs + " %LIBRARY_PATH% -dynamiclib -o %OUTNAME% %SRCFILES% %LIBRARIES% %FRAMEWORKS%"
     
     if not "libraries" in cconf or len(cconf["libraries"])==0:
         cconf ["linker"]=cconf ["linker"].replace("%LIBRARIES%", "")
@@ -241,7 +263,9 @@ def compile_lib(mainconf):
             fwksar.append("-framework " + cconf["frameworks"][i])
         cconf["linker"]=cconf ["linker"].replace("%FRAMEWORKS%", " ".join(fwksar))
     
-    srcfiles=""
+    srcfiles=[]
+    compile_lib_path(cconf,os.path.abspath(mainconf["pathsrc"]),os.path.abspath(mainconf["pathdst"]),srcfiles)
+    '''
     dsrc = os.listdir(mainconf["pathsrc"])
     for f in dsrc:
         if f.endswith(".cpp") or (is_mac() and (f.endswith(".m") or f.endswith(".mm"))):
@@ -259,7 +283,8 @@ def compile_lib(mainconf):
             scmd=scmd.replace("%NAMECPP%", os.path.abspath(mainconf["pathsrc"]) + os.sep + srcname)        
             if not system_exec(scmd,mainconf["pathdst"]):
                 raise Exception("Compiler error.")
-            srcfiles+=srcname.split(".")[0] + ".o "    
+            srcfiles.append(srcname.split(".")[0] + ".o ")    
+    '''
             
     scmd=cconf["linker"]
     apprs=""
@@ -270,7 +295,7 @@ def compile_lib(mainconf):
             apprs+="-L\"" + os.path.abspath(cconf["cpp_library_paths"][i]) + "\""
     scmd=scmd.replace("%LIBRARY_PATH%", apprs)
     scmd=scmd.replace("%OUTNAME%", cconf["outname"])
-    scmd=scmd.replace("%SRCFILES%", srcfiles)
+    scmd=scmd.replace("%SRCFILES%", " ".join(srcfiles))
     if not system_exec(scmd,mainconf["pathdst"]):
         raise Exception("Linker error.")
     return cconf

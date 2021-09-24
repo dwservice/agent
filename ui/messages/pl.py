@@ -26,7 +26,7 @@ data={
     'configureChooseMonitorTrayIconVisibility':u'Czy wyświetlać ikonę w tray\'u',
     'configureChooseOperation':u'Wybierz operację:',
     'configureDesktopNotification':u'Powiadomienia',
-    'configureDesktopNotificationOK':u'Powiadomienia skonfigurowanie pomyślnie.',
+    'configureDesktopNotificationOK':u'Powiadomienia zostały skonfigurowane pomyślnie.',
     'configureDisableAgent':u'Wyłącz agenta',
     'configureDisableAgentQuestion':u'Czy chcesz wyłączyć agenta?',
     'configureEnableAgent':u'Włącz agenta',

@@ -20,7 +20,7 @@ class Compile(compile_generic.Compile):
             conf["cpp_include_paths"]=[] 
             conf["cpp_library_paths"]=conf["cpp_include_paths"]
             conf["libraries"]=["psapi", "user32"]
-            conf["linker_flags"]="-static-libgcc -static-libstdc++" #DA RIMUOVERE E CORREGGERE config.json "lib_dependencies": ["stdcpp",...
+            conf["linker_flags"]="-shared -static-libgcc -static-libstdc++" #DA RIMUOVERE E CORREGGERE config.json "lib_dependencies": ["stdcpp",...
         elif osn=="linux":
             None
             '''

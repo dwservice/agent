@@ -37,7 +37,7 @@ data={
     'configureInstallCode':u'Enter the installation code',
     'configureInstallNewAgent':u'Creating a new agent',
     'configureInvalidPassword':u'Invalid password.',
-    'configureKeyInstalled':u'Key installed succesfully.',
+    'configureKeyInstalled':u'Key installed successfully.',
     'configureLater':u'Configure later',
     'configureMonitor':u'Configure monitor',
     'configurePassword':u'Edit configuration password',
