@@ -9,7 +9,6 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import json
 import agent
 import ctypes
-import native
 import signal
 import os
 import platform
@@ -18,6 +17,23 @@ import re
 import subprocess
 import stat
 import utils
+
+##### TO FIX 22/09/2021
+try:
+    TMP_bytes_to_str=utils.bytes_to_str
+    TMP_str_to_bytes=utils.str_to_bytes
+except:
+    TMP_bytes_to_str=lambda b, enc="ascii": b.decode(enc, errors="replace")
+    TMP_str_to_bytes=lambda s, enc="ascii": s.encode(enc, errors="replace")
+try:    
+    import sys
+    if sys.version_info[0]==2:        
+        if utils.path_exists(os.path.dirname(__file__) + os.sep + "__pycache__"):
+            utils.path_remove(os.path.dirname(__file__) + os.sep + "__pycache__")
+except: 
+    None
+##### TO FIX 22/09/2021
+
 
 class Resource():
 
@@ -103,11 +119,22 @@ class NativeWindows:
         self._osmodule=None;
     
     def get_system_info(self):
-        pi= self._osmodule.getSystemInfo()
-        s=""
-        if pi:
-            s = ctypes.wstring_at(pi)
-            self._osmodule.freeMemory(pi)
+            
+        ##### TO FIX 22/09/2021
+        if hasattr(self._osmodule, "DWAOSUtilGetSystemInfo"):
+            wcp = ctypes.c_wchar_p()
+            sz=self._osmodule.DWAOSUtilGetSystemInfo(ctypes.byref(wcp))
+            if sz>0:
+                s = ctypes.wstring_at(wcp,size=sz)
+            self._osmodule.freeMemory(wcp)
+        else:
+            pi=self._osmodule.getSystemInfo()
+            s=""
+            if pi:
+                s = ctypes.wstring_at(pi)
+                self._osmodule.freeMemory(pi)
+        ##### TO FIX 22/09/2021
+        
         return json.loads(s)
     
     def get_diskpartition_info(self):
@@ -128,27 +155,60 @@ class NativeWindows:
             bitmask >>= 1
         return res
         '''
-        pi= self._osmodule.getDiskInfo()
-        s=""
-        if pi:
-            s = ctypes.wstring_at(pi)
-            self._osmodule.freeMemory(pi)
+        
+        ##### TO FIX 22/09/2021
+        if hasattr(self._osmodule, "DWAOSUtilGetDiskInfo"):
+            wcp = ctypes.c_wchar_p()
+            sz=self._osmodule.DWAOSUtilGetDiskInfo(ctypes.byref(wcp))
+            if sz>0:
+                s = ctypes.wstring_at(wcp,size=sz)
+            self._osmodule.freeMemory(wcp)
+        else:
+            pi=self._osmodule.getDiskInfo()
+            s=""
+            if pi:
+                s = ctypes.wstring_at(pi)
+                self._osmodule.freeMemory(pi)
+        ##### TO FIX 22/09/2021
+            
         return json.loads(s)
     
     def get_performance_info(self):
-        pi= self._osmodule.getPerformanceInfo()
-        s=""
-        if pi:
-            s = ctypes.wstring_at(pi)
-            self._osmodule.freeMemory(pi)
+        
+        ##### TO FIX 22/09/2021
+        if hasattr(self._osmodule, "DWAOSUtilGetPerformanceInfo"):
+            wcp = ctypes.c_wchar_p()
+            sz=self._osmodule.DWAOSUtilGetPerformanceInfo(ctypes.byref(wcp))
+            if sz>0:
+                s = ctypes.wstring_at(wcp,size=sz)
+            self._osmodule.freeMemory(wcp)
+        else:
+            pi=self._osmodule.getPerformanceInfo()
+            s=""
+            if pi:
+                s = ctypes.wstring_at(pi)
+                self._osmodule.freeMemory(pi)
+        ##### TO FIX 22/09/2021
+        
         return json.loads(s)  
         
     def get_task_list(self):
-        pi= self._osmodule.getTaskList()
-        s=""
-        if pi:
-            s = ctypes.wstring_at(pi)
-            self._osmodule.freeMemory(pi)
+        
+        ##### TO FIX 22/09/2021
+        if hasattr(self._osmodule, "DWAOSUtilGetTaskList"):
+            wcp = ctypes.c_wchar_p()
+            sz=self._osmodule.DWAOSUtilGetTaskList(ctypes.byref(wcp))
+            if sz>0:
+                s = ctypes.wstring_at(wcp,size=sz)
+            self._osmodule.freeMemory(wcp)
+        else:
+            pi=self._osmodule.getTaskList()
+            s=""
+            if pi:
+                s = ctypes.wstring_at(pi)
+                self._osmodule.freeMemory(pi)
+        ##### TO FIX 22/09/2021
+        
         return json.loads(s)
     
     def task_kill(self, pid):
@@ -156,11 +216,22 @@ class NativeWindows:
         return bret==1
     
     def get_service_list(self):
-        pi= self._osmodule.getServiceList()
-        s=""
-        if pi:
-            s = ctypes.wstring_at(pi)
-            self._osmodule.freeMemory(pi)
+        
+        ##### TO FIX 22/09/2021
+        if hasattr(self._osmodule, "DWAOSUtilGetServiceList"):
+            wcp = ctypes.c_wchar_p()
+            sz=self._osmodule.DWAOSUtilGetServiceList(ctypes.byref(wcp))
+            if sz>0:
+                s = ctypes.wstring_at(wcp,size=sz)
+            self._osmodule.freeMemory(wcp)
+        else:
+            pi=self._osmodule.getServiceList()
+            s=""
+            if pi:
+                s = ctypes.wstring_at(pi)
+                self._osmodule.freeMemory(pi)
+        ##### TO FIX 22/09/2021
+                
         return json.loads(s)
     
     def service_start(self,name):
@@ -178,13 +249,13 @@ class NativeLinux:
         self._timer = getattr(time, 'monotonic', time.time)
         self._oldcputime=None
         self._cpu_logical_count=self.get_cpu_logical_count()
-   
+        
     def destroy(self):
         None
    
     def get_system_info(self):
         hmcpu={}
-        f = utils.file_open("/proc/cpuinfo", "r")
+        f = utils.file_open("/proc/cpuinfo", "r", encoding="utf8", errors='replace')
         try:
             for line in f:
                 if line.startswith("model name"):
@@ -206,7 +277,7 @@ class NativeLinux:
     def get_diskpartition_info(self):
         arret = []
         phydevs = []
-        f = utils.file_open("/proc/filesystems", "r")
+        f = utils.file_open("/proc/filesystems", "r", encoding="utf8", errors='replace')
         try:
             for line in f:
                 if not line.startswith("nodev"):
@@ -214,7 +285,7 @@ class NativeLinux:
         finally:
             f.close()
         #Legge fstab
-        f = utils.file_open("/etc/fstab", "r")
+        f = utils.file_open("/etc/fstab", "r", encoding="utf8", errors='replace')
         try:
             for line in f:
                 line=line.strip()
@@ -230,18 +301,7 @@ class NativeLinux:
                         tp = ar[2]
                         if tp in phydevs:
                             path=nm
-                            try:
-                                st = os.statvfs(path)
-                            except UnicodeEncodeError:
-                                if isinstance(path, unicode):
-                                    try:
-                                        import sys
-                                        path = path.encode(sys.getfilesystemencoding())
-                                    except UnicodeEncodeError:
-                                        pass
-                                    st = os.statvfs(path)
-                                else:
-                                    raise
+                            st = os.statvfs(path)
                             free = (st.f_bavail * st.f_frsize)
                             size = (st.f_blocks * st.f_frsize)
                             arret.append({"Name":nm, "Size":size, "Free":free})
@@ -258,7 +318,7 @@ class NativeLinux:
                 None
             
             if num == 0:
-                f = utils.file_open('/proc/cpuinfo', 'rb')
+                f = utils.file_open('/proc/cpuinfo', 'rb', encoding="utf8", errors='replace')
                 try:
                     lines = f.readlines()
                 finally:
@@ -267,7 +327,7 @@ class NativeLinux:
                     if line.lower().startswith('processor'):
                         num += 1
             if num == 0:
-                f = utils.file_open('/proc/stat', 'rt')
+                f = utils.file_open('/proc/stat', 'rb', encoding="utf8", errors='replace')
                 try:
                     lines = f.readlines()
                 finally:
@@ -285,7 +345,7 @@ class NativeLinux:
         ret  = {}
         cpuUsagePerc=0
         #Legge info cpu
-        f = utils.file_open('/proc/stat', 'rb')
+        f = utils.file_open('/proc/stat', 'rb', encoding="utf8", errors='replace')
         try:
             arline = f.readline().split()
         finally:
@@ -313,7 +373,7 @@ class NativeLinux:
         ret["cpuUsagePerc"]=cpuUsagePerc
         
         #Legge la memoria
-        f = utils.file_open('/proc/meminfo', 'rb')
+        f = utils.file_open('/proc/meminfo', 'rb', encoding="utf8", errors='replace')
         memoryPhysicalTotal=0
         memoryPhysicalAvailable=-1
         memoryFree=0
@@ -322,15 +382,15 @@ class NativeLinux:
         try:
             for line in f:
                 if line.startswith("MemTotal:"):
-                    memoryPhysicalTotal = long(line.split()[1]) * 1024
+                    memoryPhysicalTotal = int(line.split()[1]) * 1024
                 elif line.startswith("MemFree:"):
-                    memoryFree = long(line.split()[1]) * 1024
+                    memoryFree = int(line.split()[1]) * 1024
                 elif line.startswith("MemAvailable:"):
-                    memoryPhysicalAvailable = long(line.split()[1]) * 1024
+                    memoryPhysicalAvailable = int(line.split()[1]) * 1024
                 elif line.startswith("SwapTotal:"):
-                    memoryVirtualTotal = long(line.split()[1]) * 1024
+                    memoryVirtualTotal = int(line.split()[1]) * 1024
                 elif line.startswith("SwapFree:"):
-                    memoryVirtualAvailable = long(line.split()[1]) * 1024
+                    memoryVirtualAvailable = int(line.split()[1]) * 1024
         finally:
             f.close()
         
@@ -352,23 +412,23 @@ class NativeLinux:
                 try:
                     itm={}
                     #PID
-                    itm["PID"]=long(x)
+                    itm["PID"]=int(x)
                     #Name
-                    f = utils.file_open("/proc/%s/stat" % x)
+                    f = utils.file_open("/proc/%s/stat" % x, encoding="utf8", errors='replace')
                     try:
                         itm["Name"] = f.read().split(' ')[1].replace('(', '').replace(')', '')
                     finally:
                         f.close()
                     #Memory
-                    f = utils.file_open("/proc/%s/statm" % x)
+                    f = utils.file_open("/proc/%s/statm" % x, encoding="utf8", errors='replace')
                     try:
                         vms, rss = f.readline().split()[:2]
-                        itm["Memory"] = long(rss) * long(self._PAGESIZE)
+                        itm["Memory"] = int(rss) * int(self._PAGESIZE)
                         #int(vms) * _PAGESIZE)
                     finally:
                         f.close()
                     #Owner
-                    f = utils.file_open("/proc/%s/status" % x)
+                    f = utils.file_open("/proc/%s/status" % x, encoding="utf8", errors='replace')
                     try:
                         for line in f:
                             if line.startswith('Uid:'):
@@ -402,6 +462,7 @@ class NativeLinux:
             (po, pe) = p.communicate()
             p.wait()
             if po is not None and len(po)>0:
+                po=TMP_bytes_to_str(po,"utf8")
                 appar = po.split("\n")
                 for appln in appar:
                     sv = ""
@@ -433,7 +494,7 @@ class NativeLinux:
                     xp = "/etc/init.d/" + x
                     st = utils.path_stat(xp)
                     if bool(st.st_mode & stat.S_IXUSR) or bool(st.st_mode & stat.S_IXGRP) or bool(st.st_mode & stat.S_IXOTH):                        
-                        appf = utils.file_open("/etc/init.d/" + x)
+                        appf = utils.file_open("/etc/init.d/" + x, encoding="utf8", errors='replace')
                         apps = appf.read()
                         appf.close()                        
                         if "status)" in apps or "status|" in apps:  
@@ -441,6 +502,7 @@ class NativeLinux:
                             (po, pe) = p.communicate()
                             p.wait()
                             if po is not None and len(po)>0:
+                                po=TMP_bytes_to_str(po,"utf8")
                                 st = 999
                                 if "running" in po.lower() or "started" in po.lower():
                                     st = 4
@@ -464,6 +526,7 @@ class NativeLinux:
             p = subprocess.Popen("/etc/init.d/" + name + " status", stdout=subprocess.PIPE, shell=True)
             (po, pe) = p.communicate()
             p.wait()
+            po=TMP_bytes_to_str(po,"utf8")
             return "running" in po.lower() or "started" in po.lower()
         
     
@@ -482,12 +545,13 @@ class NativeLinux:
             p = subprocess.Popen("/etc/init.d/" + name + " status", stdout=subprocess.PIPE, shell=True)
             (po, pe) = p.communicate()
             p.wait()
+            po=TMP_bytes_to_str(po,"utf8")
             return "not running" in po.lower() or "not started" in po.lower()  or "failed" in po.lower()
        
 class NativeMac:
     def __init__(self):
         self._PAGESIZE = os.sysconf("SC_PAGE_SIZE")
-   
+        
     def destroy(self):
         None
    
@@ -495,7 +559,7 @@ class NativeMac:
         cpuName=""
         try:
             appout = subprocess.Popen("sysctl machdep.cpu.brand_string", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate() 
-            lines = appout[0].splitlines()
+            lines = TMP_bytes_to_str(appout[0]).splitlines()
             for l in lines:
                 try:
                     idx = l.index(':')
@@ -511,7 +575,7 @@ class NativeMac:
         arret = []
         try:
             appout = subprocess.Popen("diskutil info /", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate() 
-            lines = appout[0].splitlines()
+            lines = TMP_bytes_to_str(appout[0]).splitlines()
             size=0
             free=0
             for l in lines:
@@ -523,14 +587,14 @@ class NativeMac:
                             try:
                                 iapp1 = l.index('(')
                                 iapp2 = l.index(' ',iapp1)
-                                size=long(l[iapp1+1:iapp2].strip())
+                                size=int(l[iapp1+1:iapp2].strip())
                             except:
                                 None
                         elif key.lower()=="volume free space":
                             try:
                                 iapp1 = l.index('(')
                                 iapp2 = l.index(' ',iapp1)
-                                free=long(l[iapp1+1:iapp2].strip())
+                                free=int(l[iapp1+1:iapp2].strip())
                             except:
                                 None
                     except:
@@ -552,7 +616,7 @@ class NativeMac:
         #CPU
         try:
             appout = subprocess.Popen("iostat -c 2", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-            lines = appout[0].splitlines()
+            lines = TMP_bytes_to_str(appout[0]).splitlines()
             cnt=0
             idxus=-1
             idxsy=-1 
@@ -576,8 +640,8 @@ class NativeMac:
         
         #MEMORIA
         try:
-            ps = subprocess.Popen(['ps', '-caxm', '-orss,comm'], stdout=subprocess.PIPE).communicate()[0]
-            vm = subprocess.Popen(['vm_stat'], stdout=subprocess.PIPE).communicate()[0]
+            ps = TMP_bytes_to_str(subprocess.Popen(['ps', '-caxm', '-orss,comm'], stdout=subprocess.PIPE).communicate()[0])
+            vm = TMP_bytes_to_str(subprocess.Popen(['vm_stat'], stdout=subprocess.PIPE).communicate()[0])
             processLines = ps.split('\n')
             sep = re.compile('[\s]+')
             for row in range(1,len(processLines)):
@@ -612,21 +676,21 @@ class NativeMac:
             size_rss=50;
             size_comm=200;
             appout = subprocess.Popen("ps -axc -o pid=" + ("-"*size_pid) + ",user=" + ("-"*size_user) + ",rss=" + ("-"*size_rss) + ",comm=" + ("-"*size_comm), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate() 
-            lines = appout[0].splitlines()
+            lines = TMP_bytes_to_str(appout[0]).splitlines()
             bfirst=True
             for l in lines:
                 if not bfirst:
                     itm={}
                     p=0
                     try:
-                        itm["PID"]=long(l[p:p+size_pid].strip())
+                        itm["PID"]=int(l[p:p+size_pid].strip())
                     except:
                         itm["PID"]=-1
                     p=p+size_pid+1
                     itm["Owner"] = l[p:p+size_user].strip()
                     p=p+size_user+1
                     try:
-                        itm["Memory"] = long(l[p:p+size_rss].strip())
+                        itm["Memory"] = int(l[p:p+size_rss].strip())
                     except: 
                         itm["Memory"] = 0
                     p=p+size_rss+1
@@ -672,7 +736,7 @@ class NativeMac:
     def _get_service_status(self,name):
         try:
             appout = subprocess.Popen("launchctl list " + name, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-            lines = appout[0].splitlines()
+            lines = TMP_bytes_to_str(appout[0]).splitlines()
             for l in lines:
                 if "LastExitStatus" in l:
                     return 4

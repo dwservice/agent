@@ -24,7 +24,7 @@ class TestSendStream(ipc.ChildProcessThread):
             s = strmother.read()
             if s is None:
                 break
-            print "READ " + s
+            print("READ " + utils.bytes_to_str(s))
         strmother.close()
         strm.close()
         time.sleep(1)
@@ -33,18 +33,18 @@ class TestReadAndWrite(ipc.ChildProcessThread):
     
     def run(self):
         strm = self.get_stream()    
-        print "WAIT READ..."
+        print("WAIT READ...")
         time.sleep(0.1)
         #time.sleep(10)
         
-        print "START READ"
+        print("START READ")
         cnt=0
         tm=utils.get_time()
         ar=[]
         while True:
             try:
                 dt=strm.read_bytes()
-                #print "READ: "+ str(cnt)
+                #print("READ: "+ str(cnt))
             except Exception as e:
                 print("READ ERROR: " + str(e) + "  CNT:" + str(cnt))
                 break
@@ -55,7 +55,7 @@ class TestReadAndWrite(ipc.ChildProcessThread):
                 
         #print("***************")
         print("READ TIME:" + str(utils.get_time()-tm) + "  CNT:" + str(cnt))
-        print "END READ"
+        print("END READ")
         
         if True:
             print("READ CHECK...")
@@ -65,24 +65,24 @@ class TestReadAndWrite(ipc.ChildProcessThread):
                 try:
                     s=ar[i]
                     cnt+=1
-                    if s!="TEST" + str(i+1):
+                    if utils.bytes_to_str(s)!="TEST" + str(i+1):
                         bok=False
-                        print ("ERRORE: '" + s + "' != 'TEST" + str(i+1) + "'")
+                        print("ERRORE: '" + s + "' != 'TEST" + str(i+1) + "'")
                 except:
                     bok=False
-                    print ("ERRORE: TEST out of range: " + str(i+1) + "'")
+                    print("ERRORE: TEST out of range: " + str(i+1) + "'")
                     break
             if bok:
-                print "READ CHECK OK - CNT:" + str(cnt)         
+                print("READ CHECK OK - CNT:" + str(cnt))         
         else:
-            print "NO READ CHECK"
+            print("NO READ CHECK")
         
         strm.close()
         time.sleep(1)
 
 if __name__ == "__main__":    
     ipc.initialize()
-    print ("BEGIN")
+    print("BEGIN")
     
              
     p=ipc.Process("mytest.test_ipc_stream", "Test" + TEST_TYPE)
@@ -91,18 +91,18 @@ if __name__ == "__main__":
     if TEST_TYPE=="ReadAndWrite":
           
         time.sleep(1)            
-        print "START WRITE"
+        print("START WRITE")
         tm=utils.get_time()
         cnt=0
         try:        
             for i in range(TEST_NUM):
-                lstrm.write_bytes("TEST" + str(i+1))
+                lstrm.write_bytes(utils.str_to_bytes("TEST" + str(i+1)))
                 cnt+=1
-                #print "WRITE: "+ str(i)
+                #print("WRITE: "+ str(i))
         except Exception as e:
             print("WRITE ERROR: " + str(e) + "  CNT:" + str(cnt))
         print("WRITE TIME:" + str(utils.get_time()-tm) + "  CNT:" + str(cnt))
-        print "END WRITE"
+        print("END WRITE")
     elif TEST_TYPE=="SendStream":
         
         lstrmother = ipc.Stream({"size":20})
@@ -117,12 +117,12 @@ if __name__ == "__main__":
     lstrm.close()
     
     
-    print ("PARENT CLOSE")    
+    print("PARENT CLOSE")    
     #WAIT REMOVE IPC
     p.join()
     lstrm._destroy()
     time.sleep(4)
-    print ("END")
+    print("END")
     ipc.terminate()
 
     

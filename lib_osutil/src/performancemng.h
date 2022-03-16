@@ -19,7 +19,7 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 class PerformanceMng{
 public:
 	PerformanceMng();
-	wchar_t* getInfo();
+	int getInfo(wchar_t** sret);
 private:
 
 #if defined OS_WINDOWS

@@ -118,10 +118,9 @@ class ResImage:
             self._pkgnm = pkgnm.split(".")[1]
         else:
             self._pkgnm=pkgnm        
-        self._basepth=unicode(self._pkgnm.replace(".",utils.path_sep))
+        self._basepth=utils.str_new(self._pkgnm.replace(".",utils.path_sep))
         
-    def get(self, nm):
-        
-        return self._basepth + utils.path_sep + unicode(nm)
+    def get(self, nm):        
+        return self._basepth + utils.path_sep + utils.str_new(nm)
         
         

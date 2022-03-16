@@ -1146,10 +1146,18 @@ void DWAGDILoop(CallbackEventMessage callback){
 		}
 
 	}
-
+	//Destroy Fonts here because XFreeFontSet need of display
+	unsigned int cnt=fontList.size();
+	for (unsigned int i=0;i<cnt;i++){
+		DWAFont* dwf = fontList.at(i);
+		XFreeFontSet(display, dwf->fontset);
+		delete dwf;
+	}
+	for (unsigned int i=0;i<cnt;i++){
+		fontList.erase(fontList.begin());
+	}
 	XFreeColormap (display, colormap);
 	XCloseDisplay(display);
-
 }
 
 void DWAGDIEndLoop(){

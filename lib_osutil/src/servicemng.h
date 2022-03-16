@@ -16,7 +16,7 @@ using namespace std;
 class ServiceMng{
 public:
 	ServiceMng();
-	wchar_t* getServiceList();
+	int getServiceList(wchar_t** sret);
 	int startService(wchar_t* serviceName);
 	int stopService(wchar_t* serviceName);
 private:

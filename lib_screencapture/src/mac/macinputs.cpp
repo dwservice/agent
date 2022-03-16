@@ -277,10 +277,22 @@ CGKeyCode MacInputs::keyCodeForChar(const char c){
 CGKeyCode MacInputs::getCGKeyCode(const char* key){
 	if (strcmp(key,"CONTROL")==0){
 		return 0x3B;
+	}else if (strcmp(key,"LCONTROL")==0){
+		return 0x3B;
+	}else if (strcmp(key,"RCONTROL")==0){
+		return 0x3E;
 	}else if (strcmp(key,"ALT")==0){
 		return 0x3A;
+	}else if (strcmp(key,"LALT")==0){
+		return 0x3A;
+	}else if (strcmp(key,"RALT")==0){
+		return 0x3D;
 	}else if (strcmp(key,"SHIFT")==0){
 		return 0x38;
+	}else if (strcmp(key,"LSHIFT")==0){
+		return 0x38;
+	}else if (strcmp(key,"RSHIFT")==0){
+		return 0x3C;
 	}else if (strcmp(key,"TAB")==0){
 		return 0x30;
 	}else if (strcmp(key,"ENTER")==0){

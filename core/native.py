@@ -18,8 +18,8 @@ import threading
 import signal
 import json
 
-GUILNC_ARG_MAX=10
-GUILNC_ARG_SIZE=1024
+GUILNC_ARG_MAX=10 #COMPATIBILITA VERSIONI PRECEDENTI
+GUILNC_ARG_SIZE=1024 #COMPATIBILITA VERSIONI PRECEDENTI
 
 _nativemap={}
 _nativemap["semaphore"] = threading.Condition()
@@ -46,8 +46,8 @@ def get_instance():
 def fmain(args):
     if utils.is_mac():
         if len(args)>1:
-            a1=args[1]
-            if a1 is not None and a1.lower()=="guilnc":
+            a1=args[1]            
+            if a1 is not None and a1.lower()=="guilnc": #GUI LAUNCHER OLD VERSION 03/11/2021 (DO NOT REMOVE) (DO NOT REMOVE)
                 main = Mac()
                 main.start_guilnc()
                 sys.exit(0)
@@ -180,7 +180,10 @@ class Windows():
         return bret==1
     
     def set_file_permission_everyone(self,fl):
-        self._dwaglib.setFilePermissionEveryone(fl)    
+        if utils.is_py2():
+            self._dwaglib.setFilePermissionEveryone(fl)
+        else:
+            self._dwaglib.setFilePermissionEveryone(fl.encode('utf-8'))
     
     def fix_file_permissions(self,operation,path,path_src=None):
         None
@@ -315,7 +318,7 @@ class Linux():
             if os.path.exists(fn):
                 f = open(fn, "r")
                 try:
-                    s = f.read()    
+                    s = utils.bytes_to_str(f.read(),"utf8")    
                     if s is not None and len(s)>0:
                         s=s.strip("\n").strip("\r")
                         appar = s.split(" ")
@@ -331,7 +334,7 @@ class Linux():
                 if os.path.exists(fn):
                     f = open(fn , "r")
                     try:
-                        s = f.read()    
+                        s = utils.bytes_to_str(f.read(),"utf8")
                         if s is not None and len(s)>0:
                             s=s.strip("\n").strip("\r")
                             scons = s.split(" ")[0]                        
@@ -344,6 +347,7 @@ class Linux():
                 data = subprocess.Popen(["fgconsole"], stdout = subprocess.PIPE, stderr = subprocess.PIPE)
                 so, se = data.communicate()
                 if so is not None and len(so)>0:
+                    so=utils.bytes_to_str(so, "utf8")
                     scons="tty"+so.replace("\n","").replace("\r","")
                     if not os.path.exists("/sys/class/tty/" + scons):
                         scons=None                    
@@ -368,7 +372,7 @@ class Linux():
             if os.path.exists(fn):
                 f = open(fn , "r")
                 try:
-                    s = f.read()    
+                    s = utils.bytes_to_str(f.read(),"utf8")    
                     if s is not None and len(s)>0:
                         arenv = s.split("\0")
                         for apps in arenv:
@@ -388,7 +392,7 @@ class Linux():
             if os.path.exists(fn):
                 f = open(fn , "r")
                 try:
-                    s = f.read()
+                    s = utils.bytes_to_str(f.read(),"utf8")
                     if s is not None and len(s)>0:
                         rpar = s.rfind(b')')
                         name = s[s.find(b'(') + 1:rpar]
@@ -413,7 +417,7 @@ class Linux():
             if os.path.exists(fn):
                 f = open(fn , "r")
                 try:
-                    s = f.read()
+                    s = utils.bytes_to_str(f.read(),"utf8")
                     if s is not None and len(s)>0:
                         import re
                         reuids=re.compile(br'Uid:\t(\d+)\t(\d+)\t(\d+)')
@@ -432,7 +436,7 @@ class Linux():
             if os.path.exists(fn):
                 f = open(fn , "r")
                 try:
-                    s = f.read()
+                    s = utils.bytes_to_str(f.read(),"utf8")
                     if s is not None and len(s)>0:
                         import re
                         reuids=re.compile(br'Gid:\t(\d+)\t(\d+)\t(\d+)')
@@ -452,7 +456,7 @@ class Linux():
             if os.path.exists(fn):
                 f = open(fn , "r")
                 try:
-                    s = f.read()
+                    s = utils.bytes_to_str(f.read(),"utf8")
                     if s is not None and len(s)>0:
                         lret = s.split("\0")             
                 finally:
@@ -465,9 +469,9 @@ class Mac():
         
     def __init__(self):
         self._dwaglib = None
-        self._propguilnc = None
-        self._propguilnc_semaphore = threading.Condition()        
-    
+        self._propguilnc = None #COMPATIBILITA VERSIONI PRECEDENTI
+        self._propguilnc_semaphore = threading.Condition() #COMPATIBILITA VERSIONI PRECEDENTI
+            
     def load_library(self):
         try:
             if self._dwaglib is None:
@@ -537,11 +541,29 @@ class Mac():
     def get_console_user_id(self):
         return self._dwaglib.getConsoleUserId();
     
-    #GESTIONE GUI LAUNCHER
+    #GUI LAUNCHER OLD VERSION 03/11/2021 (DO NOT REMOVE)
+    def is_old_guilnc(self):
+        #READ installer.ver
+        bold=False
+        try:
+            sver="0"
+            ptver="native" + os.sep + "installer.ver"
+            if utils.path_exists(ptver):
+                fver = utils.file_open(ptver, "rb")
+                sver=utils.bytes_to_str(fver.read())
+                fver.close()
+            bold=(int(sver)==0)
+        except:
+            None
+        return bold
+    
+    
+    #GUI LAUNCHER OLD VERSION 03/11/2021 (DO NOT REMOVE)
     def _signal_handler(self, signal, frame):
         self._propguilnc_stop=True
     
-    def start_guilnc(self):
+    #GUI LAUNCHER OLD VERSION 03/11/2021 (DO NOT REMOVE)
+    def start_guilnc(self):        
         self._propguilnc_stop=False
         signal.signal(signal.SIGTERM, self._signal_handler)
         bload=False
@@ -565,8 +587,8 @@ class Mac():
                     if lnc.get_property("state")=="LNC":
                         popenar=[]
                         popenar.append(sys.executable)
-                        popenar.append(u'agent.pyc')
-                        popenar.append(u'app=' + lnc.get_property("app"))
+                        popenar.append("agent.py")
+                        popenar.append(u"app=" + lnc.get_property("app"))
                         for i in range(GUILNC_ARG_MAX):
                             a = lnc.get_property("arg" + str(i))
                             if a=="":
@@ -574,11 +596,11 @@ class Mac():
                             popenar.append(a)
                         libenv = os.environ
                         libenv["LD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
-                        #print "Popen: " + " , ".join(popenar)
+                        #print("Popen: " + " , ".join(popenar))
                         try:
                             p = subprocess.Popen(popenar, env=libenv)
                             prcs.append(p)
-                            #print "PID: " + str(p.pid)
+                            #print("PID: " + str(p.pid))
                             if p.poll() is None:
                                 lnc.set_property("state", str(p.pid))
                             else:
@@ -591,31 +613,36 @@ class Mac():
         finally:
             if bload:
                 lnc.close()
-
+    
+    #GUI LAUNCHER OLD VERSION 03/11/2021 (DO NOT REMOVE)
     def init_guilnc(self,ag):
-        self._propguilnc_semaphore.acquire()
-        try:
-            #COMPATIBILITA VERSIONI PRECEDENTI
-            if utils.path_exists("native/dwagguilnc"):
-                self._propguilnc = {}
-                if not utils.path_exists("guilnc.run"):
-                    f = utils.file_open("guilnc.run","wb")
-                    f.close()
-        finally:
-            self._propguilnc_semaphore.release()        
+        if self.is_old_guilnc():
+            self._propguilnc_semaphore.acquire()
+            try:
+                #COMPATIBILITA VERSIONI PRECEDENTI
+                if utils.path_exists("native/dwagguilnc"):
+                    self._propguilnc = {}
+                    if not utils.path_exists("guilnc.run"):
+                        f = utils.file_open("guilnc.run","wb")
+                        f.close()
+            finally:
+                self._propguilnc_semaphore.release()                        
     
+    #GUI LAUNCHER OLD VERSION 03/11/2021 (DO NOT REMOVE)
     def term_guilnc(self):
-        self._propguilnc_semaphore.acquire()
-        try:
-            if utils.path_exists("guilnc.run"):
-                utils.path_remove("guilnc.run")
-            if self._propguilnc is not None:
-                for l in self._propguilnc:
-                    self._propguilnc[l].close()
-                self._propguilnc=None
-        finally:
-            self._propguilnc_semaphore.release()            
+        if self.is_old_guilnc():
+            self._propguilnc_semaphore.acquire()
+            try:
+                if utils.path_exists("guilnc.run"):
+                    utils.path_remove("guilnc.run")
+                if self._propguilnc is not None:
+                    for l in self._propguilnc:
+                        self._propguilnc[l].close()
+                    self._propguilnc=None
+            finally:
+                self._propguilnc_semaphore.release()            
     
+    #GUI LAUNCHER OLD VERSION 03/11/2021 (DO NOT REMOVE)
     def exec_guilnc(self, uid, app, args):
         self._propguilnc_semaphore.acquire()
         try:

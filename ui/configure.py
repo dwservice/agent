@@ -6,9 +6,22 @@ Public License, v. 2.0. If a copy of the MPL was not distributed
 with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
-import messages
-import gdi
-import ui
+try:
+    from . import messages
+except: #FIX INSTALLER
+    import messages
+try:
+    from . import images
+except: #FIX INSTALLER
+    import images
+try:
+    from . import gdi
+except: #FIX INSTALLER
+    import gdi 
+try:
+    from . import ui
+except: #FIX INSTALLER
+    import ui
 import sys
 import listener
 import utils
@@ -120,7 +133,7 @@ class Configure:
             None
         prmsui={}
         if "name" in confjson:
-            self._name=unicode(confjson["name"])            
+            self._name=utils.str_new(confjson["name"])            
         prmsui["title"]=self._get_message('configureTitle')
         if "topinfo" in confjson:
             prmsui["topinfo"]=confjson["topinfo"]
@@ -142,7 +155,7 @@ class Configure:
             msg = ui.Message(self._get_message('configureWelcome'))
             msg.next_step(self.step_check_password)
         except Exception as e:
-            msg = ui.Message(str(e))
+            msg = ui.Message(utils.exception_to_string(e))
         return msg
         '''
         return self.step_check_password(curui);
@@ -273,7 +286,7 @@ class Configure:
             msg.next_step(self.step_menu_main)
             return msg
         except Exception as e:
-            s = str(e)
+            s = utils.exception_to_string(e)
             if s=="INVALID_CODE":
                 chs = ui.Chooser()
                 chs.set_key("tryAgain")
@@ -308,7 +321,7 @@ class Configure:
         chs.add("HTTP", self._get_message('proxyHttp'))
         chs.add("SOCKS4", self._get_message('proxySocks4'))
         chs.add("SOCKS4A", self._get_message('proxySocks4a'))
-        chs.add("SOCKS45", self._get_message('proxySocks5'))
+        chs.add("SOCKS5", self._get_message('proxySocks5'))
         chs.add("NONE", self._get_message('proxyNone'))
         chs.set_variable(self._proxy_type)
         

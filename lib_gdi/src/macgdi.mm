@@ -19,7 +19,7 @@ NSMutableArray *windowList=NULL;
 NSMutableArray *notifyIconList=NULL;
 NSMutableArray *imageList=NULL;
 JSONWriter jonextevent;
-
+NSInteger  appActPolicy=NSApplicationActivationPolicyRegular;
 
 const int WINDOW_TYPE_NORMAL=0;
 const int WINDOW_TYPE_NORMAL_NOT_RESIZABLE=1;
@@ -558,6 +558,16 @@ DWAImage* getImageByID(int wid){
 }
 @end
 
+extern "C" void DWAGDINSAppSetActivationPolicy(int v){
+	if (v==1){
+		appActPolicy=NSApplicationActivationPolicyAccessory;
+	}else if (v==2){
+		appActPolicy=NSApplicationActivationPolicyProhibited;
+	}else{
+		appActPolicy=NSApplicationActivationPolicyRegular;
+	}
+}
+
 
 extern "C" void DWAGDILoop(CallbackEventMessage callback){
 	windowList = [[NSMutableArray alloc] init];
@@ -578,10 +588,8 @@ extern "C" void DWAGDILoop(CallbackEventMessage callback){
 				 userInfo: nil
 				 repeats: YES];
 
-		//[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-		[NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
+		[NSApp setActivationPolicy:appActPolicy];
 		[NSApp activateIgnoringOtherApps:YES];
-
 
 		id menubar = [[NSMenu new] autorelease];
 		id appMenuItem = [[NSMenuItem new] autorelease];

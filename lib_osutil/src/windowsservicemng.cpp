@@ -12,33 +12,33 @@ ServiceMng::ServiceMng(){
 
 }
 
-wchar_t* ServiceMng::getServiceList() {
+int ServiceMng::getServiceList(wchar_t** sret) {
 	JSONWriter jsonw;
 	jsonw.beginArray();
 
     SC_HANDLE hHandle = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
     if (NULL != hHandle) {
-		ENUM_SERVICE_STATUS service;
+		ENUM_SERVICE_STATUSW service;
 		DWORD dwBytesNeeded = 0;
 		DWORD dwServicesReturned = 0;
 		DWORD dwResumedHandle = 0;
 		DWORD dwServiceType = SERVICE_WIN32 | SERVICE_DRIVER;
-		BOOL retVal = EnumServicesStatus(hHandle, dwServiceType, SERVICE_STATE_ALL,
-			&service, sizeof(ENUM_SERVICE_STATUS), &dwBytesNeeded, &dwServicesReturned,
+		BOOL retVal = EnumServicesStatusW(hHandle, dwServiceType, SERVICE_STATE_ALL,
+			&service, sizeof(ENUM_SERVICE_STATUSW), &dwBytesNeeded, &dwServicesReturned,
 			&dwResumedHandle);
 		if (!retVal) {
 			if (ERROR_MORE_DATA == GetLastError()) {
-				DWORD dwBytes = sizeof(ENUM_SERVICE_STATUS) + dwBytesNeeded;
-				ENUM_SERVICE_STATUS* pServices = NULL;
-				pServices = new ENUM_SERVICE_STATUS [dwBytes];
-				EnumServicesStatus(hHandle, SERVICE_WIN32 | SERVICE_DRIVER, SERVICE_STATE_ALL,
+				DWORD dwBytes = sizeof(ENUM_SERVICE_STATUSW) + dwBytesNeeded;
+				ENUM_SERVICE_STATUSW* pServices = NULL;
+				pServices = new ENUM_SERVICE_STATUSW[dwBytes];
+				EnumServicesStatusW(hHandle, SERVICE_WIN32 | SERVICE_DRIVER, SERVICE_STATE_ALL,
 					pServices, dwBytes, &dwBytesNeeded, &dwServicesReturned, &dwResumedHandle);
 				for (unsigned iIndex = 0; iIndex < dwServicesReturned; iIndex++) {
 
 					if ((pServices + iIndex)->ServiceStatus.dwServiceType>=10){
 						jsonw.beginObject();
-						jsonw.addString(L"Name", towstring((pServices + iIndex)->lpServiceName));
-						jsonw.addString(L"Label", towstring((pServices + iIndex)->lpDisplayName));
+						jsonw.addString(L"Name", (pServices + iIndex)->lpServiceName);
+						jsonw.addString(L"Label", (pServices + iIndex)->lpDisplayName);
 						jsonw.addNumber(L"Status", (pServices + iIndex)->ServiceStatus.dwCurrentState);
 						jsonw.endObject();
 					}
@@ -51,7 +51,9 @@ wchar_t* ServiceMng::getServiceList() {
 	}
 
     jsonw.endArray();
-	return towcharp(jsonw.getString());
+    wstring str=jsonw.getString();
+	*sret=towcharp(str);
+	return str.length();
 }
 
 bool ServiceMng::checkStateService(SC_HANDLE schService,DWORD state){

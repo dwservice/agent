@@ -13,10 +13,8 @@ import socket
 import threading
 import xml.etree.ElementTree
 import os
-import base64
 import math
 import utils
-from Queue import Queue
 
 BUFFER_SIZE_MAX = 65536-10
 BUFFER_SIZE_MIN = 1024
@@ -49,6 +47,8 @@ def get_time():
 
 def get_ssl_info():
     sslret=ssl.OPENSSL_VERSION + " ("
+    #if hasattr(ssl, 'PROTOCOL_TLSv1_3'):
+    #    sslret += "TLSv1.3"
     if hasattr(ssl, 'PROTOCOL_TLSv1_2'):
         sslret += "TLSv1.2" 
     elif hasattr(ssl, 'PROTOCOL_TLSv1_1'):
@@ -61,6 +61,8 @@ def get_ssl_info():
     return sslret
 
 def _get_ssl_ver():
+    #if hasattr(ssl, 'PROTOCOL_TLSv1_3'):
+    #    return ssl.PROTOCOL_TLSv1_3
     if hasattr(ssl, 'PROTOCOL_TLSv1_2'):
         return ssl.PROTOCOL_TLSv1_2 
     if hasattr(ssl, 'PROTOCOL_TLSv1_1'):
@@ -77,40 +79,47 @@ def _connect_proxy_http(sock, host, port, proxy_info):
     arreq=[]
     arreq.append("CONNECT %s:%d HTTP/1.0" % (host, port))
     if usr is not None and len(usr)>0:
-        auth=base64.b64encode(usr + ":" + pwd)
+        auth=utils.bytes_to_str(utils.enc_base64_encode(utils.str_to_bytes(usr + ":" + pwd,"utf8")))
         arreq.append("\r\nProxy-Authorization: Basic %s" % (auth))
     arreq.append("\r\n\r\n")
-    sock.sendall("".join(arreq))    
+    sock.sendall(utils.str_to_bytes("".join(arreq)))
     resp = Response(sock)
     if resp.get_code() != '200':
-        raise Exception("Proxy http error " + str(resp.get_code()) + ".")
+        raise Exception("Proxy http error: " + str(resp.get_code()) + ".")
     
 
 def _connect_proxy_socks(sock, host, port, proxy_info):
     usr = proxy_info.get_user()
     pwd = proxy_info.get_password()
     if proxy_info.get_type()=='SOCKS5':
-        mthreq=0x00
-        if usr is not None and len(usr)>0 and pwd is not None and len(pwd)>0:
-            mthreq=0x02
         arreq = []
-        arreq.append(struct.pack(">BBB", 0x05, 0x01, mthreq))
-        sock.sendall("".join(arreq))
+        arreq.append(struct.pack(">BBBB", 0x05, 0x02, 0x00, 0x02))
+        sock.sendall(utils.bytes_join(arreq))
         resp = sock.recv(2)
-        ver = ord(resp[0:1])
-        mth = ord(resp[1:2])
-        if ver!=0x05 or mth!=mthreq:
-            raise Exception("Proxy socks error.")
+        ver = utils.bytes_get(resp,0)
+        mth = utils.bytes_get(resp,1)
+        if ver!=0x05:
+            raise Exception("Proxy socks error: Incorrect version.")
+        if mth!=0x00 and mth!=0x02:
+            raise Exception("Proxy socks error: Method not supported.")
         if mth==0x02:
-            arreq.append(struct.pack(">B", len(usr)))
-            arreq.append(usr)
-            arreq.append(struct.pack(">B", len(pwd)))
-            arreq.append(pwd)
-            sock.sendall("".join(arreq))
-            ver = ord(resp[0:1])
-            status = ord(resp[1:2])
-            if ver!=0x05 or status != 0x00:
-                raise Exception("Proxy socks error.")
+            if usr is not None and len(usr)>0 and pwd is not None and len(pwd)>0:
+                arreq = []
+                arreq.append(struct.pack(">B", 0x01))
+                arreq.append(struct.pack(">B", len(usr)))
+                for c in usr:
+                    arreq.append(struct.pack(">B", ord(c)))
+                arreq.append(struct.pack(">B", len(pwd)))
+                for c in pwd:
+                    arreq.append(struct.pack(">B", ord(c)))                
+                sock.sendall(utils.bytes_join(arreq))
+                resp = sock.recv(2)
+                ver = utils.bytes_get(resp,0)
+                status = utils.bytes_get(resp,1)
+                if ver!=0x01 or status != 0x00:
+                    raise Exception("Proxy socks error: Incorrect Authentication.")
+            else:
+                raise Exception("Proxy socks error: Authentication required.")
         arreq = []
         arreq.append(struct.pack(">BBB", 0x05, 0x01, 0x00))
         try:
@@ -120,12 +129,13 @@ def _connect_proxy_socks(sock, host, port, proxy_info):
         except socket.error:
             arreq.append(b"\x03")
             arreq.append(struct.pack(">B", len(host)))
-            arreq.append(host)
+            for c in host:
+                arreq.append(struct.pack(">B", ord(c)))
         arreq.append(struct.pack(">H", port))
-        sock.sendall("".join(arreq))
+        sock.sendall(utils.bytes_join(arreq))
         resp = sock.recv(1024)
-        ver = ord(resp[0:1])
-        status = ord(resp[1:2])
+        ver = utils.bytes_get(resp,0)
+        status = utils.bytes_get(resp,1)
         if ver!=0x05 or status != 0x00:
             raise Exception("Proxy socks error.")
     else:
@@ -137,23 +147,27 @@ def _connect_proxy_socks(sock, host, port, proxy_info):
                 addr_bytes = b"\x00\x00\x00\x01"
                 remoteresolve=True
             else:
-                addr_bytes = socket.inet_aton(socket.gethostbyname(host))               
+                addr_bytes = socket.inet_aton(socket.gethostbyname(host))
             
         arreq = []
         arreq.append(struct.pack(">BBH", 0x04, 0x01, port))
         arreq.append(addr_bytes)
         if usr is not None and len(usr)>0:
-            arreq.append(usr)
+            for c in usr:
+                arreq.append(struct.pack(">B", ord(c)))
         arreq.append(b"\x00")
         if remoteresolve:
-            arreq.append(host)
+            for c in host:
+                arreq.append(struct.pack(">B", ord(c)))
             arreq.append(b"\x00")
-        sock.sendall("".join(arreq))
+        sock.sendall(utils.bytes_join(arreq))
         
         resp = sock.recv(8)
-        if resp[0:1] != b"\x00":
+        if len(resp)<2:
             raise Exception("Proxy socks error.")
-        status = ord(resp[1:2])
+        if utils.bytes_get(resp,0) != 0x00:
+            raise Exception("Proxy socks error.")
+        status = utils.bytes_get(resp,1)
         if status != 0x5A:
             raise Exception("Proxy socks error.")
 
@@ -212,7 +226,7 @@ def _detect_proxy_windows():
                 prxi.set_type(stp)
                 prxi.set_host(sho)
                 prxi.set_port(int(spr))
-                #print "PROXY WINDOWS DETECTED:" + stp + "  " + spr
+                #print("PROXY WINDOWS DETECTED:" + stp + "  " + spr)
                 
     except:
         None
@@ -362,11 +376,13 @@ def _connect_socket(host, port, proxy_info, timeout=_SOCKET_TIMEOUT_READ):
                 global _cacerts_path
                 if hasattr(ssl, 'SSLContext'):
                     ctx = ssl.SSLContext(_get_ssl_ver())
-                    ctx.verify_mode = ssl.CERT_REQUIRED
-                    ctx.check_hostname = True
-                    ctx.load_verify_locations(_cacerts_path)
-                    sock = ctx.wrap_socket(sock,server_hostname=host)
-                    #sock = ctx.wrap_socket(sock)
+                    if _cacerts_path!="":
+                        ctx.verify_mode = ssl.CERT_REQUIRED
+                        ctx.check_hostname = True
+                        ctx.load_verify_locations(_cacerts_path)
+                        sock = ctx.wrap_socket(sock,server_hostname=host)
+                    else:
+                        sock = ctx.wrap_socket(sock)
                 else:
                     iargs = None
                     try:
@@ -374,7 +390,7 @@ def _connect_socket(host, port, proxy_info, timeout=_SOCKET_TIMEOUT_READ):
                         iargs = inspect.getargspec(ssl.wrap_socket).args
                     except:                   
                         None
-                    if iargs is not None and "cert_reqs" in iargs and "ca_certs" in iargs: 
+                    if iargs is not None and "cert_reqs" in iargs and "ca_certs" in iargs and _cacerts_path!="": 
                         sock = ssl.wrap_socket(sock, ssl_version=_get_ssl_ver(), cert_reqs=ssl.CERT_REQUIRED, ca_certs=_cacerts_path)
                     else:
                         sock = ssl.wrap_socket(sock, ssl_version=_get_ssl_ver())
@@ -410,16 +426,16 @@ def prop_to_xml(prp):
     ardata = []
     ardata.append('<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">');
     root_element = xml.etree.ElementTree.Element("properties")
-    for key in prp.iterkeys():
+    for key in prp:
         child = xml.etree.ElementTree.SubElement(root_element, "entry")
         child.attrib['key'] = key
         child.text = prp[key]
-    ardata.append(xml.etree.ElementTree.tostring(root_element));
+    ardata.append(utils.bytes_to_str(xml.etree.ElementTree.tostring(root_element)));
     return ''.join(ardata)
 
 def xml_to_prop(s):
     prp = {}
-    root = xml.etree.ElementTree.fromstring(s)
+    root = xml.etree.ElementTree.fromstring(utils.buffer_new(s,0,len(s)))
     for child in root:
         prp[child.attrib['key']] = child.text
     return prp
@@ -582,7 +598,7 @@ class Request:
         arhead.append('\r\n')
         if self._body is not None:
             arhead.append(self._body)
-        return ''.join(arhead)
+        return utils.str_to_bytes(''.join(arhead))
 
 class Response_Transfer_Progress:
     
@@ -617,16 +633,16 @@ class Response_Transfer_Progress:
 
 class Response:
     def __init__(self, sock, body_file_name=None,  response_transfer_progress=None):
-        data = ''
-        while data.find('\r\n\r\n') == -1:
+        data = bytes()
+        while utils.bytes_to_str(data).find('\r\n\r\n') == -1:
             app=sock.recv(1024 * 4)
             if app is None or len(app)==0:
                 raise Exception('Close connection')
             data += app 
-        ar = data.split('\r\n\r\n')
+        ar = utils.bytes_to_str(data).split('\r\n\r\n')
         head = ar[0].split('\r\n')
         appbody = []
-        appbody.append(ar[1])
+        appbody.append(data[len(ar[0])+4:])
         self._code = None
         self._headers = {}
         clenkey=None
@@ -645,10 +661,11 @@ class Response:
             lenbd = int(self._headers[clenkey])
             fbody=None
             try:
+                jbts=utils.bytes_join(appbody)
                 if body_file_name is not None:
                     fbody=utils.file_open(body_file_name, 'wb')
-                    fbody.write(''.join(appbody))
-                cnt=len(''.join(appbody))
+                    fbody.write(jbts)
+                cnt=len(jbts)
                 if response_transfer_progress is not None:
                     response_transfer_progress.fire_on_data(cnt,  lenbd)
                 szbuff=1024*2
@@ -668,9 +685,9 @@ class Response:
                 if fbody is not None:
                     fbody.close()
                 else:
-                    self._body=''.join(appbody)
+                    self._body=utils.bytes_join(appbody)
         else:
-            self._extra_data=''.join(appbody)
+            self._extra_data=utils.bytes_join(appbody)
             if len(self._extra_data)==0:
                 self._extra_data=None
 
@@ -712,7 +729,7 @@ class ThreadPool():
             self._destroy=False
             self._name=name
             self._fexcpt=fexcpt
-            self._queue = Queue(queue_size)
+            self._queue = utils.Queue(queue_size)
             for i in range(core_size):
                 self._worker = Worker(self, self._queue, i)
                 self._worker.start()
@@ -946,7 +963,7 @@ class ConnectionCheckAlive(threading.Thread):
         try:
             if not self._connection.is_close():
                 self._connection._send_ws_ping()
-                #print "SESSION - PING INVIATO!"                
+                #print("SESSION - PING INVIATO!")                
         except:
             #traceback.print_exc()
             None
@@ -962,7 +979,7 @@ class ConnectionCheckAlive(threading.Thread):
         
             
     def run(self):
-        #print "Thread alive started: " + str(self._connection)        
+        #print("Thread alive started: " + str(self._connection))        
         bfireclose=False
         while not self._connection.is_shutdown():
             time.sleep(1)
@@ -970,11 +987,11 @@ class ConnectionCheckAlive(threading.Thread):
             try:
                 #Verifica alive
                 if not self._connection_keepalive_send:                    
-                    #print "Thread alive send counter: " + str(self._counter.get_value()) + " " + str(self._connection)                    
+                    #print("Thread alive send counter: " + str(self._counter.get_value()) + " " + str(self._connection))                    
                     if self._counter.is_elapsed((ConnectionCheckAlive._KEEPALIVE_INTERVALL-ConnectionCheckAlive._KEEPALIVE_THRESHOLD)):
                         self._connection_keepalive_send=True
                         self._send_keep_alive()
-                        #print "Thread alive send: " + str(self._connection)
+                        #print("Thread alive send: " + str(self._connection))
                         
                 else:
                     if self._counter.is_elapsed((ConnectionCheckAlive._KEEPALIVE_INTERVALL+ConnectionCheckAlive._KEEPALIVE_THRESHOLD)):
@@ -985,7 +1002,7 @@ class ConnectionCheckAlive(threading.Thread):
         self._connection.shutdown();
         if bfireclose is True:
             self._connection.fire_close(True)        
-        #print "Thread alive stopped: " + str(self._connection)
+        #print("Thread alive stopped: " + str(self._connection))
 
 class ConnectionReader(threading.Thread):
     
@@ -1004,11 +1021,11 @@ class ConnectionReader(threading.Thread):
             self._connection._tdalive.reset();
             data.append(s)
             cnt+=len(s)
-        return ''.join(data)
+        return utils.bytes_join(data)
         
     
     def run(self):
-        #print "Thread read started: " + str(self._connection)        
+        #print("Thread read started: " + str(self._connection))        
         bfireclose=False
         bconnLost=True
         sock = self._connection.get_socket()
@@ -1020,18 +1037,18 @@ class ConnectionReader(threading.Thread):
                     break
                 else:
                     lendt=0;
-                    bt1=ord(data[1]);
+                    bt1=utils.bytes_get(data,1);
                     if bt1 <= 125:
                         if bt1 > 0:
                             lendt = bt1;
                         else:
-                            bt0=ord(data[0]);
+                            bt0=utils.bytes_get(data,0);
                             if bt0 == 136: #CLOSE  
                                 bconnLost=False                              
                                 bfireclose=not self._connection.is_close()
                                 break
                             elif bt0 == 138: #PONG
-                                #print "SESSION - PONG RICEVUTO!"
+                                #print("SESSION - PONG RICEVUTO!")
                                 continue
                             else:
                                 continue    
@@ -1058,7 +1075,7 @@ class ConnectionReader(threading.Thread):
                     else:
                         bfireclose=not self._connection.is_close()
                         break
-                    self._connection.fire_data(utils.Bytes(data))                    
+                    self._connection.fire_data(data)
                     
         except:
             e=utils.get_exception()
@@ -1068,7 +1085,7 @@ class ConnectionReader(threading.Thread):
         self._connection.shutdown()
         if bfireclose is True:
             self._connection.fire_close(bconnLost)        
-        #print "Thread read stopped: " + str(self._connection)
+        #print("Thread read stopped: " + str(self._connection))
         
 
 class Connection:
@@ -1093,6 +1110,23 @@ class Connection:
         self._sock = None
         self._tdalive = None
         self._tdread = None
+        #WEBSOCKET DATA
+        self._ws_data_b0 = 0;
+        self._ws_data_b0 |= 1 << 7;
+        self._ws_data_b0 |= 0x2 % 128;
+        self._ws_data_struct_1=struct.Struct("!BBI")
+        self._ws_data_struct_2=struct.Struct("!BBBBI")
+        self._ws_data_struct_3=struct.Struct("!BBII")
+        #WEBSOCKET PING
+        self._ws_ping_b0 = 0
+        self._ws_ping_b0 |= 1 << 7;
+        self._ws_ping_b0 |= 0x9 % 128;
+        self._ws_ping_struct=struct.Struct("!BBI")
+        #WEBSOCKET CLOSE
+        self._ws_close_b0 = 0;
+        self._ws_close_b0 |= 1 << 7;
+        self._ws_close_b0 |= 0x8 % 128;
+        self._ws_close_struct=struct.Struct("!BBI")
                 
             
     def open(self, prop, proxy_info):
@@ -1151,14 +1185,13 @@ class Connection:
     
    
     def send(self, data):
-        self._send_ws_data(data)        
+        self._send_ws_data(data)
         
     def fire_data(self, dt):
         if self._on_data is not None:
             self._on_data(dt)        
             
     def fire_close(self,connlost):        
-        onc=None
         with self._lock_status:
             self._connection_lost=connlost
             onc=self._on_close
@@ -1172,52 +1205,52 @@ class Connection:
         if self._on_except is not None:
             self._on_except(e) 
     
-    def _send_ws_data(self,data):
+    def _send_ws_data(self,dt):
         if self._sock is None:
             raise Exception('connection closed.')
-        data.encode_ws_data()
         self._lock_send.acquire()
         try:
-            utils.socket_sendall(self._sock,data)
+            length = len(dt);
+            if length <= 125:
+                ba=bytearray(self._ws_data_struct_1.pack(self._ws_data_b0, 0x80|length,0)) #rnd=random.randint(0,2147483647)
+            elif length <= 0xFFFF:
+                ba=bytearray(self._ws_data_struct_2.pack(self._ws_data_b0, 0xFE,length >> 8 & 0xFF,length & 0xFF,0)) #rnd=random.randint(0,2147483647)
+            else: 
+                ba=bytearray(self._ws_data_struct_3.pack(self._ws_data_b0, 0xFF,length,0)) #rnd=random.randint(0,2147483647)
+            ba+=dt
+            utils.socket_sendall(self._sock,ba)
         finally:
-            self._lock_send.release()               
+            self._lock_send.release()
             
     def _send_ws_close(self):
         if self._sock is None:
             raise Exception('connection closed.')
-        bts = utils.Bytes()
-        bts.encode_ws_close()
         self._lock_send.acquire()
-        try:            
-            utils.socket_sendall(self._sock,bts)
+        try:
+            utils.socket_sendall(self._sock,self._ws_close_struct.pack(self._ws_close_b0, 0x80 | 0, 0)) #rnd=random.randint(0,2147483647)
         finally:
             self._lock_send.release() 
     
     def _send_ws_ping(self):
         if self._sock is None:
             raise Exception('connection closed.')
-        bts = utils.Bytes()
-        bts.encode_ws_ping()        
         self._lock_send.acquire()
         try:
-            utils.socket_sendall(self._sock,bts)
+            utils.socket_sendall(self._sock,self._ws_ping_struct.pack(self._ws_ping_b0, 0x80 | 0, 0)) #rnd=random.randint(0,2147483647)
         finally:
             self._lock_send.release()
 
     def is_close(self):
-        bret = True
         with self._lock_status:
             bret = self._close
         return bret
     
     def is_connection_lost(self):
-        bret = True
         with self._lock_status:
             bret = self._connection_lost
         return bret        
     
     def is_shutdown(self):
-        bret = True
         with self._lock_status:
             bret = self._shutdown
         return bret
@@ -1232,7 +1265,7 @@ class Connection:
                     self._on_data= None
                     self._on_close = None
                     self._on_except = None
-                    #print "session send stream close."
+                    #print("session send stream close.")
             if bsendclose:
                 self._send_ws_close();
                 #Attende lo shutdown

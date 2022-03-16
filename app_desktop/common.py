@@ -8,8 +8,8 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import ctypes
 
 _libmap={}
-_libmap["lastID"]=0l
-_libmap["capscrID"]=0l
+_libmap["lastID"]=0
+_libmap["capscrID"]=0
 
 #CALLBACKS
 SCRDBGFUNC = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_wchar_p)
@@ -68,7 +68,7 @@ TYPE_FRAME_PALETTE_V1 =  0
 TYPE_FRAME_TJPEG_V1 = 100
 TYPE_FRAME_TJPEG_V2 = 101
 
-MAX_CURSOR_IMAGE_SIZE=256
+MAX_CURSOR_IMAGE_SIZE=512*1024
 RGB_IMAGE_DIFFSIZE = 1000
 MONITORS_INFO_ITEM_MAX=1000;
 

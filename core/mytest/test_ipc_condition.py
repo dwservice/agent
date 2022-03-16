@@ -12,27 +12,27 @@ class Test(ipc.ChildProcessThread):
     def run(self):
         strm = self.get_stream()
         mp1 = strm.read_obj()
-        print ("CHILD ACQUIRE")
+        print("CHILD ACQUIRE")
         mp1.acquire()
-        print ("CHILD SLEEP 4s")
+        print("CHILD SLEEP 4s")
         
         time.sleep(4)
         
         mp1.notify_all()
-        print ("CHILD NOTIFY ALL")
+        print("CHILD NOTIFY ALL")
         mp1.release()
         time.sleep(2)
         strm.close()
-        print ("CHILD CLOSE")
+        print("CHILD CLOSE")
         time.sleep(2)
     
 
 if __name__ == "__main__":
     ipc.initialize()
-    print ("BEGIN")
+    print("BEGIN")
     
     mp = ipc.Condition()
-    print ("PARENT ACQUIRE")
+    print("PARENT ACQUIRE")
     mp.acquire()     
     
              
@@ -40,19 +40,19 @@ if __name__ == "__main__":
     lstrm = p.start()    
     lstrm.write_obj(mp)      
    
-    print ("PARENT WAIT 5s")
+    print("PARENT WAIT 5s")
     mp.wait(5)    
     
 
-    print ("PARENT RELEASE")        
+    print("PARENT RELEASE")        
     mp.release()        
     lstrm.close()    
     
-    print ("PARENT CLOSE")    
+    print("PARENT CLOSE")    
     #WAIT REMOVE IPC
     p.join()
     time.sleep(4)    
-    print ("END")
+    print("END")
     ipc.terminate()
 
 

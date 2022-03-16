@@ -7,9 +7,19 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 import time
 import os
+import utils
 from threading import Thread
-from win32.native import *
 from ctypes import *
+from .win32.native import *
+
+##### TO FIX 22/09/2021
+try:
+    TMP_bytes_to_str=utils.bytes_to_str
+    TMP_str_to_bytes=utils.str_to_bytes
+except:
+    TMP_bytes_to_str=lambda b, enc="ascii": b.decode(enc, errors="replace")
+    TMP_str_to_bytes=lambda s, enc="ascii": s.encode(enc, errors="replace")
+##### TO FIX 22/09/2021
 
 class ConPty(Thread):
 
@@ -82,7 +92,7 @@ class ConPty(Thread):
     
             # Initialize startup info
             self._startupInfoEx = STARTUPINFOEX()
-            self._startupInfoEx.StartupInfo.cb = sizeof(STARTUPINFOEX)        
+            self._startupInfoEx.StartupInfo.cb = sizeof(STARTUPINFOEX)
             self.__initStartupInfoExAttachedToPseudoConsole()
             self._lpProcessInformation = PROCESS_INFORMATION()
     
@@ -96,13 +106,13 @@ class ConPty(Thread):
             
             # Create process
             hr = CreateProcess(None,                                        # _In_opt_      LPCTSTR
-                                self._cmd,                                   # _Inout_opt_   LPTSTR
+                                TMP_str_to_bytes(self._cmd),              # _Inout_opt_   LPTSTR
                                 None,                                        # _In_opt_      LPSECURITY_ATTRIBUTES
                                 None,                                        # _In_opt_      LPSECURITY_ATTRIBUTES
                                 False,                                       # _In_          BOOL
                                 EXTENDED_STARTUPINFO_PRESENT,                # _In_          DWORD
                                 None,                                        # _In_opt_      LPVOID
-                                defpath,                                        # _In_opt_      LPCTSTR
+                                TMP_str_to_bytes(defpath),                                    # _In_opt_      LPCTSTR
                                 byref(self._startupInfoEx.StartupInfo),      # _In_          LPSTARTUPINFO
                                 byref(self._lpProcessInformation))           # _Out_
     
@@ -113,8 +123,8 @@ class ConPty(Thread):
             self._status=u"OPEN"
             WaitForSingleObject(self._lpProcessInformation.hThread, 10 * 1000)
         except Exception as e:
-            self._status=u"ERROR:" + str(e)
-            self.write_err(str(e))            
+            self._status=u"ERROR:" + utils.exception_to_string(e)
+            self.write_err(utils.exception_to_string(e))            
 
     def open(self, timeout=20):
         self.start()

@@ -25,23 +25,20 @@ void TaskMng::appendMemoryUsage(HANDLE hProcess_i, JSONWriter* jsonw){
 void TaskMng::appendProcessOwner(HANDLE hProcess_i, JSONWriter* jsonw){
    wstring sown;
    HANDLE hProcessToken = NULL;
-   if ( ::OpenProcessToken( hProcess_i, TOKEN_READ, &hProcessToken ) || !hProcessToken )  {
+   if (::OpenProcessToken(hProcess_i, TOKEN_READ, &hProcessToken) || !hProcessToken )  {
 	   DWORD dwProcessTokenInfoAllocSize = 0;
 	   ::GetTokenInformation(hProcessToken, TokenUser, NULL, 0, &dwProcessTokenInfoAllocSize);
-	   if( ::GetLastError() == ERROR_INSUFFICIENT_BUFFER )
-	   {
+	   if( ::GetLastError() == ERROR_INSUFFICIENT_BUFFER ){
 		  PTOKEN_USER pUserToken = reinterpret_cast<PTOKEN_USER>( new BYTE[dwProcessTokenInfoAllocSize] );
-		  if (pUserToken != NULL)
-		  {
-			 if (::GetTokenInformation( hProcessToken, TokenUser, pUserToken, dwProcessTokenInfoAllocSize, &dwProcessTokenInfoAllocSize ))
-			 {
+		  if (pUserToken != NULL){
+			if (::GetTokenInformation( hProcessToken, TokenUser, pUserToken, dwProcessTokenInfoAllocSize, &dwProcessTokenInfoAllocSize )){
 				SID_NAME_USE   snuSIDNameUse;
-				TCHAR          szUser[MAX_PATH] = { 0 };
+				wchar_t        szUser[MAX_PATH] = { 0 };
 				DWORD          dwUserNameLength = MAX_PATH;
-				TCHAR          szDomain[MAX_PATH] = { 0 };
+				wchar_t        szDomain[MAX_PATH] = { 0 };
 				DWORD          dwDomainNameLength = MAX_PATH;
 
-				if ( ::LookupAccountSid( NULL,
+				if ( ::LookupAccountSidW( NULL,
 										 pUserToken->User.Sid,
 										 szUser,
 										 &dwUserNameLength,
@@ -49,12 +46,12 @@ void TaskMng::appendProcessOwner(HANDLE hProcess_i, JSONWriter* jsonw){
 										 &dwDomainNameLength,
 										 &snuSIDNameUse )){
 				   // Prepare user name string
-				   sown.append(towstring(szDomain));
+				   sown.append(szDomain);
 				   sown.append(L"\\");
-				   sown.append(towstring(szUser));
+				   sown.append(szUser);
 				}
-			 }
-			 delete [] pUserToken;
+			}
+			delete [] pUserToken;
 		  }
 	   }
    }
@@ -81,21 +78,21 @@ void TaskMng::appendProcessOwner(HANDLE hProcess_i, JSONWriter* jsonw){
     CloseHandle(hToken);
 }*/
 
-wchar_t* TaskMng::getTaskList() {
+int TaskMng::getTaskList(wchar_t** sret) {
 	JSONWriter jsonw;
 	jsonw.beginArray();
 	//EnableDebugPriv();
 
-    PROCESSENTRY32 entry;
-    entry.dwSize = sizeof(PROCESSENTRY32);
+    PROCESSENTRY32W entry;
+    entry.dwSize = sizeof(PROCESSENTRY32W);
 
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 
-    if (Process32First(snapshot, &entry) == TRUE){
-        while (Process32Next(snapshot, &entry) == TRUE){
+    if (Process32FirstW(snapshot, &entry) == TRUE){
+        while (Process32NextW(snapshot, &entry) == TRUE){
         	jsonw.beginObject();
 
-        	jsonw.addString(L"Name", towstring(entry.szExeFile));
+        	jsonw.addString(L"Name", entry.szExeFile);
         	jsonw.addNumber(L"PID", entry.th32ProcessID);
 			HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, entry.th32ProcessID);
 			appendMemoryUsage(hProcess, &jsonw);
@@ -110,7 +107,9 @@ wchar_t* TaskMng::getTaskList() {
     CloseHandle(snapshot);
 
     jsonw.endArray();
-	return towcharp(jsonw.getString());
+    wstring str=jsonw.getString();
+	*sret=towcharp(str);
+	return str.length();
 }
 
 int TaskMng::taskKill(int pid) {

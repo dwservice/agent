@@ -5,12 +5,8 @@ This Source Code Form is subject to the terms of the Mozilla
 Public License, v. 2.0. If a copy of the MPL was not distributed
 with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
-
-import BaseHTTPServer
-from urlparse import urlparse, parse_qs
 import threading
 import time
-import sys
 import ipc
 import json
 import os
@@ -75,7 +71,7 @@ class IPCStatus(threading.Thread):
     def run(self):
         logwait=60*10
         while not self._bclose:
-            if self._cnt==sys.maxint:
+            if self._cnt==utils.sys_maxsize:
                 self._cnt=0
             else:
                 self._cnt+=1
@@ -85,20 +81,20 @@ class IPCStatus(threading.Thread):
                 sapp = self._agent.get_group()
                 if sapp is None:
                     sapp=""
-                sapp=sapp.encode("unicode-escape");
+                if utils.is_py2():
+                    sapp=sapp.encode("unicode-escape");
                 self._prop.set_property("group", sapp)
                 
                 sapp = self._agent.get_name()
                 if sapp is None:
                     sapp=""
-                sapp=sapp.encode("unicode-escape");
+                if utils.is_py2():
+                    sapp=sapp.encode("unicode-escape");
                 self._prop.set_property("name", sapp)
                 
                 jo = self._agent.get_active_sessions_status()                
                 self._prop.set_property("connections", str(len(jo))) #TO REMOVE 2021-02-11                
                 self._prop.set_property("sessions_status", json.dumps(jo))
-                
-                                
             except:
                 e=utils.get_exception()
                 if logwait>=60*10:
@@ -132,15 +128,15 @@ class IPCConfig(threading.Thread):
             if request_pid!="":
                 try:
                     request_data = None
-                    #Attende 2 secondi che la richiesta
+                    #Wait 2 seconds for request
                     for i in range(20):
                         request_data = self._prop.get_property("request_data");
                         if request_data!="":
                             break
                         time.sleep(0.1)
                     if request_data is not None:
-                        self._prop.set_property("response_data",self._invoke_request(request_data))                    
-                        #Attende 2 secondi che la risposta venga letta
+                        self._prop.set_property("response_data",self._invoke_request(request_data))
+                        #Wait 2 seconds for read response
                         for i in range(20):
                             if self._prop.get_property("request_data")=="":
                                 break
@@ -164,7 +160,7 @@ class IPCConfig(threading.Thread):
                     return func(prms)
                 except:
                     e=utils.get_exception()
-                    return "ERROR:" + str(e)
+                    return "ERROR:" + utils.exception_to_string(e)
             except:
                 return "ERROR:INVALID_REQUEST"
         else:
@@ -284,9 +280,9 @@ class IPCClient():
                     prms["_request"]=req
                     prms["_user"]=usr
                     #Hash password
-                    encpwd= hashlib.sha256(pwd).digest()
-                    encpwd= base64.b64encode(encpwd)
-                    prms["_password"]=encpwd
+                    encpwd=hashlib.sha256(utils.str_to_bytes(pwd,"utf8")).digest()
+                    encpwd=base64.b64encode(encpwd)
+                    prms["_password"]=utils.bytes_to_str(encpwd)
                     
                     self._prop.set_property("request_data",json.dumps(prms))
                     self._prop.set_property("response_data","")
@@ -383,24 +379,24 @@ class HttpServer(threading.Thread):
             self._close=True
             self._httpd.shutdown() 
 '''
-class HttpConfigServer(BaseHTTPServer.HTTPServer):
+class HttpConfigServer(utils.HTTPServer):
     
     def __init__(self, port, agent):
         server_address = ('127.0.0.1', port)
-        BaseHTTPServer.HTTPServer.__init__(self, server_address, HttpConfigHandler)
+        utils.HTTPServer.__init__(self, server_address, HttpConfigHandler)
         self._agent = agent
     
     def get_agent(self):
         return self._agent
 
 
-class HttpConfigHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+class HttpConfigHandler(utils.BaseHTTPRequestHandler):
 
     def do_GET(self):
         #Legge richiesta
-        o = urlparse(self.path)
+        o = utils.url_parse(self.path)
         nm = o.path
-        qs = parse_qs(o.query)
+        qs = utils.url_parse_qs(o.query)
         #Invia risposta
         resp={}
         resp['code']=404

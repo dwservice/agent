@@ -21,7 +21,7 @@ using namespace std;
 class SystemMng{
 public:
 	SystemMng();
-	wchar_t* getInfo();
+	int getInfo(wchar_t** sret);
 
 #if defined OS_WINDOWS
 	bool isWinNTFamily();

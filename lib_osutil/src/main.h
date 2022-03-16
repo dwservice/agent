@@ -19,18 +19,19 @@ extern "C"{
 void freeMemory(LPVOID lb);
 #endif
 
+
 int taskKill(int pid);
 int isTaskRunning(int pid);
-wchar_t* getTaskList();
+int DWAOSUtilGetTaskList(wchar_t** sret);
 
-wchar_t* getServiceList();
+int DWAOSUtilGetServiceList(wchar_t** sret);
 int startService(wchar_t* serviceName);
 int stopService(wchar_t* serviceName);
 
-wchar_t* getSystemInfo();
-wchar_t* getPerformanceInfo();
+int DWAOSUtilGetSystemInfo(wchar_t** sret);
+int DWAOSUtilGetPerformanceInfo(wchar_t** sret);
 
-wchar_t* getDiskInfo();
+int DWAOSUtilGetDiskInfo(wchar_t** sret);
 int isFileJunction(wchar_t* path);
 }
 

@@ -38,6 +38,22 @@ int record(void *outputBuffer, void *inputBuffer, unsigned int nBufferFrames,
 	return 0;
 }
 
+int getCurOutput(rtaudio* adc){
+	int dvout=-1;
+	#if defined OS_LINUX
+		for (unsigned int i=0;i<=deviceCount-1;i++){
+			rtaudio_device_info_t di = rtaudio_get_device_info(adc,i);
+			if (strcasestr(di.name,"monitor")!=NULL){
+				dvout=i;
+				break;
+			}
+		}
+	#else
+		dvout=rtaudio_get_default_output_device(adc);
+	#endif
+	return dvout;
+}
+
 int DWASoundCaptureStart(AUDIO_CONFIG* audioconf,CallbackRecord cbrec,void** capses){
 	AudioCaptureSessionInfo* cs = new AudioCaptureSessionInfo();
 	cs->bStreamAlive=false;
@@ -54,7 +70,7 @@ int DWASoundCaptureStart(AUDIO_CONFIG* audioconf,CallbackRecord cbrec,void** cap
 		return -91;
 	}
 	deviceCount = rtaudio_device_count(cs->adc);
-	deviceOut = rtaudio_get_default_output_device(cs->adc);
+	deviceOut = getCurOutput(cs->adc);
 	if (deviceCount==0 || deviceOut>deviceCount-1){
 		rtaudio_destroy(cs->adc);
 		return -92;
@@ -80,7 +96,12 @@ int DWASoundCaptureStart(AUDIO_CONFIG* audioconf,CallbackRecord cbrec,void** cap
 
 int DWASoundCaptureGetDetectOutputName(void* capses,char* bf, int sz){
 	AudioCaptureSessionInfo* cs = (AudioCaptureSessionInfo*)capses;
-	rtaudio_device_info_t di = rtaudio_get_device_info(cs->adc,rtaudio_get_default_output_device(cs->adc));
+	int dvcnt = rtaudio_device_count(cs->adc);
+	int dvout = getCurOutput(cs->adc);
+	if (dvcnt==0 || dvout>dvcnt-1){
+		return 0;
+	}
+	rtaudio_device_info_t di = rtaudio_get_device_info(cs->adc,dvout);
 	strncpy(bf,di.name,sz);
 	return strlen(di.name);
 }

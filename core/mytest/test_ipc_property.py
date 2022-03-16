@@ -9,7 +9,7 @@ import ipc
 if __name__ == "__main__":
     
     ipc.initialize()
-    print ("BEGIN")
+    print("BEGIN")
     
     t1 = ipc.Property()
     fieldsdef=[]
@@ -24,10 +24,10 @@ if __name__ == "__main__":
     
     t2 = ipc.Property()
     t2.open("prova")
-    print t2.get_property("status")
-    print t2.get_property("counter")
+    print(t2.get_property("status"))
+    print(t2.get_property("counter"))
     t2.close()
-    print ("END")
+    print("END")
     ipc.terminate()
 
 

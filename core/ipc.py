@@ -20,17 +20,6 @@ import stat
 import native
 import importlib
 import threading
-import _multiprocessing
-import multiprocessing.synchronize
-import multiprocessing.forking
-try:
-    from cPickle import Pickler, Unpickler
-except ImportError:
-    from pickle import Pickler, Unpickler
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
 
 _struct_IIcc=struct.Struct("!IIcc")
 _struct_I=struct.Struct("!I")
@@ -53,6 +42,19 @@ _ipcmap["childsharedobj"] = []
 _ipcmap["threadsharedobj"]={}
 _ipcmap["list_names_lock"]=threading.RLock()
 _ipcmap["list_names"]=[]
+
+try:
+    import _multiprocessing
+    import multiprocessing.synchronize
+    if utils.is_windows():
+        if utils.is_py2():
+            import multiprocessing.forking
+            import _subprocess
+        else:
+            import _winapi
+except:
+    _ipcmap["libbaseloaded"] = True
+
 
 
 class SEMAPHORE_DEF(ctypes.Structure):
@@ -86,7 +88,7 @@ def _destroy_child_shared_obj():
                 obj._destroy()
             except:
                 ex = utils.get_exception()
-                print "_destroy_child_shared_obj  " + str(obj) + " - err: " + str(ex)
+                print("_destroy_child_shared_obj  " + str(obj) + " - err: " + utils.exception_to_string(ex))
         _ipcmap["childsharedobj"]=None
     finally:
         _ipcmap["childsharedobjsemaphore"].release()
@@ -110,10 +112,10 @@ def _add_name(suffix):
                     if not utils.is_windows():
                         pth = process_manager._get_release_path("dwa_" + spid)
                         if not os.path.exists(pth):
-                            with utils.file_open(pth, "wb") as f:
+                            with utils.file_open(pth, "w", encoding="utf-8") as f:
                                 f.write("[]")
                             utils.path_change_permissions(pth, stat.S_IRUSR | stat.S_IWUSR)
-                        with utils.file_open(pth, "wb") as f:
+                        with utils.file_open(pth, "w", encoding="utf-8") as f:
                             f.write(json.dumps(_ipcmap["list_names"])) 
                     return nm
 
@@ -124,7 +126,7 @@ def _rem_name(nm):
             if not utils.is_windows():
                 spid=str(os.getpid())
                 pth = process_manager._get_release_path("dwa_" + spid)
-                with utils.file_open(pth, "wb") as f:
+                with utils.file_open(pth, "w", encoding="utf-8") as f:
                     f.write(json.dumps(_ipcmap["list_names"]))
 
 def _fix_perm_get_mode(fixperm):
@@ -142,21 +144,13 @@ def _fix_perm_path(fpath, fixperm):
 
 def initialize():
         try:
-            ########################################################################################################################
-            ##### OLD 27/07/2021 TO REMOVE    
-            ########################################################################################################################
-            import sharedmem
-            sharedmem.init_path()
-        except:
-            None
-        try:
             if not utils.path_exists(IPC_PATH):
                 utils.path_makedir(IPC_PATH)
             else:
                 clear_path(True)
         except:
             e = utils.get_exception()
-            print "ipc init_path error: " + str(e)        
+            print("ipc init_path error: " + utils.exception_to_string(e))        
         process_manager.start()
 
 def terminate():
@@ -207,24 +201,24 @@ def clear_path(checkpid=False):
                 None
 
 def _dump_obj(o, prc):    
-    sret=None
+    dtret=None
     _ipcmap["picklesemaphore"].acquire()
     oldprc = _ipcmap["pickleprocess"]
     try:
         _ipcmap["pickleprocess"] = prc
-        sfile = StringIO()
-        Pickler(sfile, -1).dump(o)
-        sret = sfile.getvalue()
+        sfile = utils.BytesIO()
+        utils.Pickler(sfile, -1).dump(o)
+        dtret = sfile.getvalue()
     finally:
         _ipcmap["pickleprocess"] = oldprc
         _ipcmap["picklesemaphore"].release()
-    return sret
+    return dtret
 
-def _load_obj(s):
-    if s is None:
+def _load_obj(dt):
+    if dt is None:
         return None    
-    sfile = StringIO(s)
-    return Unpickler(sfile).load()
+    sfile = utils.BytesIO(dt)
+    return utils.Unpickler(sfile).load()
 
 def is_load_libbase():
     _ipcmap["semaphore"].acquire()
@@ -262,14 +256,17 @@ class SemIPC(object):
         if is_load_libbase():
             self._libbase=_ipcmap["libbase"]
             if utils.is_windows():
-                self._semlock = _multiprocessing.SemLock(kind, value, maxvalue)
+                if utils.is_py2():
+                    self._semlock = _multiprocessing.SemLock(kind, value, maxvalue)
+                else:
+                    self._semlock = _multiprocessing.SemLock(kind, value, maxvalue, "", True)
             else:
                 cnttry=0
                 while True:
                     sid=_add_name(SEM_NAME)
                     self._sem_name=sid
                     self._sem_def = SEMAPHORE_DEF()
-                    self._sem_def.name=self._sem_name
+                    self._sem_def.name=utils.str_to_bytes(self._sem_name)
                     self._sem_def.create=1
                     self._sem_def.mode=_fix_perm_get_mode(fixperm)
                     self._sem_def.semvalue=value
@@ -284,11 +281,14 @@ class SemIPC(object):
                         raise Exception("Semaphore initialize failed.")
                     else:
                         time.sleep(0.2)
-                        
-                self._semlock = _multiprocessing.SemLock._rebuild(*(self._sem_def.sem, kind, maxvalue))
+                
+                if utils.is_py2():
+                    self._semlock = _multiprocessing.SemLock._rebuild(*(self._sem_def.sem, kind, maxvalue))
+                else:
+                    self._semlock = _multiprocessing.SemLock._rebuild(*(self._sem_def.sem, kind, maxvalue, None))
             
             self._type=kind
-            self._max=maxvalue            
+            self._max=maxvalue
         else:
             raise Exception("Semaphore libabase load failed.")
             
@@ -299,9 +299,14 @@ class SemIPC(object):
             raise Exception("No child process attached")
         sid=None        
         if utils.is_windows():
-            chandle = _multiprocessing.win32.OpenProcess(_multiprocessing.win32.PROCESS_ALL_ACCESS, False, prc.get_pid())
-            sid = multiprocessing.forking.duplicate(self._semlock.handle,chandle)
-            multiprocessing.forking.close(chandle)
+            if utils.is_py2():
+                chandle = _multiprocessing.win32.OpenProcess(_multiprocessing.win32.PROCESS_ALL_ACCESS, False, prc.get_pid())
+                sid = _subprocess.DuplicateHandle(_subprocess.GetCurrentProcess(), self._semlock.handle, chandle, 0, False, _subprocess.DUPLICATE_SAME_ACCESS).Detach()
+                multiprocessing.forking.close(chandle)
+            else:
+                chandle = _winapi.OpenProcess(_winapi.PROCESS_ALL_ACCESS, False, prc.get_pid())
+                sid = _winapi.DuplicateHandle(_winapi.GetCurrentProcess(), self._semlock.handle, chandle, 0, False, _winapi.DUPLICATE_SAME_ACCESS)
+                _winapi.CloseHandle(chandle)
         else:
             sid = self._sem_name
         prc._add_shared_obj(self)
@@ -317,15 +322,21 @@ class SemIPC(object):
         if is_load_libbase():
             self._libbase=_ipcmap["libbase"]
             if utils.is_windows():
-                self._semlock = _multiprocessing.SemLock._rebuild(*state)
+                if utils.is_py2():
+                    self._semlock = _multiprocessing.SemLock._rebuild(*state)
+                else:
+                    self._semlock = _multiprocessing.SemLock._rebuild(*(state[0],state[1],state[2],None))
             else: 
                 self._sem_name=state[0]
                 self._sem_def=SEMAPHORE_DEF()
-                self._sem_def.name=self._sem_name
+                self._sem_def.name=utils.str_to_bytes(self._sem_name)
                 self._sem_def.create=0
                 iret = self._libbase.semaphoreInitialize(ctypes.byref(self._sem_def))                    
                 if iret==0:
-                    self._semlock=_multiprocessing.SemLock._rebuild(*(self._sem_def.sem,state[1],state[2]))
+                    if utils.is_py2():
+                        self._semlock=_multiprocessing.SemLock._rebuild(*(self._sem_def.sem,state[1],state[2]))
+                    else:
+                        self._semlock=_multiprocessing.SemLock._rebuild(*(self._sem_def.sem,state[1],state[2],None))
                 else:
                     raise Exception("Semaphore initialize failed.")
             _add_child_shared_obj(self)
@@ -530,13 +541,13 @@ class ConditionIPC(object):
         assert self._lock._semlock._is_mine(), 'must acquire() condition before using wait()'
         self._sleeping_count.release()
         count = self._lock._semlock._count()
-        for i in xrange(count):
+        for i in utils.nrange(count):
             self._lock.release()
         try:
             self._wait_semaphore.acquire(True, timeout)
         finally:
             self._woken_count.release()
-            for i in xrange(count):
+            for i in utils.nrange(count):
                 self._lock.acquire()
         
     def notify(self):
@@ -563,7 +574,7 @@ class ConditionIPC(object):
             sleepers += 1
 
         if sleepers:
-            for i in xrange(sleepers):
+            for i in utils.nrange(sleepers):
                 self._woken_count.acquire()
             while self._wait_semaphore.acquire(False):
                 pass
@@ -749,13 +760,13 @@ class StreamIPC():
             fixperm=None
             if self._prop is not None and "fixperm" in self._prop:
                 fixperm=self._prop["fixperm"]
-            appsz = 1*1024*1024l
+            appsz = 1*1024*1024
             if self._prop is not None and "size" in self._prop:
                 appsz=self._prop["size"] 
-            self._size1 = long(appsz/2)
+            self._size1 = int(appsz/2)
             if self._prop is not None and "size1" in self._prop:
                 self._size1 = self._prop["size1"] 
-            self._size2 = long(appsz/2)
+            self._size2 = int(appsz/2)
             if self._prop is not None and "size2" in self._prop:
                 self._size2 = self._prop["size2"]       
             
@@ -798,8 +809,8 @@ class StreamIPC():
             self._write_start_pos=self._mmap_state_size
             self._read_start_pos=self._mmap_state_size + self._size1
             self._mmap.seek(0)
-            self._mmap.write(_struct_IIcc.pack(self._write_start_pos,self._write_start_pos,"C","K"))
-            self._mmap.write(_struct_IIcc.pack(0,0,"I","K"))
+            self._mmap.write(_struct_IIcc.pack(self._write_start_pos,self._write_start_pos,b"C",b"K"))
+            self._mmap.write(_struct_IIcc.pack(0,0,b"I",b"K"))
         elif self._side==2:
             self._write_size = self._size2
             self._read_size = self._size1
@@ -810,13 +821,13 @@ class StreamIPC():
             self._write_start_pos=self._mmap_state_size + self._size1
             self._read_start_pos=self._mmap_state_size
             self._mmap.seek(self._write_pos)
-            self._mmap.write(_struct_IIcc.pack(self._write_start_pos,self._write_start_pos,"C","K"))                
+            self._mmap.write(_struct_IIcc.pack(self._write_start_pos,self._write_start_pos,b"C",b"K"))                
      
     def _close_nosync(self):
         if not self._bclose:
             self._bclose=True
             self._mmap.seek(self._state_pos)
-            self._mmap.write(_struct_c.pack("X"))            
+            self._mmap.write(_struct_c.pack(b"X"))
     
     def close(self):
         if self._binit==False or self._cond is None or self._mmap is None:
@@ -845,8 +856,8 @@ class StreamIPC():
                 pw, pr, st, ka = _struct_IIcc.unpack(self._mmap.read(10))
                 self._mmap.seek(self._state_pos_other)
                 st_other, ka_other = _struct_cc.unpack(self._mmap.read(2))
-                #if st_other=="X" or st_other=="T":
-                if st_other=="X":
+                #if st_other==b"X" or st_other==b"T":
+                if st_other==b"X":
                     self._close_nosync()
                     break
                 if pw>=pr:
@@ -864,14 +875,14 @@ class StreamIPC():
                 else:   
                     self._mmap.seek(pw)
                     if sz<=szlimit:
-                        self._mmap.write(buffer(data,p))
+                        self._mmap.write(utils.buffer_new(data,p,len(data)-p))
                         pw+=sz
                         if pw-self._write_start_pos==self._write_size:
                             pw=self._write_start_pos
                         p+=sz
                         sz=0                                                    
                     else:
-                        self._mmap.write(buffer(data,p,szlimit))
+                        self._mmap.write(utils.buffer_new(data,p,szlimit))
                         pw+=szlimit
                         if pw-self._write_start_pos==self._write_size:
                             pw=self._write_start_pos
@@ -882,7 +893,7 @@ class StreamIPC():
                             if sz>szremain:
                                 ln = szremain
                             self._mmap.seek(pw)
-                            self._mmap.write(buffer(data,p,ln))
+                            self._mmap.write(utils.buffer_new(data,p,ln))
                             pw+=ln
                             if pw-self._write_start_pos==self._write_size:
                                 pw=self._write_start_pos
@@ -913,8 +924,8 @@ class StreamIPC():
                 elif pw<pr:
                     sz=self._read_size-(pr-self._read_start_pos)
                 if pw==pr: # or (numbytes>0 and numbytes>sz):
-                    #if st=="X" or st=="T":
-                    if st=="X":
+                    #if st==b"X" or st==b"T":
+                    if st==b"X":
                         self._close_nosync()
                         break
                     self._cond.wait(1)
@@ -939,7 +950,7 @@ class StreamIPC():
                     self._cond.notify_all()
                     if numbytes==0:
                         if dt is None:
-                            dt="".join(ardt)
+                            dt=utils.bytes_join(ardt)
                         break
         finally:
             self._cond.release()
@@ -1055,7 +1066,7 @@ class MemMapIPC():
                             utils.path_remove(self.fpath)
                         except:
                             ex = utils.get_exception()
-                            print("MemMap remove file error: " + str(ex))
+                            print("MemMap remove file error: " + utils.exception_to_string(ex))
                 elif self.ftype=="M":
                     _rem_name(self.fname)
                     if not utils.is_windows():                        
@@ -1092,7 +1103,7 @@ class MemMapIPC():
                 while True:
                     self.fname = _add_name(MMP_NAME)
                     self.shm_def = SHAREDMEMORY_DEF()
-                    self.shm_def.name=self.fname
+                    self.shm_def.name=utils.str_to_bytes(self.fname)
                     self.shm_def.create=1
                     self.shm_def.size=self.size
                     self.shm_def.mode=_fix_perm_get_mode(fixperm)
@@ -1159,7 +1170,7 @@ class MemMapIPC():
                 if is_load_libbase():
                     self._libbase=_ipcmap["libbase"]
                     self.shm_def = SHAREDMEMORY_DEF()
-                    self.shm_def.name=self.fname
+                    self.shm_def.name=utils.str_to_bytes(self.fname)
                     self.shm_def.create=0
                     self.shm_def.size=self.size
                     iret = self._libbase.sharedMemoryInitialize(ctypes.byref(self.shm_def))
@@ -1216,7 +1227,7 @@ class MemMapIPC():
                     self.mmap=None                    
             except:
                 e = utils.get_exception()
-                serr+="Error map close: " + str(e) + "; ";
+                serr+="Error map close: " + utils.exception_to_string(e) + "; ";
             
             if self.ftype=="F":
                 if self.file is not None:  
@@ -1281,9 +1292,9 @@ class MemMapTHC():
         
     def read(self, sz):
         with self.lck:
-            sret = str(self.data[self.pos:self.pos+sz])
+            sret = utils.bytes_new(self.data[self.pos:self.pos+sz])
             self.pos+=sz
-            return sret        
+            return sret
 
     def close(self):
         self.data=None
@@ -1305,6 +1316,13 @@ class Property():
     def __init__(self):
         self._semaphore = threading.Condition()
         self._binit=False
+        if utils.is_py2():
+            self._mmap_write = lambda s: self._mmap.write(s.encode("utf8", errors="replace"))
+            self._mmap_read = lambda n: self._mmap.read(n).decode("utf8", errors="replace")
+        else:
+            self._mmap_write = lambda s: self._mmap.write(bytes(s, "utf8"))
+            self._mmap_read = lambda n: str(self._mmap.read(n), "utf8")
+            
     
     def create(self, fname, fieldsdef, fixperm=None):
         self._semaphore.acquire()
@@ -1343,14 +1361,14 @@ class Property():
             self._len_def=len(shead)
             self._size=4+self._len_def+szdata
             with utils.file_open(self._path, "wb") as f:
-                f.write(" "*self._size)
+                f.write(b" "*self._size)
             if fixperm is not None:
                 fixperm(self._path)
             self._file=utils.file_open(self._path, "r+b")
             self._mmap = mmap.mmap(self._file.fileno(), 0)
             self._mmap.seek(0)
             self._mmap.write(struct.pack('!i', self._len_def))
-            self._mmap.write(shead)
+            self._mmap.write(utils.str_to_bytes(shead))
             self._binit=True
         finally:
             self._semaphore.release()
@@ -1371,7 +1389,7 @@ class Property():
             self._mmap.seek(0)
             #Legge struttura
             self._len_def=struct.unpack('!i',self._mmap.read(4))[0]
-            shead=self._mmap.read(self._len_def)
+            shead=utils.bytes_to_str(self._mmap.read(self._len_def),"utf8")
             self._fields = json.loads(shead)
             self._binit=True
         finally:
@@ -1388,12 +1406,12 @@ class Property():
                     self._mmap.close()
                 except:
                     e = utils.get_exception()
-                    err+="Error map close:" + str(e) + "; "
+                    err+="Error map close:" + utils.exception_to_string(e) + "; "
                 try:
                     self._file.close()
                 except:
                     e = utils.get_exception()
-                    err+="Error shared file close:" + str(e) + ";"
+                    err+="Error shared file close:" + utils.exception_to_string(e) + ";"
                 if (err!=""):
                     raise Exception(err)
         finally:
@@ -1414,8 +1432,8 @@ class Property():
                     f=self._fields[name];
                     if len(val)<=f["size"]:
                         self._mmap.seek(4+self._len_def+f["pos"])
-                        appv=val + " "*(f["size"]-len(val))
-                        self._mmap.write(appv)
+                        appv=val + " "*(f["size"]-len(val)) 
+                        self._mmap_write(appv)
                     else:
                         raise Exception("Invalid size for property " + name + ".")
                 else:
@@ -1432,7 +1450,7 @@ class Property():
                 if name in self._fields:
                     f=self._fields[name];
                     self._mmap.seek(4+self._len_def+f["pos"])
-                    sret = self._mmap.read(f["size"])
+                    sret = self._mmap_read(f["size"])
                     return sret.strip() 
                 else:
                     raise Exception("Property " + name + " not found.")
@@ -1488,7 +1506,7 @@ class ProcessManager(threading.Thread):
                 prc.close()                
             except:
                 e = utils.get_exception()
-                print("IPC manager _destroy_process_by_shared_obj error: " + str(e))
+                print("IPC manager _destroy_process_by_shared_obj error: " + utils.exception_to_string(e))
         
     def _add_process(self, prc):
         with self._lock:
@@ -1514,18 +1532,18 @@ class ProcessManager(threading.Thread):
                                 remlist.append(prc)                        
                         except:
                             e = utils.get_exception()
-                            print("IPC manager process check close error: " + str(e))
+                            print("IPC manager process check close error: " + utils.exception_to_string(e))
                             remlist.append(prc)
                     
                     #REMOVE PROCESS
                     with self._lock:
                         for prc in remlist:
                             self._list_process.remove(prc)
-                            #print "PROCES REMOVED " + str(prc)                
+                            #print("PROCES REMOVED " + str(prc))                
                 
         except:
             #ex = utils.get_exception()
-            #print str(ex)
+            #print(utils.exception_to_string(ex))
             None #Sometime shutdown error (most likely raised during interpreter shutdown) errore: <type 'exceptions.TypeError'>: 'NoneType' object is not callable
         
 process_manager=ProcessManager()
@@ -1556,12 +1574,12 @@ class ProcessConfig():
                 if not os.path.exists(pth):
                     break
             with utils.file_open(pth, "wb") as f:
-                f.write("")
+                f.write(utils.bytes_new())
             _fix_perm_path(pth,fixperm)
         finally:
             _ipcmap["semaphore"].release()
         with utils.file_open(pth, "r+b") as f:
-            f.write(struct.pack("!cIcIQI","I",os.getpid(),"I",0,long(time.time()*1000),0))
+            f.write(struct.pack("!cIcIQI",b"I",os.getpid(),b"I",0,int(time.time()*1000),0))
         
         self._bclose=False
     
@@ -1583,7 +1601,7 @@ class ProcessConfig():
         pth = process_manager._get_config_path(self._key)
         with utils.file_open(pth, "r+b") as f:
             f.seek(self.POS_STATUS_PARENT)
-            f.write(s)                    
+            f.write(s)
         
     def get_status_child(self):
         pth = process_manager._get_config_path(self._key)
@@ -1616,7 +1634,7 @@ class ProcessConfig():
         pth = process_manager._get_config_path(self._key)
         with utils.file_open(pth, "r+b") as f:
             f.seek(self.POS_ALIVE_TIME)
-            f.write(struct.pack("!Q",long(time.time()*1000)))
+            f.write(struct.pack("!Q",int(time.time()*1000)))
     
     def set_run_info(self, oconf):
         pth = process_manager._get_config_path(self._key)
@@ -1633,11 +1651,11 @@ class ProcessConfig():
         with utils.file_open(pth, "r+b") as f:
             f.seek(self.POS_RUN_INFO)
             ln = struct.unpack("!I",f.read(4))[0]
-            if ln>0:            
+            if ln>0:
                 oconf=_load_obj(f.read(ln))
                 f.seek(self.POS_RUN_INFO)
                 f.write(struct.pack("!I",0))
-                f.write(" "*ln)
+                f.write(b" "*ln)
                 f.flush()
                 return oconf
             else:
@@ -1706,7 +1724,7 @@ class Process():
     
     def _create_process(self, args):
         if utils.is_windows() and not self._forcesubprocess:
-            appcmd=u"\"" + self._py_exe_path + u"\" -S -m agent " + unicode(args[2]) + u" " + unicode(args[3])            
+            appcmd=u"\"" + self._py_exe_path + u"\" -S -m agent " + utils.str_new(args[2]) + u" " + utils.str_new(args[3])            
             self._process=None
             self._ppid = native.get_instance().start_process(appcmd,self._py_home_path)
             if self._ppid==-1:
@@ -1737,13 +1755,9 @@ class Process():
             self._config=ProcessConfig()
             self._config.create(self, self._fixperm)
             #START CHILD PROCESS
-            fn=u"agent.pyc"
-            if utils.path_exists(u"agent.py"):
-                fn=u"agent.py"
-            
-            self._py_exe_path=sys.executable 
+            self._py_exe_path=utils.str_new(sys.executable) 
             if utils.is_windows():
-                #sys.executable don't work well with unicode path                        
+                #sys.executable don't work well with unicode path
                 self._py_home_path=u""
                 appth="native\\service.properties"
                 if (utils.path_exists(appth)):
@@ -1753,10 +1767,11 @@ class Process():
                     lns = sprop.splitlines()
                     for line in lns:
                         if line.startswith("pythonPath="):
-                            self._py_exe_path=line[11:]
+                            self._py_exe_path=utils.str_new(line[11:])
                         elif line.startswith("pythonHome="):
-                            self._py_home_path=line[11:]                            
-            self._create_process([self._py_exe_path, fn, u"app=ipc", self._config.get_key()])
+                            self._py_home_path=utils.str_new(line[11:])   
+                                     
+            self._create_process([self._py_exe_path, u"agent.py", u"app=ipc", self._config.get_key()])
             #WAIT CHILD PROCESS
             cnt=utils.Counter()
             cnt_timeout=15
@@ -1782,15 +1797,15 @@ class Process():
             oconf["stream"]=self._stream
             oconf["aliveTime"]=time.time()
             self._config.set_run_info(oconf)
-            self._config.set_status_parent("O")
+            self._config.set_status_parent(b"O")
             while True:
                 if not self.is_running():
                     raise Exception("Process closed (child status).")
                 try:
                     stcl=self._config.get_status_child()
-                    if stcl=="O":
+                    if stcl==b"O":
                         break
-                    elif stcl=="C":
+                    elif stcl==b"C":
                         raise Exception("Process closed (child status).")
                 except:
                     None
@@ -1802,11 +1817,11 @@ class Process():
         except:
             ex = utils.get_exception()
             try:
-                self._config.set_status_parent("C")
+                self._config.set_status_parent(b"C")
                 self._config.close()
             except:
                 ex1 = utils.get_exception()
-                print "_start_ipc close config file - err: " + str(ex1)
+                print("_start_ipc close config file - err: " + str(ex1))
             self._kill()
             if self._stream is not None:
                 self._stream.close()
@@ -1887,7 +1902,7 @@ class Process():
                     if self._tdclose is None:
                         try:
                             if self._config is not None:
-                                self._config.set_status_parent("C")
+                                self._config.set_status_parent(b"C")
                         except:
                             None
                         if self._stream is not None: 
@@ -1929,9 +1944,9 @@ class Process():
                 self._config.close()
             except:
                 ex = utils.get_exception()
-                print "_check_close config file - err: " + str(ex)
+                print("_check_close config file - err: " + utils.exception_to_string(ex))
             self._config=None
-            if stcl=="C":
+            if stcl==b"C":
                 with self._lock:
                     self._list_shared_obj=None                                        
             else:
@@ -1948,7 +1963,7 @@ class Process():
                             process_manager._destroy_process_by_shared_obj(obj)
                         except:
                             ex = utils.get_exception()
-                            print "_check_close close other process shared obj:  " + str(obj) + " - err: " + str(ex)
+                            print("_check_close close other process shared obj:  " + str(obj) + " - err: " + utils.exception_to_string(ex))
                     #DESTROY OBJECT (RELEASE LOCKS)
                     for i in reversed(range(len(lstshobj))):
                         try:
@@ -1956,7 +1971,7 @@ class Process():
                             obj._destroy()
                         except:
                             ex = utils.get_exception()
-                            print "_check_close destroy shared obj:  " + str(obj) + " - err: " + str(ex)                    
+                            print("_check_close destroy shared obj:  " + str(obj) + " - err: " + utils.exception_to_string(ex))                    
             self._stream=None
             self._process=None
             self._ppid=None            
@@ -1977,6 +1992,440 @@ class Process():
         self._process=None
         self._ppid=None
         
+
+class ProcessInActiveConsole(Process):
+        def __init__(self, mdl, func, args=None, forcesubprocess=False):
+            Process.__init__(self, mdl, func, args, self._process_fix_perm, forcesubprocess)
+            self._forcesubprocess=forcesubprocess
+            self._currentconsole=None
+            self._currentconsolecounter=utils.Counter()
+            
+        
+        def _process_fix_perm(self):
+            jo={}
+            appconsole = self._currentconsole
+            if (utils.is_mac() or utils.is_linux()) and appconsole!=None and "uid" in appconsole and appconsole["uid"]!=os.getuid():
+                jo["mode"]=stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH
+            return jo
+        
+        def _get_linux_envirionment(self,uid,tty):
+            bwaylanderr=False
+            lstret={}
+            
+            #DETECT BY PROCESS
+            if uid!=-1:       
+                lst = native.get_instance().get_process_ids()
+                try:
+                    bok=False
+                    cnt = utils.Counter()
+                    while not bok and cnt.get_value()<=2:
+                        for pid in lst:
+                            if native.get_instance().get_process_uid(pid)==uid:
+                                lstret={}
+                                arenv = native.get_instance().get_process_environ(pid)
+                                for apps in arenv:                        
+                                    if apps=="XAUTHORITY" or apps=="DISPLAY" or apps.startswith("WAYLAND_") or apps.startswith("XDG_") or apps.startswith("LC_"):
+                                        lstret[apps]=arenv[apps]
+                                        #print("DETECT BY PROCESS- " + apps + ": " + lstret[apps])                                        
+                                if ("DISPLAY" in lstret and "XAUTHORITY" in lstret):                                    
+                                    bok=True
+                                    break
+                                lstret={}
+                        time.sleep(0.5)
+                except:
+                    lstret={}
+            
+            #DETECT BY WHAT OF w COMMAND
+            swhatcmd=None
+            if uid!=-1:            
+                try:
+                    import pwd
+                    pwinfo=pwd.getpwuid(uid)
+                    if pwinfo is not None and pwinfo.pw_name is not None:
+                        data = subprocess.Popen(["w"], stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+                        so, se = data.communicate()
+                        if so is not None and len(so)>0:
+                            so=utils.bytes_to_str(so, "utf8")
+                            ar = so.split("\n")
+                            del ar[0]
+                            bhead=True
+                            pwhat=-1
+                            for s in ar:
+                                if bhead:
+                                    #DETECT WHAT position
+                                    bhead=False
+                                    pwhat = s.upper().index("WHAT")                                
+                                elif pwhat>=0 and s.split(" ")[0].rstrip(" ")==pwinfo.pw_name:
+                                    swhatcmd = s[pwhat:].lstrip(" ").rstrip(" ")
+                                    break
+                except:
+                    None
+            if swhatcmd is not None:
+                try:
+                    lst = native.get_instance().get_process_ids()
+                    for pid in lst:
+                        sst = native.get_instance().get_process_stat(pid)
+                        if native.get_instance().get_process_uid(pid)==uid:
+                            bok=False
+                            lret = native.get_instance().get_process_cmdline(pid)
+                            lcmd=" ".join(lret).lstrip(" ").rstrip(" ")
+                            if lcmd==swhatcmd:
+                                arenv = native.get_instance().get_process_environ(pid)
+                                for apps in arenv:                        
+                                    if apps=="XAUTHORITY" or apps=="DISPLAY" or apps.startswith("WAYLAND_") or apps.startswith("XDG_") or apps.startswith("LC_"):
+                                        lstret[apps]=arenv[apps]
+                                        #print("DETECT BY WHAT OF w COMMAND - " + apps + ": " + lstret[apps])
+                                break
+                                                
+                except:
+                    None
+            
+            #DETECT DISPLAY BY w COMMAND
+            if uid!=-1:
+                try:
+                    import pwd
+                    pwinfo=pwd.getpwuid(uid)
+                    if pwinfo is not None and pwinfo.pw_name is not None:
+                        data = subprocess.Popen(["w"], stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+                        so, se = data.communicate()
+                        if so is not None and len(so)>0:
+                            so=utils.bytes_to_str(so, "utf8")
+                            ar = so.split("\n")
+                            del ar[0]
+                            bhead=True
+                            ptty=-1
+                            for s in ar:
+                                if bhead:
+                                    #DETECT WHAT position
+                                    bhead=False
+                                    ptty = s.upper().index("TTY")                                
+                                elif ptty>=0 and s.split(" ")[0].rstrip(" ")==pwinfo.pw_name:
+                                    sdisplay = s[ptty:]
+                                    sdisplay=sdisplay[0:sdisplay.index(" ")]
+                                    if len(sdisplay)==2:
+                                        if sdisplay[0]==":" and sdisplay[1].isdigit():
+                                            sdsp=sdisplay
+                                    elif len(sdisplay)==4:
+                                        if sdisplay[0]==":" and sdisplay[1].isdigit() and sdisplay[2]=="." and sdisplay[3].isdigit():
+                                            sdsp=sdisplay
+                                    if sdsp is not None:
+                                        lstret["DISPLAY"] = sdsp
+                                        #print("DETECT DISPLAY BY w COMMAND - DISPLAY: " + lstret["DISPLAY"])
+                                        break
+                except:
+                    None
+            
+            #DETECT BY CMDLINE
+            try:
+                if tty is not None:
+                    st = os.stat("/dev/" + tty)
+                lst = native.get_instance().get_process_ids()
+                for pid in lst:
+                    sst = native.get_instance().get_process_stat(pid)
+                    if (tty is None or sst["tty"]==st.st_rdev) and (uid==-1 or native.get_instance().get_process_uid(pid)==uid):
+                        lret = native.get_instance().get_process_cmdline(pid)
+                        bok=False
+                        sxauth=None
+                        sdsp=None
+                        for i in range(len(lret)):
+                            if i==0:
+                                scmd = lret[i]
+                                arcmd = scmd.split("/")
+                                if len(arcmd)>0:
+                                    scmd=arcmd[len(arcmd)-1]
+                                    if scmd.upper()=="X" or "XORG" in scmd.upper():
+                                        bok=True
+                                    elif scmd.upper()=="XWAYLAND":
+                                        bwaylanderr=True
+                            if bok:
+                                sitm = lret[i]
+                                if i>0 and lret[i-1]=="-auth":
+                                    sxauth=sitm
+                                elif len(sitm)==2:
+                                    if sitm[0]==":" and sitm[1].isdigit():
+                                        sdsp=sitm
+                                elif len(sitm)==4:
+                                    if sitm[0]==":" and sitm[1].isdigit() and sitm[2]=="." and sitm[3].isdigit():
+                                        sdsp=sitm
+                        if sxauth is not None:
+                            lstret["XAUTHORITY"] = sxauth                            
+                            #print("DETECT BY CMDLINE - XAUTHORITY: " + lstret["XAUTHORITY"])                            
+                        if sdsp is not None:
+                            lstret["DISPLAY"] = sdsp
+                            #print("DETECT BY CMDLINE - DISPLAY: " + lstret["DISPLAY"])
+                        if bok:
+                            bwaylanderr=False
+                            break
+                
+            except:
+                None
+            
+            if bwaylanderr or (("XDG_SESSION_TYPE" in lstret) and (lstret["XDG_SESSION_TYPE"].upper()=="WAYLAND")):
+                raise Exception("XWayland is not supported.")                
+            
+            if "DISPLAY" not in lstret:
+                lstret["DISPLAY"]=":0"
+                
+            if "XAUTHORITY" in lstret:
+                sxauth = lstret["XAUTHORITY"]
+                if not os.path.exists(sxauth):
+                    try:
+                        p = sxauth.rindex("/")
+                        if p>=0:
+                            sxauthdir = sxauth[0:p]
+                            os.makedirs(sxauthdir, 0o700)
+                            fd = os.open(sxauth,os.O_RDWR|os.O_CREAT, 0o600)
+                            os.close(fd)                                                        
+                    except:
+                        None
+            
+            if "XAUTHORITY" not in lstret and (uid!=-1 or tty is not None): 
+                return self._get_linux_envirionment(-1, None)
+            
+            '''
+            if "DISPLAY" in lstret:
+                print("DISPLAY: " + lstret["DISPLAY"])
+            if "XAUTHORITY" in lstret:
+                print("XAUTHORITY: " + lstret["XAUTHORITY"])
+            '''
+            
+            return lstret
+        
+        def _load_linux_console_info(self,appconsole):
+            if appconsole is not None:
+                stty=appconsole["tty"]
+                #print("\n\nTTY: " + stty)
+                pwinfo=None
+                try:
+                    import pwd
+                    if os.getuid()==0 and "cktype" in appconsole and appconsole["cktype"]!="":
+                        if appconsole["cktype"]=="USER_NAME":
+                            pwinfo=pwd.getpwnam(appconsole["ckvalue"])
+                        elif appconsole["cktype"]=="USER_ID":
+                            pwinfo=pwd.getpwuid(appconsole["ckvalue"])
+                    else:
+                        pwinfo=pwd.getpwuid(os.getuid())
+                except:
+                    None
+                
+                appuid=-1
+                libenv={}
+                if pwinfo is not None:
+                    #print("uid: " + str(pwinfo.pw_uid))                                    
+                    appconsole["user"] = pwinfo.pw_name
+                    appconsole["uid"] = pwinfo.pw_uid
+                    appconsole["gid"] = pwinfo.pw_gid
+                    appconsole["home"] = pwinfo.pw_dir
+                    appuid=pwinfo.pw_uid
+                else:
+                    libenv = os.environ
+                
+                lstret = self._get_linux_envirionment(appuid, stty)
+                for k in lstret:
+                    libenv[k]=lstret[k]
+                if pwinfo is not None:
+                    libenv['HOME'] = appconsole["home"]
+                    libenv['LOGNAME'] = appconsole["user"]
+                    libenv['USER'] = appconsole["user"]
+                appconsole["env"]=libenv
+        
+        def _load_mac_console_info(self,appconsole):
+            if appconsole is not None:
+                pwinfo=None            
+                try:
+                    import pwd
+                    if os.getuid()==0:
+                        pwinfo=pwd.getpwuid(appconsole["uid"])
+                    else:
+                        pwinfo=pwd.getpwuid(os.getuid())
+                except:
+                    None                
+                libenv = os.environ                
+                if pwinfo is not None:
+                    try:
+                        appconsole["user"] = pwinfo.pw_name
+                        appconsole["gid"] = pwinfo.pw_gid
+                        appconsole["home"] = pwinfo.pw_dir
+                        libenv['HOME'] = appconsole["home"]
+                        libenv['LOGNAME'] = appconsole["user"]
+                        libenv['USER'] = appconsole["user"]
+                    except:
+                        None
+                appconsole["env"]=libenv
+        
+        def _init_process_demote(self,user_uid, user_gid):
+            def set_ids():
+                os.setgid(user_gid)
+                os.setuid(user_uid)
+            return set_ids        
+
+        def _is_old_windows(self):
+            return (utils.is_windows() and (native.get_instance().is_win_xp()==1 or native.get_instance().is_win_2003_server()==1))
+        
+        def is_change_console(self):
+            if self._currentconsole is not None and self._currentconsolecounter.is_elapsed(1):
+                self._currentconsolecounter.reset()
+                appc=self._detect_console()
+                if appc is not None:
+                    if utils.is_windows():
+                        if self._is_old_windows() and appc["id"]>0:
+                            native.get_instance().win_station_connect()
+                            time.sleep(1)
+                            return True
+                        elif appc["id"]!=self._currentconsole["id"]:
+                            return True
+                    elif utils.is_mac():
+                        if appc["uid"]!=self._currentconsole["uid"]:
+                            return True
+                    elif utils.is_linux():
+                        if appc["tty"]!=self._currentconsole["tty"]:
+                            if appc["cktype"]=="" or appc["cktype"]!=self._currentconsole["cktype"]:
+                                return True
+                            else:
+                                return appc["ckvalue"]!=self._currentconsole["ckvalue"]
+            return False
+        
+        def _detect_console(self):
+            if utils.is_windows():
+                return {"id": native.get_instance().get_active_console_id()}            
+            elif utils.is_mac():
+                return {"uid": native.get_instance().get_console_user_id()}            
+            elif utils.is_linux():
+                try:
+                    ar={}
+                    stty=native.get_instance().get_tty_active()
+                    if stty is not None:
+                        ar["tty"] = stty
+                        ar["cktype"] = ""
+                        ar["ckvalue"] = ""
+                        try:
+                            if os.getuid()==0:
+                                sbuf = None
+                                offset = 0                        
+                                with open('/var/run/utmp', 'rb') as fd:
+                                    sbuf = fd.read()
+                                if sbuf is not None:
+                                    while offset < len(sbuf):
+                                        arutmp = _struct_utmp.unpack_from(sbuf, offset)
+                                        stype=arutmp[0]
+                                        if stype==7: #USER_PROCESS
+                                            appstty=arutmp[2].rstrip(b'\0')
+                                            if appstty==stty:
+                                                ar["cktype"]="USER_NAME"
+                                                ar["ckvalue"]=arutmp[4].rstrip(b'\0')
+                                                break                                     
+                                        offset += _struct_utmp.size
+                        except:
+                            None
+                        if ar["cktype"]=="":
+                            try:    
+                                st = os.stat("/dev/" + stty)
+                                ar["cktype"]="USER_ID"
+                                ar["ckvalue"]=st.st_uid
+                            except:
+                                None
+                        #print("_detect_console_:" + ar["cktype"] + " " + str(ar["ckvalue"]))
+                        return ar
+                except:
+                    None 
+                
+            return None
+        
+        def _create_process(self, args):        
+            if utils.is_windows():
+                if self._forcesubprocess:
+                    self._currentconsole=None
+                    self._process=subprocess.Popen(args)
+                    self._ppid=self._process.pid
+                else:
+                    '''
+                    runaselevatore=u"False"
+                    if self._get_screen_module().DWAScreenCaptureIsUserInAdminGroup()==1:
+                        if self._get_screen_module().DWAScreenCaptureIsRunAsAdmin()==1:
+                            if self._get_screen_module().DWAScreenCaptureIsProcessElevated()==1:
+                                runaselevatore=u"True"
+                    '''            
+                    appcmd=u"\"" + self._py_exe_path + u"\" -S -m agent " + utils.str_new(args[2]) + u" " + utils.str_new(args[3]) #+ u" " + TMP_str_new(str(self._agent_main._agent_debug_mode)) + u" windows " + runaselevatore            
+                    self._process=None
+                    self._ppid = native.get_instance().start_process_in_active_console(appcmd,self._py_home_path)
+                    if self._ppid==-1:
+                        self._ppid=None
+                        self._currentconsole=None
+                        raise Exception("Start process error")
+            elif utils.is_linux():
+                bfaultback=True
+                if self._currentconsole!=None and "env" in self._currentconsole:
+                    try:
+                        libenv=self._currentconsole["env"]
+                        if utils.path_exists("runtime"):
+                            libenv["LD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
+                        elif "LD_LIBRARY_PATH" in os.environ:
+                            libenv["LD_LIBRARY_PATH"]=os.environ["LD_LIBRARY_PATH"]
+                        self._process=subprocess.Popen(args, env=libenv, preexec_fn=self._init_process_demote(self._currentconsole["uid"], self._currentconsole["gid"]))                        
+                        self._ppid=self._process.pid
+                        bfaultback=False
+                    except:
+                        None
+                if bfaultback:
+                    libenv = os.environ
+                    lstret = self._get_linux_envirionment(-1, None)
+                    for k in lstret:
+                        libenv[k]=lstret[k]
+                    if utils.path_exists("runtime"):
+                        libenv["LD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
+                    elif "LD_LIBRARY_PATH" in os.environ:
+                        libenv["LD_LIBRARY_PATH"]=os.environ["LD_LIBRARY_PATH"]
+                    self._process=subprocess.Popen(args, env=libenv)
+                    self._ppid=self._process.pid
+                    
+            elif utils.is_mac():
+                bfaultback=True
+                self._ppid=None
+                if not self._forcesubprocess:
+                    if not hasattr(native.get_instance(), "is_old_guilnc") or native.get_instance().is_old_guilnc():                
+                        #GUI LAUNCHER OLD VERSION 03/11/2021 (DO NOT REMOVE)
+                        if self._currentconsole!=None and "uid" in self._currentconsole:
+                            self._ppid=native.get_instance().exec_guilnc(self._currentconsole["uid"],"ipc",[args[3]])
+                    else:
+                        if self._currentconsole!=None and "env" in self._currentconsole:
+                            try:
+                                libenv=self._currentconsole["env"]
+                                if utils.path_exists("runtime"):
+                                    libenv["DYLD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
+                                elif "DYLD_LIBRARY_PATH" in os.environ:
+                                    libenv["DYLD_LIBRARY_PATH"]=os.environ["DYLD_LIBRARY_PATH"]
+                                self._process=subprocess.Popen(args, env=libenv, preexec_fn=self._init_process_demote(self._currentconsole["uid"], self._currentconsole["gid"]))                        
+                                self._ppid=self._process.pid
+                                bfaultback=False
+                            except:
+                                None
+                                                
+                if self._ppid is not None:
+                    self._process = None
+                    bfaultback=False                                    
+                if bfaultback:
+                    libenv = os.environ
+                    if utils.path_exists("runtime"):
+                        libenv["DYLD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
+                    elif "DYLD_LIBRARY_PATH" in os.environ:
+                        libenv["DYLD_LIBRARY_PATH"]=os.environ["DYLD_LIBRARY_PATH"]
+                    self._process=subprocess.Popen(args, env=libenv)
+                    self._ppid=self._process.pid
+                    
+                
+        def _start_ipc(self):
+            try:            
+                self._currentconsole=self._detect_console()
+                if utils.is_linux():                
+                    self._load_linux_console_info(self._currentconsole)
+                elif utils.is_mac():
+                    self._load_mac_console_info(self._currentconsole)
+                Process._start_ipc(self)
+                self._currentconsolecounter.reset()
+            except:
+                ex = utils.get_exception()
+                self._currentconsole=None
+                raise ex
 
 class ChildProcessThread(threading.Thread):
     
@@ -2028,14 +2477,14 @@ def fmain(args): #SERVE PER MACOS APP
     #oconf={}
     conf=ProcessConfig()
     try:
-        conf.open(args[1])        
+        conf.open(args[1])
         while ((not parentAliveCounter.is_elapsed(parentAliveTimeout)) and (tdchild is None or tdchild.is_alive())):
             appst, apptm = conf.get_status_parent_and_alive_time()
             apptm = apptm*1000.0
             if parentAliveTime is None or parentAliveTime!=apptm:
                     parentAliveTime=apptm
                     parentAliveCounter.reset()
-            if tdchild is None and appst=="O":
+            if tdchild is None and appst==b"O":
                 oconf=conf.get_run_info()            
                 pkn = oconf["package"].rsplit('.',1)[0]
                 if pkn == oconf["package"]:
@@ -2048,11 +2497,11 @@ def fmain(args): #SERVE PER MACOS APP
                 if cls is not None:
                     tdchild = cls(cstrm,cargs)
                     tdchild.start()
-                    conf.set_status_child("O")
+                    conf.set_status_child(b"O")
                     waittm=1.0
                 else:
                     break                    
-            if appst=="C":
+            if appst==b"C":
                 break            
             time.sleep(waittm)           
     except:
@@ -2066,7 +2515,7 @@ def fmain(args): #SERVE PER MACOS APP
             None
     _destroy_child_shared_obj()
     if not conf.is_close():
-        conf.set_status_child("C")
+        conf.set_status_child(b"C")
     conf.close()
     
     

@@ -8,15 +8,12 @@ PATH_DWA_RUNTIME="$PATH_DWA/runtime/bin"
 PATH_DWA_RUNTIME_LIBRARY="$PATH_DWA/runtime/lib"
 PATH_DWA_NATIVE="$PATH_DWA/native"
 
-#FIX LIBZ 
-unlink "${PATH_DWA_RUNTIME_LIBRARY}/libz.so.1.2.8"
-
 cd "${PATH_DWA}"
 export LD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
 export PYTHONIOENCODING=utf-8
-"${PATH_DWA_RUNTIME}/@EXE_NAME@" configure.pyc $@
+"${PATH_DWA_RUNTIME}/@EXE_NAME@" configure.py $@
 if [ ! $? -eq 0 ]; then
 	echo "Error starting gui, attempt to start console mode..."
-	"${PATH_DWA_RUNTIME}/@EXE_NAME@" configure.pyc -console
+	"${PATH_DWA_RUNTIME}/@EXE_NAME@" configure.py -console
 fi
 exit 0

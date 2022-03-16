@@ -10,7 +10,6 @@ import agent
 import threading
 import native
 import utils
-import common
 import ctypes
 import time
 import os
@@ -18,6 +17,31 @@ import sys
 import logging
 import platform
 import struct
+from . import common
+
+
+##### TO FIX 22/09/2021
+import zlib
+TMP_zlib_compress=lambda b: zlib.compress(b)
+try:
+    TMP_bytes_to_str=utils.bytes_to_str
+    TMP_str_to_bytes=utils.str_to_bytes
+    TMP_str_new=utils.str_new
+    TMP_bytes_new=utils.bytes_new    
+except:
+    TMP_bytes_to_str=lambda b, enc="ascii": b.decode(enc, errors="replace")
+    TMP_str_to_bytes=lambda s, enc="ascii": s.encode(enc, errors="replace")
+    def TMP_py2_str_new(o):
+        if isinstance(o, unicode):
+            return o 
+        elif isinstance(o, str):
+            return o.decode("utf8", errors="replace")
+        else:
+            return str(o).decode("utf8", errors="replace")
+    TMP_str_new=TMP_py2_str_new
+    TMP_bytes_new=str
+##### TO FIX 22/09/2021
+
 
 class ProcessCaptureScreen(threading.Thread):
     def __init__(self, cprc, args):
@@ -42,7 +66,7 @@ class ProcessCaptureScreen(threading.Thread):
         self._curid=0
         self._curx=-1
         self._cury=-1
-        self._curvis=False
+        self._curvis=False        
         self._curcounter=utils.Counter()
         self._max_cpu_usage=30
         self._frame_wait_min=0.015
@@ -182,7 +206,7 @@ class ProcessCaptureScreen(threading.Thread):
                     bcommand=False
                     if len(prms)==7:
                         bcommand=(prms[6]=="true")
-                    self._screen_module.DWAScreenCaptureInputKeyboard(str(prms[1]), str(prms[2]), prms[3]=="true", prms[4]=="true", prms[5]=="true", bcommand)
+                    self._screen_module.DWAScreenCaptureInputKeyboard(TMP_str_to_bytes(prms[1]), TMP_str_to_bytes(prms[2]), prms[3]=="true", prms[4]=="true", prms[5]=="true", bcommand)
             except:
                 ex = utils.get_exception()
                 self._process._debug_print(utils.exception_to_string(ex))
@@ -205,7 +229,7 @@ class ProcessCaptureScreen(threading.Thread):
         self._process._stream.write_obj({u"request": u"COPY_TEXT", u"text":apps})
         
     def paste_text(self,imon,stxt):
-        self._screen_module.DWAScreenCaptureSetClipboardText(ctypes.c_wchar_p(unicode(stxt)))
+        self._screen_module.DWAScreenCaptureSetClipboardText(ctypes.c_wchar_p(TMP_str_new(stxt)))
         self._screen_module.DWAScreenCapturePaste()
     
     #TMP PRIVACY MODE
@@ -289,26 +313,26 @@ class ProcessCaptureScreen(threading.Thread):
                         while not self._bdestory and not self._process.is_destroy():
                             memmap.seek(0)
                             st = memmap.read(1)
-                            if st=="O":
+                            if st==b"O":
                                 memmap.seek(mon["pos"])
                                 if iret==0:
                                     mon["capid"]+=1
-                                    memmap.write("K")
+                                    memmap.write(b"K")
                                     memmap.write(self._struct_Q.pack(mon["capid"]))                                
                                     memmap.write(rgbimage)
                                     memmap.write((ctypes.c_char*rgbimage.sizedata).from_address(rgbimage.data))
                                     cond.notify_all()                                                                        
                                 elif iret==-99999:
-                                    memmap.write("P") #Permission 
+                                    memmap.write(b"P") #Permission 
                                 else:
-                                    memmap.write("E")
+                                    memmap.write(b"E")
                                     if self._capture_cnt_err==None:
                                         self._capture_cnt_err=utils.Counter()
                                     if self._capture_cnt_err.is_elapsed(1.0):
                                         self._capture_fallback_ok=True
                                         raise Exception("Unable to capture monitor (code: " + str(iret) + ").");
                                 break
-                            elif st=="C":
+                            elif st==b"C":
                                 self._bdestory=True
                                 break
                             cond.wait(0.5)                        
@@ -350,19 +374,21 @@ class ProcessCaptureScreen(threading.Thread):
                         while not self._bdestory and not self._process.is_destroy():
                             memmap.seek(0)
                             st = memmap.read(1)
-                            if st=="O":
+                            if st==b"O":
                                 memmap.seek(curpos)
                                 memmap.write(self._curimage)
                                 if self._curimage.changed==1:
-                                    self._curid+=1
-                                    memmap.write(self._struct_Q.pack(self._curid))
-                                    memmap.write((ctypes.c_char*self._curimage.sizedata).from_address(self._curimage.data))
+                                    cdt = TMP_zlib_compress((ctypes.c_char*self._curimage.sizedata).from_address(self._curimage.data))
+                                    if len(cdt)<common.MAX_CURSOR_IMAGE_SIZE:
+                                        self._curid+=1
+                                        memmap.write(self._struct_Q.pack(self._curid))                                    
+                                        memmap.write(cdt)
                                 cond.notify_all()
                                 break
-                            elif st=="C":
+                            elif st==b"C":
                                 self._bdestory=True
                                 break
-                            cond.wait(0.5)                        
+                            cond.wait(0.5)
                     finally:
                         cond.release()            
             self._curcounter.reset()
@@ -519,16 +545,16 @@ class ProcessCaptureSound(threading.Thread):
     def cb_sound_data(self, sz, pdata):
         if self._status=="O" and sz>0:
             try:
-                sdata = str(pdata[0:sz])            
+                sdata = TMP_bytes_new(pdata[0:sz])
                 self._cond.acquire()
                 try:
                     self._memmap.seek(0)
                     st = self._memmap.read(1)
-                    if st=="O":
+                    if st==b"O":
                         self._frameid+=1
                         self._memmap.write(self._struct_Q.pack(self._frameid))
                         towrite=0
-                        if self._memmap_limit+sz>=self._memmap_size:                        
+                        if self._memmap_limit+sz>=self._memmap_size:
                             towrite=self._memmap_size-self._memmap_limit
                             if towrite>0:
                                 self._memmap.seek(17+self._memmap_limit)
@@ -542,12 +568,12 @@ class ProcessCaptureSound(threading.Thread):
                         self._memmap.write(self._struct_Q.pack(self._memmap_limit))
                         self._cond.notify_all()
                     else:
-                        self._status="C"
+                        self._status=b"C"
                 finally:
                     self._cond.release()
             except:
                 ex = utils.get_exception()
-                self._status="C"
+                self._status=b"C"
                 self._process._debug_print(str("cb_sound_data err: " + utils.exception_to_string(ex)))
             
     
@@ -568,7 +594,7 @@ class ProcessCaptureSound(threading.Thread):
                             utils.path_makedirs(fnsndcrash)
                         fnsndcrash = fnsndcrash + utils.path_sep + u"app_desktop.soundcrash"
                     if fnsndcrash is None or not utils.path_exists(fnsndcrash):
-                        if fnsndcrash is not None:                                                                
+                        if fnsndcrash is not None:
                             fsndcrash=utils.file_open(fnsndcrash, 'wb')
                             fsndcrash.close()
                         try:
@@ -671,9 +697,7 @@ class ProcessCapture(ipc.ChildProcessThread):
     
     def _debug_print(self,s):
         if self._dbgenable:
-            if isinstance(s, str):
-                s = unicode(s, errors='replace')
-            print(s.encode('utf-8'))
+            print(TMP_str_new(s))
                 
     def cb_screen_debug_print(self, s):
         self._debug_print("DESKTOPNATIVE@" + s)

@@ -16,15 +16,8 @@ wstring towstring(const char* chrs) {
 	return L"";
 }
 
-char* tocharp(string& str) {
-    char* apps = new char[str.size() + 1];
-    str.copy(apps, str.size());
-	//strcpy(apps, str.c_str());
-    return apps;
-}
-
 wchar_t* towcharp(wstring str) {
-	wchar_t*  wc = new wchar_t[str.size() + 1];
+	wchar_t*  wc = (wchar_t*)malloc((str.size() + 1) * sizeof(wchar_t));
 	str.copy(wc,str.size());
 	wc[str.size()]='\0';
 	return wc;

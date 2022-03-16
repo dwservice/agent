@@ -19,7 +19,7 @@ PerformanceMng::PerformanceMng(){
 	}
 }
 
-wchar_t* PerformanceMng::getInfo(){
+int PerformanceMng::getInfo(wchar_t** sret){
 	JSONWriter jsonw;
 
 	jsonw.beginObject();
@@ -40,7 +40,9 @@ wchar_t* PerformanceMng::getInfo(){
 	jsonw.addNumber(L"memoryAvailable", statex.ullAvailPageFile);*/
 
 	jsonw.endObject();
-	return towcharp(jsonw.getString());
+	wstring str=jsonw.getString();
+	*sret=towcharp(str);
+	return str.length();
 }
 
 float PerformanceMng::calculateCPULoad(unsigned long long idleTicks, unsigned long long totalTicks){

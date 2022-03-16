@@ -10,9 +10,18 @@ import ctypes
 import threading
 import utils
 import ipc
-import common
 import native
 import struct
+from . import common
+
+##### TO FIX 22/09/2021
+import zlib
+TMP_zlib_decompress=lambda b: zlib.decompress(b)
+try:
+    TMP_bytes_join=utils.bytes_join        
+except:
+    TMP_bytes_join=lambda ar: "".join(ar)
+##### TO FIX 22/09/2021
 
 class ProcessEncoderPalette():
     
@@ -184,7 +193,7 @@ class ProcessEncoder(ipc.ChildProcessThread):
         for mon in self._monitors:
             mon["curcapid"]=0
             mon["fpscurcapid"]=0
-            mon["curcapst"]="K"
+            mon["curcapst"]=b"K"
             mon["encses"]=None                        
         self._curmon=-2
         self._multiview=None
@@ -220,7 +229,7 @@ class ProcessEncoder(ipc.ChildProcessThread):
                 try:
                     self._sound_memmap.seek(0)
                     st = self._sound_memmap.read(1)
-                    if st=="O":
+                    if st==b"O":
                         cid=self._struct_Q.unpack(self._sound_memmap.read(8))[0]
                         if self._sound_enable==True and self._sound_cid!=cid:
                             self._sound_cid=cid
@@ -238,14 +247,14 @@ class ProcessEncoder(ipc.ChildProcessThread):
                                     data1 = self._sound_memmap.read(szrem)
                                     self._sound_memmap.seek(17)
                                     data2 = self._sound_memmap.read(plim)
-                                    data = "".join([data1,data2])
+                                    data = TMP_bytes_join([data1,data2])
                                 else:
                                     self._sound_memmap.seek(17)
                                     data = self._sound_memmap.read(plim)
                                 self._sound_memmap_limit=plim
                         else:
                             self._sound_cond.wait(0.5)                                                                      
-                    if st=="C":
+                    if st==b"C":
                         break                        
                 finally:
                     self._sound_cond.release()
@@ -253,7 +262,7 @@ class ProcessEncoder(ipc.ChildProcessThread):
                     iret = self._sndmdl.DWASoundCaptureOPUSEncode(self._sound_encses, data, len(data), common.cb_sound_encode_result)
         except:
             ex = utils.get_exception()
-            print("ProcessEncoderSound:" + str(ex))
+            print("ProcessEncoderSound:" + utils.exception_to_string(ex))
         finally:
             self._close_sound()
          
@@ -268,7 +277,7 @@ class ProcessEncoder(ipc.ChildProcessThread):
             ex = utils.get_exception()
             if not self.is_destroy():
                 self.destroy()
-                print("_sound_encode_result: err" + str(ex))            
+                print("_sound_encode_result: err" + utils.exception_to_string(ex))            
     
     def _close_sound(self):        
         if self._sound_memmap is not None:
@@ -298,7 +307,7 @@ class ProcessEncoder(ipc.ChildProcessThread):
             self._encinst.initialize(mon["encses"])
             mon["curcapid"]=0
             mon["fpscurcapid"]=0
-            mon["curcapst"]="K"
+            mon["curcapst"]=b"K"
             if self._multiview["gx"]+mon["x"]+mon["width"]>w:
                 w=self._multiview["gx"]+mon["x"]+mon["width"]
             if self._multiview["gy"]+mon["y"]+mon["height"]>h:
@@ -314,7 +323,7 @@ class ProcessEncoder(ipc.ChildProcessThread):
         self._encinst.initialize(mon["encses"])
         mon["curcapid"]=0
         mon["fpscurcapid"]=0
-        mon["curcapst"]="K"
+        mon["curcapst"]=b"K"
         self._stream.write_bytes(self._struct_hhh.pack(common.TOKEN_RESOLUTION,mon["width"],mon["height"]))
         
         
@@ -331,10 +340,10 @@ class ProcessEncoder(ipc.ChildProcessThread):
                     rgbimage=None
                     self._memmap.seek(0)
                     st = self._memmap.read(1)
-                    if st=="O":
+                    if st==b"O":
                         self._memmap.seek(mon["pos"])
                         capst=self._memmap.read(1)
-                        if capst=="K":
+                        if capst==b"K":
                             capid=self._struct_Q.unpack(self._memmap.read(8))[0]
                             if mon["curcapid"]!=capid:
                                 mon["curcapid"]=capid
@@ -343,10 +352,10 @@ class ProcessEncoder(ipc.ChildProcessThread):
                                 utils.convert_bytes_to_structure(rgbimage,btsi)
                                 btsd = self._memmap.read(rgbimage.sizedata)
                                 rgbimage.data=ctypes.cast(ctypes.c_char_p(btsd),ctypes.c_void_p)
-                        elif capst=="P":
+                        elif capst==b"P":
                             multiviewst=capst
                             break
-                    elif st=="C":
+                    elif st==b"C":
                         bexit=True
                         break   
                     rgbimages.append(rgbimage)
@@ -354,9 +363,9 @@ class ProcessEncoder(ipc.ChildProcessThread):
                         bchange=True            
                 self._cursor_encode()
                 if self._multiview["st"]!=multiviewst:
-                    if multiviewst=="K":
+                    if multiviewst==b"K":
                         self._stream.write_bytes(self._struct_h.pack(common.TOKEN_FRAME_UNLOCKED))
-                    elif multiviewst=="P":
+                    elif multiviewst==b"P":
                         self._stream.write_bytes(self._struct_h.pack(common.TOKEN_FRAME_LOCKED))
                     self._multiview["st"]=multiviewst
                 if bchange==True or bexit==True:                    
@@ -388,11 +397,11 @@ class ProcessEncoder(ipc.ChildProcessThread):
             while not self.is_destroy() and not self._skipevent.is_set():
                 self._memmap.seek(0)
                 st = self._memmap.read(1)
-                if st=="O":
+                if st==b"O":
                     self._memmap.seek(mon["pos"])
                     capst=self._memmap.read(1)
-                    if capst=="K":
-                        if mon["curcapst"]=="P":
+                    if capst==b"K":
+                        if mon["curcapst"]==b"P":
                             self._stream.write_bytes(self._struct_h.pack(common.TOKEN_FRAME_UNLOCKED))
                         mon["curcapst"]=capst
                         capid=self._struct_Q.unpack(self._memmap.read(8))[0]
@@ -408,13 +417,13 @@ class ProcessEncoder(ipc.ChildProcessThread):
                             break
                         else:                            
                             self._cursor_encode()
-                    elif capst=="P":
-                        if mon["curcapst"]!="P":
+                    elif capst==b"P":
+                        if mon["curcapst"]!=b"P":
                             self._stream.write_bytes(self._struct_h.pack(common.TOKEN_FRAME_LOCKED))
                         mon["curcapst"]=capst
-                elif st=="C":
+                elif st==b"C":
                     break
-                self._cond.wait(0.25)                    
+                self._cond.wait(0.25)
         finally:
             self._cond.release()
         if rgbimage is not None:                            
@@ -438,7 +447,7 @@ class ProcessEncoder(ipc.ChildProcessThread):
             curid=self._struct_Q.unpack(self._memmap.read(8))[0]
             if self._curid!=curid:
                 self._curid=curid
-                btsd = self._memmap.read(curimage.sizedata)
+                btsd = TMP_zlib_decompress(self._memmap.read(curimage.sizedata))                
                 curimage.data=ctypes.cast(ctypes.c_char_p(btsd),ctypes.c_void_p)
                 bencode=True
             else:
@@ -512,11 +521,11 @@ class ProcessEncoder(ipc.ChildProcessThread):
                     self._calc_fps()
                     if not self.is_destroy():
                         self._skipevent.clear()
-                        self._stream.write_bytes("")                            
+                        self._stream.write_bytes(b"")                            
         except:
             ex = utils.get_exception()
             if not self.is_destroy():
-                print("ProcessEncoder:" + str(ex))
+                print("ProcessEncoder:" + utils.exception_to_string(ex))
         finally:
             self._close_monitors()
             native.unload_libraries(self._listlibscr)            
@@ -569,6 +578,6 @@ class ProcessEncoder(ipc.ChildProcessThread):
             ex = utils.get_exception()
             if not self.is_destroy():
                 self.destroy()
-                print("_screen_encode_result: err" + str(ex))
+                print("_screen_encode_result: err" + utils.exception_to_string(ex))
                 
                 

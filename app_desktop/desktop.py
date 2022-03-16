@@ -16,8 +16,39 @@ import stat
 import utils
 import ctypes
 import native
-import common
 import subprocess
+from . import common
+
+
+##### TO FIX 22/09/2021
+try:
+    TMP_bytes_to_str=utils.bytes_to_str
+    TMP_str_to_bytes=utils.str_to_bytes
+    TMP_str_new=utils.str_new
+    TMP_bytes_join=utils.bytes_join
+    TMP_bytes_get=utils.bytes_get
+except:
+    TMP_bytes_to_str=lambda b, enc="ascii": b.decode(enc, errors="replace")
+    TMP_str_to_bytes=lambda s, enc="ascii": s.encode(enc, errors="replace")
+    def TMP_py2_str_new(o):
+        if isinstance(o, unicode):
+            return o 
+        elif isinstance(o, str):
+            return o.decode("utf8", errors="replace")
+        else:
+            return str(o).decode("utf8", errors="replace")
+    TMP_str_new=TMP_py2_str_new
+    TMP_bytes_join=lambda ar: "".join(ar)
+    TMP_bytes_get=lambda b, i: ord(b[i])
+
+try:    
+    import sys
+    if sys.version_info[0]==2:        
+        if utils.path_exists(os.path.dirname(__file__) + os.sep + "__pycache__"):
+            utils.path_remove(os.path.dirname(__file__) + os.sep + "__pycache__")
+except: 
+    None
+##### TO FIX 22/09/2021
 
 ########################################################################################################################
 ##### OLD 27/07/2021 TO REMOVE      
@@ -31,7 +62,7 @@ except:
 
 
     
-####### TOP MOVE INSIDE IPC AFTER TEST
+####### TO REMOVE (IT IS INSIDE IPC)
 if BIPCOK==True:  
     class ProcessInActiveConsole(ipc.Process):
         def __init__(self, mdl, func, args=None, forcesubprocess=False):
@@ -66,7 +97,8 @@ if BIPCOK==True:
                                 for apps in arenv:                        
                                     if apps=="XAUTHORITY" or apps=="DISPLAY" or apps.startswith("WAYLAND_") or apps.startswith("XDG_") or apps.startswith("LC_"):
                                         lstret[apps]=arenv[apps]
-                                if ("DISPLAY" in lstret and "XAUTHORITY" in lstret):
+                                        #print("DETECT BY PROCESS- " + apps + ": " + lstret[apps])                                        
+                                if ("DISPLAY" in lstret and "XAUTHORITY" in lstret):                                    
                                     bok=True
                                     break
                                 lstret={}
@@ -84,6 +116,7 @@ if BIPCOK==True:
                         data = subprocess.Popen(["w"], stdout = subprocess.PIPE, stderr = subprocess.PIPE)
                         so, se = data.communicate()
                         if so is not None and len(so)>0:
+                            so=TMP_bytes_to_str(so, "utf8")
                             ar = so.split("\n")
                             del ar[0]
                             bhead=True
@@ -112,6 +145,7 @@ if BIPCOK==True:
                                 for apps in arenv:                        
                                     if apps=="XAUTHORITY" or apps=="DISPLAY" or apps.startswith("WAYLAND_") or apps.startswith("XDG_") or apps.startswith("LC_"):
                                         lstret[apps]=arenv[apps]
+                                        #print("DETECT BY WHAT OF w COMMAND - " + apps + ": " + lstret[apps])
                                 break
                                                 
                 except:
@@ -126,6 +160,7 @@ if BIPCOK==True:
                         data = subprocess.Popen(["w"], stdout = subprocess.PIPE, stderr = subprocess.PIPE)
                         so, se = data.communicate()
                         if so is not None and len(so)>0:
+                            so=TMP_bytes_to_str(so, "utf8")
                             ar = so.split("\n")
                             del ar[0]
                             bhead=True
@@ -146,6 +181,7 @@ if BIPCOK==True:
                                             sdsp=sdisplay
                                     if sdsp is not None:
                                         lstret["DISPLAY"] = sdsp
+                                        #print("DETECT DISPLAY BY w COMMAND - DISPLAY: " + lstret["DISPLAY"])
                                         break
                 except:
                     None
@@ -183,9 +219,11 @@ if BIPCOK==True:
                                     if sitm[0]==":" and sitm[1].isdigit() and sitm[2]=="." and sitm[3].isdigit():
                                         sdsp=sitm
                         if sxauth is not None:
-                            lstret["XAUTHORITY"] = sxauth
+                            lstret["XAUTHORITY"] = sxauth                            
+                            #print("DETECT BY CMDLINE - XAUTHORITY: " + lstret["XAUTHORITY"])                            
                         if sdsp is not None:
                             lstret["DISPLAY"] = sdsp
+                            #print("DETECT BY CMDLINE - DISPLAY: " + lstret["DISPLAY"])
                         if bok:
                             bwaylanderr=False
                             break
@@ -193,7 +231,7 @@ if BIPCOK==True:
             except:
                 None
             
-            if bwaylanderr:
+            if bwaylanderr or (("XDG_SESSION_TYPE" in lstret) and (lstret["XDG_SESSION_TYPE"].upper()=="WAYLAND")):
                 raise Exception("XWayland is not supported.")                
             
             if "DISPLAY" not in lstret:
@@ -206,8 +244,8 @@ if BIPCOK==True:
                         p = sxauth.rindex("/")
                         if p>=0:
                             sxauthdir = sxauth[0:p]
-                            os.makedirs(sxauthdir, 0700)
-                            fd = os.open(sxauth,os.O_RDWR|os.O_CREAT, 0600)
+                            os.makedirs(sxauthdir, 0o700)
+                            fd = os.open(sxauth,os.O_RDWR|os.O_CREAT, 0o600)
                             os.close(fd)                                                        
                     except:
                         None
@@ -221,7 +259,8 @@ if BIPCOK==True:
             if "XAUTHORITY" in lstret:
                 print("XAUTHORITY: " + lstret["XAUTHORITY"])
             '''
-            return lstret        
+            
+            return lstret
         
         def _load_linux_console_info(self,appconsole):
             if appconsole is not None:
@@ -377,7 +416,7 @@ if BIPCOK==True:
                             if self._get_screen_module().DWAScreenCaptureIsProcessElevated()==1:
                                 runaselevatore=u"True"
                     '''            
-                    appcmd=u"\"" + self._py_exe_path + u"\" -S -m agent " + unicode(args[2]) + u" " + unicode(args[3]) #+ u" " + unicode(str(self._agent_main._agent_debug_mode)) + u" windows " + runaselevatore            
+                    appcmd=u"\"" + self._py_exe_path + u"\" -S -m agent " + TMP_str_new(args[2]) + u" " + TMP_str_new(args[3]) #+ u" " + TMP_str_new(str(self._agent_main._agent_debug_mode)) + u" windows " + runaselevatore            
                     self._process=None
                     self._ppid = native.get_instance().start_process_in_active_console(appcmd,self._py_home_path)
                     if self._ppid==-1:
@@ -411,37 +450,31 @@ if BIPCOK==True:
                     self._ppid=self._process.pid
                     
             elif utils.is_mac():
-                '''
-                NEW                
                 bfaultback=True
-                if self._currentconsole!=None and "env" in self._currentconsole:
-                    try:
-                        libenv=self._currentconsole["env"]
-                        if utils.path_exists("runtime"):
-                            libenv["DYLD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
-                        elif "DYLD_LIBRARY_PATH" in os.environ:
-                            libenv["DYLD_LIBRARY_PATH"]=os.environ["DYLD_LIBRARY_PATH"]
-                        self._process=subprocess.Popen(args, env=libenv, preexec_fn=self._init_process_demote(self._currentconsole["uid"], self._currentconsole["gid"]))                        
-                        self._ppid=self._process.pid
-                        bfaultback=False
-                    except:
-                        None
-                
-                if bfaultback:
-                    libenv = os.environ
-                    if utils.path_exists("runtime"):
-                        libenv["DYLD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
-                    elif "DYLD_LIBRARY_PATH" in os.environ:
-                        libenv["DYLD_LIBRARY_PATH"]=os.environ["DYLD_LIBRARY_PATH"]
-                    self._process=subprocess.Popen(args, env=libenv)
-                    self._ppid=self._process.pid
-                '''
-                                
+                self._ppid=None
                 if not self._forcesubprocess:
-                    self._ppid=native.get_instance().exec_guilnc(self._currentconsole["uid"],"ipc",[args[3]])
+                    if not hasattr(native.get_instance(), "is_old_guilnc") or native.get_instance().is_old_guilnc():                
+                        #GUI LAUNCHER OLD VERSION 03/11/2021 (DO NOT REMOVE)
+                        if self._currentconsole!=None and "uid" in self._currentconsole:
+                            self._ppid=native.get_instance().exec_guilnc(self._currentconsole["uid"],"ipc",[args[3]])
+                    else:
+                        if self._currentconsole!=None and "env" in self._currentconsole:
+                            try:
+                                libenv=self._currentconsole["env"]
+                                if utils.path_exists("runtime"):
+                                    libenv["DYLD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
+                                elif "DYLD_LIBRARY_PATH" in os.environ:
+                                    libenv["DYLD_LIBRARY_PATH"]=os.environ["DYLD_LIBRARY_PATH"]
+                                self._process=subprocess.Popen(args, env=libenv, preexec_fn=self._init_process_demote(self._currentconsole["uid"], self._currentconsole["gid"]))                        
+                                self._ppid=self._process.pid
+                                bfaultback=False
+                            except:
+                                None
+                                                
                 if self._ppid is not None:
                     self._process = None
-                else:
+                    bfaultback=False                                    
+                if bfaultback:
                     libenv = os.environ
                     if utils.path_exists("runtime"):
                         libenv["DYLD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
@@ -465,7 +498,7 @@ if BIPCOK==True:
                 self._currentconsole=None
                 raise ex    
 
-####### TOP MOVE INSIDE IPC AFTER TEST
+####### TO REMOVE (IT IS INSIDE IPC)
     
     
 class Desktop():
@@ -698,7 +731,7 @@ class DesktopProcessCapture(threading.Thread):
                 if "memmap" in self._sound_status:
                     memmap=self._sound_status["memmap"]
                     memmap.seek(0)
-                    memmap.write("C")
+                    memmap.write(b"C")
                     memmap.close()
             except:
                 None
@@ -710,7 +743,7 @@ class DesktopProcessCapture(threading.Thread):
                 if "memmap" in self._monitors:
                     memmap=self._monitors["memmap"]
                     memmap.seek(0)
-                    memmap.write("C")
+                    memmap.write(b"C")
                     memmap.close()
             except:
                 None
@@ -765,7 +798,14 @@ class DesktopProcessCapture(threading.Thread):
                             prcargs=[]         
                             if hasattr(self._agent_main, "_app_desktop_capture_fallback_lib") and self._agent_main._app_desktop_capture_fallback_lib is not None:
                                 prcargs.append("capture_fallback_lib=" + self._agent_main._app_desktop_capture_fallback_lib)
-                            self._process=ProcessInActiveConsole("app_desktop.capture", "ProcessCapture", prcargs, forcesubprocess=self._debug_forcesubprocess)
+                            
+                            ##### TO FIX 22/09/2021
+                            if hasattr(ipc, "ProcessInActiveConsole"):
+                                self._process=ipc.ProcessInActiveConsole("app_desktop.capture", "ProcessCapture", prcargs, forcesubprocess=self._debug_forcesubprocess)
+                            else:
+                                self._process=ProcessInActiveConsole("app_desktop.capture", "ProcessCapture", prcargs, forcesubprocess=self._debug_forcesubprocess)
+                            ##### TO FIX 22/09/2021
+                            
                             self._strm=self._process.start()
                             self._strm.set_read_timeout_function(self._strm_read_timeout)
                             self._process_last_error=None
@@ -793,7 +833,7 @@ class DesktopProcessCapture(threading.Thread):
                                         l=1+8+ctypes.sizeof(common.RGB_IMAGE)+(mon["width"]*mon["height"]*3)                                
                                         szmmap+=l
                                     #CURSOR
-                                    l=ctypes.sizeof(common.CURSOR_IMAGE)+8+((common.MAX_CURSOR_IMAGE_SIZE*common.MAX_CURSOR_IMAGE_SIZE)*4)
+                                    l=ctypes.sizeof(common.CURSOR_IMAGE)+8+common.MAX_CURSOR_IMAGE_SIZE
                                     self._monitors["curpos"]=szmmap
                                     szmmap+=l
                                     #FPS
@@ -801,7 +841,7 @@ class DesktopProcessCapture(threading.Thread):
                                     szmmap+=1                                                                
                                     memmap = ipc.MemMap(szmmap, fixperm=self._process.get_fixperm())
                                     memmap.seek(0)
-                                    memmap.write("O")
+                                    memmap.write(b"O")
                                     memmap.write(self._struct_Q.pack(0))                                                                
                                     self._monitors["memmap"]=memmap
                                     self._monitors["cond"]=ipc.Condition(fixperm=self._process.get_fixperm())
@@ -821,7 +861,7 @@ class DesktopProcessCapture(threading.Thread):
                                     self._sound_status["memmap_size"] = jo["memmap_size"]
                                     self._sound_status["memmap"] = ipc.MemMap(szmmap, fixperm=self._process.get_fixperm())
                                     self._sound_status["memmap"].seek(0)
-                                    self._sound_status["memmap"].write("O")
+                                    self._sound_status["memmap"].write(b"O")
                                     self._sound_status["memmap"].write(self._struct_Q.pack(0))                                    
                                     self._sound_status["cond"]=ipc.Condition(fixperm=self._process.get_fixperm())
                                     bwrite=True
@@ -892,7 +932,7 @@ class DesktopProcessCapture(threading.Thread):
 class DesktopSession(threading.Thread):
         
     def __init__(self, dskmain, cinfo, sid,  wsock):
-        threading.Thread.__init__(self,  name="DesktopSession" + str(sid))
+        threading.Thread.__init__(self,  name="DesktopSession" + sid)
         self._struct_h=struct.Struct("!h")
         self._struct_hh=struct.Struct("!hh")
         self._struct_hb=struct.Struct("!hb")
@@ -1011,7 +1051,7 @@ class DesktopSession(threading.Thread):
                 if prprequest is not None and "frametime" in prprequest:
                     #print("frame received. Time: " + prprequest["frametime"])                    
                     tm = float(prprequest["frametime"])
-                    self.received_frame(tm)                                          
+                    self.received_frame(tm)
                 if prprequest is not None and "inputs" in prprequest:
                     if not self._allow_inputs:
                         raise Exception("Permission denied (inputs).")                    
@@ -1127,7 +1167,7 @@ class DesktopSession(threading.Thread):
     def received_frame(self,tm): 
         #CALCULATE PING
         if self._ping_sent:
-            self._ping=self._ping_counter.get_value()            
+            self._ping=self._ping_counter.get_value()
             self._ping_counter.reset()
             self._ping_sent=False
             return
@@ -1151,7 +1191,7 @@ class DesktopSession(threading.Thread):
             
     def send_init_session(self):
         #SEND ID        
-        sdataid=self._struct_h.pack(common.TOKEN_SESSION_ID)+self._id
+        sdataid=self._struct_h.pack(common.TOKEN_SESSION_ID)+TMP_str_to_bytes(self._id)
         self._send_bytes(sdataid)
     
         #START KEEP ALIVE MANAGER
@@ -1163,7 +1203,7 @@ class DesktopSession(threading.Thread):
         spar.append(self._struct_hh.pack(common.TOKEN_SUPPORTED_FRAME,3))
         for sf in self._supported_frame:
             spar.append(self._struct_h.pack(sf))
-        self._send_bytes("".join(spar))
+        self._send_bytes(TMP_bytes_join(spar))
     
     
     def calc_stats(self):
@@ -1181,7 +1221,7 @@ class DesktopSession(threading.Thread):
             stm = sum(self._stats_time)
             self._stats_ffps=float(sum(self._stats_frame_value))/stm
             self._stats_sent_frame=0
-            self._stats_bps=long(float(sum(self._stats_bytes_value))/stm)
+            self._stats_bps=int(float(sum(self._stats_bytes_value))/stm)
             self._stats_sent_bytes=0            
             if self._stats_ffps>0:
                 self._stat_ffps_itf=1.0/self._stats_ffps
@@ -1227,7 +1267,7 @@ class DesktopSession(threading.Thread):
                     ba[0:0]=self._struct_h.pack(common.TOKEN_SESSION_STATS)
                     self._send_bytes(ba)
                 except:
-                    print str(utils.get_exception())
+                    print(utils.get_exception())
         
     
     def detect_qa(self):
@@ -1239,7 +1279,7 @@ class DesktopSession(threading.Thread):
                 if self._quality_detect_wait<0:
                     self._quality_detect_wait=0                
                 perc = self._quality_detect_wait/self._quality_detect_counter.get_value()
-                #print str(perc)
+                #print(TMP_str_new(perc)
                 if perc>=0.7:
                     if self._quality_detect_value>0:
                         self._quality_detect_value-=1
@@ -1265,7 +1305,7 @@ class DesktopSession(threading.Thread):
             while self.check_destroy() and self._process.get_status()=="started" and self._process.get_id()==self._process_id:
                 bwait=False
                 if self._frame_type!=-1 and self._monitor!=-1:
-                    self.calc_stats()                    
+                    self.calc_stats()
                     self.detect_qa()
                     bwait=self._frame_distance*self._stat_ffps_itf>self._stat_max_distance_tm
                     if (not bwait and (self._slow_mode is False or self._slow_mode_counter is None or self._slow_mode_counter.is_elapsed(4)) and
@@ -1315,15 +1355,15 @@ class DesktopSession(threading.Thread):
             if len(sdata)>0:
                 lst=[]
                 tp = self._struct_h.unpack(sdata[0:2])[0]                
-                if tp==common.TOKEN_FRAME:                    
+                if tp==common.TOKEN_FRAME:
                     #CALCULATE PING
-                    if self._ping_counter is None or (self._ping_counter.is_elapsed(5) and sum(self._stats_sent_size)==0l and self._frame_distance==0):
+                    if self._ping_counter is None or (self._ping_counter.is_elapsed(5) and sum(self._stats_sent_size)==0 and self._frame_distance==0):
                         if self._ping_counter is None:
                             self._ping_counter = utils.Counter()
                         else:
                             self._ping_counter.reset()
-                        self._ping_sent=True                
-                        lst.append(self._struct_h.pack(common.TOKEN_FRAME_TIME)+str(time.time()))
+                        self._ping_sent=True
+                        lst.append(self._struct_h.pack(common.TOKEN_FRAME_TIME)+TMP_str_to_bytes(TMP_str_new(time.time())))
                         lst.append(self._struct_hb.pack(2,1))
                         self._send_list_bytes(lst)
                         lst=[]
@@ -1334,24 +1374,24 @@ class DesktopSession(threading.Thread):
                         p = len(self._stats_sent_size)-1
                         if p==-1:
                             p=0
-                            self._stats_sent_size.append(long(len(sdata)))
+                            self._stats_sent_size.append(int(len(sdata)))
                         else:
-                            self._stats_sent_size[p]+=long(len(sdata))
-                        if ord(sdata[2])==1:
+                            self._stats_sent_size[p]+=int(len(sdata))
+                        if TMP_bytes_get(sdata,2)==1:
                             self._frame_distance+=1
                             if self._stats_sent_size[p]==3:
                                 self._stats_sent_size[p]=0
                                 self._received_frame_nosync()
                                 bsend=False
-                            self._stats_sent_size.append(0l)                        
+                            self._stats_sent_size.append(0)                        
                         self._semaphore_st.notify_all()
                     finally:
                         self._semaphore_st.release()                    
                     if bsend:                    
-                        if ord(sdata[2])==1:
-                            lst.append(self._struct_h.pack(common.TOKEN_FRAME_TIME)+str(time.time()))
+                        if TMP_bytes_get(sdata,2)==1:
+                            lst.append(self._struct_h.pack(common.TOKEN_FRAME_TIME)+TMP_str_to_bytes(TMP_str_new(time.time())))
                         lst.append(sdata)
-                        #print("frame sent. Time: " + str(tm))
+                        #print("frame sent. Time: " + TMP_str_new(tm))
                 elif tp==common.TOKEN_CURSOR:
                     if self._cursor_visible==True:
                         lst.append(sdata)
@@ -1376,25 +1416,22 @@ class DesktopSession(threading.Thread):
                     self._semaphore_st.release()
                 
     def run(self):
-        bact=False
         baudioenable=None
         bframelocked=False
+        try:
+            self._cinfo.inc_activities_value("screenCapture")
+        except:
+            None        
         try:
             while self.check_destroy():
                 if self._process_encoder==None:
                     self._process_encoder = ipc.Process("app_desktop.encoder", "ProcessEncoder", forcesubprocess=self._debug_forcesubprocess)
                     self._process_encoder_stream = self._process_encoder.start()
                     self._process_encoder_stream.set_read_timeout_function(self._strm_process_encoder_read_timeout)
-                    self._process_encoder_read_thread=threading.Thread(target=self._process_encoder_read, name="DesktopSessionProcessRead" + str(self._id))
+                    self._process_encoder_read_thread=threading.Thread(target=self._process_encoder_read, name="DesktopSessionProcessRead" + TMP_str_new(self._id))
                     self._process_encoder_read_thread.start()
                                         
-                if self._process.get_status()=="started":
-                    try:
-                        if not bact:
-                            self._cinfo.inc_activities_value("screenCapture")
-                            bact=True
-                    except:
-                        None
+                if self._process.get_status()=="started":                    
                     if self._process.get_id()!=self._process_id:
                         self._destroy_process_encoder()
                         self._process_id=self._process.get_id()
@@ -1484,6 +1521,7 @@ class DesktopSession(threading.Thread):
                 if appmsg is None:
                     appmsg = utils.exception_to_string(e)
                 self._dskmain._agent_main.write_err("AppDesktop:: session id: " + self._id + " error: "  + appmsg)                
+        
         try:
             self._cinfo.dec_activities_value("screenCapture")
         except:

@@ -115,10 +115,22 @@ bool WindowsInputs::isExtendedKey(int key){
 int WindowsInputs::getKeyCode(const char* key){
 	if (strcmp(key,"CONTROL")==0){
 		return VK_CONTROL;
+	}else if (strcmp(key,"LCONTROL")==0){
+		return VK_LCONTROL;
+	}else if (strcmp(key,"RCONTROL")==0){
+			return VK_RCONTROL;
 	}else if (strcmp(key,"ALT")==0){
 		return VK_MENU;
+	}else if (strcmp(key,"LALT")==0){
+		return VK_LMENU;
+	}else if (strcmp(key,"RALT")==0){
+		return VK_RMENU;
 	}else if (strcmp(key,"SHIFT")==0){
 		return VK_SHIFT;
+	}else if (strcmp(key,"LSHIFT")==0){
+		return VK_LSHIFT;
+	}else if (strcmp(key,"RSHIFT")==0){
+		return VK_RSHIFT;
 	}else if (strcmp(key,"TAB")==0){
 		return VK_TAB;
 	}else if (strcmp(key,"ENTER")==0){
@@ -209,6 +221,7 @@ void WindowsInputs::keyboard(const char* type,const char* key, bool ctrl, bool a
 	if (strcmp(type,"CHAR")==0){
 		bool sendunicode=true;
 		SHORT vkKeyScanResult = 0;
+		int vkey = 0;
 		short btlo = 0;
 		short bthi = 0;
 		bool wShift = false;
@@ -220,9 +233,10 @@ void WindowsInputs::keyboard(const char* type,const char* key, bool ctrl, bool a
 		try {
 			HWND hwnd = GetForegroundWindow();
 			if (hwnd != 0) {
+				int ikey=atoi(key);
 				threadId = GetWindowThreadProcessId(hwnd, 0);
 				hklCurrent = GetKeyboardLayout(threadId);
-				vkKeyScanResult = VkKeyScanExW(atoi(key), hklCurrent);
+				vkKeyScanResult = VkKeyScanExW(ikey, hklCurrent);
 				if (vkKeyScanResult != -1) {
 					sendunicode=false;
 					btlo = vkKeyScanResult & 0xff;
@@ -236,6 +250,37 @@ void WindowsInputs::keyboard(const char* type,const char* key, bool ctrl, bool a
 					}else if (strcmp(key,"46")==0){ //??? Putty issue 46=.
 						sendunicode=true;
 					}
+
+					if (!sendunicode){
+						vkey=MapVirtualKeyEx(btlo, MAPVK_VK_TO_VSC,hklCurrent);
+						BYTE keyState[256] = {};
+						if (GetKeyboardState(keyState)){
+							keyState[VK_CAPITAL]=0x00;
+							if (wShift){
+								keyState[VK_SHIFT]=0xff;
+							}else{
+								keyState[VK_SHIFT]=0x00;
+							}
+							if (wCtrl){
+								keyState[VK_CONTROL]=0xff;
+							}else{
+								keyState[VK_CONTROL]=0x00;
+							}
+							if (wAlt){
+								keyState[VK_MENU]=0xff;
+							}else{
+								keyState[VK_MENU]=0x00;
+							}
+							WCHAR sbuff[5] = {};
+							if (ToUnicodeEx(btlo,vkey,keyState,sbuff,4,0,hklCurrent)>0){
+								int ikeyapp = (int)sbuff[0];
+								if (ikey!=ikeyapp){
+									sendunicode=true;
+								}
+							}
+						}
+					}
+
 				}
 				if (sendunicode){
 					int ltit = GetWindowTextLengthW(hwnd);

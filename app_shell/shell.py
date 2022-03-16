@@ -12,14 +12,36 @@ import sys
 import struct
 import signal
 import time
-import codecs
+import utils
 import subprocess
 import io
 import agent
 import json
 
+
+##### TO FIX 22/09/2021
 try:
-    from os_win_pyconpty import conpty
+    TMP_bytes_to_str=utils.bytes_to_str
+    TMP_str_to_bytes=utils.str_to_bytes
+except:
+    TMP_bytes_to_str=lambda b, enc="ascii": b.decode(enc, errors="replace")
+    TMP_str_to_bytes=lambda s, enc="ascii": s.encode(enc, errors="replace")
+try:    
+    if sys.version_info[0]==2:        
+        if utils.path_exists(os.path.dirname(__file__) + os.sep + "__pycache__"):
+            utils.path_remove(os.path.dirname(__file__) + os.sep + "__pycache__")
+        if utils.path_exists(os.path.dirname(__file__) + os.sep + "os_win_pyconpty" + os.sep + "__pycache__"):
+            utils.path_remove(os.path.dirname(__file__) + os.sep + "os_win_pyconpty" + os.sep + "__pycache__")
+        if utils.path_exists(os.path.dirname(__file__) + os.sep + "os_win_pyconpty" + os.sep + "win32" + os.sep + "__pycache__"):
+            utils.path_remove(os.path.dirname(__file__) + os.sep + "os_win_pyconpty" + os.sep + "win32" + os.sep + "__pycache__")
+        
+except: 
+    None
+##### TO FIX 22/09/2021
+
+
+try:
+    from .os_win_pyconpty import conpty
 except Exception as ex:
     None
 
@@ -134,7 +156,7 @@ class ShellManager(threading.Thread):
         return data.to_str("utf8")
     
     def _decode_data_NEW(self,data):        
-        return data.decode("utf8")
+        return TMP_bytes_to_str(data,"utf8")
     ##### TO FIX 22/09/2021
     
     def get_id(self):
@@ -143,20 +165,20 @@ class ShellManager(threading.Thread):
     def get_idses(self):
         return self._idses
     
-    def _on_data(self,websocket,tpdata,data):
+    def _on_data(self,websocket,tpdata,data):        
         self._semaphore.acquire()
         try:
             if not self._bclose:
                 try:
                     self._timeout_cnt=0;
-                    self._last_timeout=long(time.time() * 1000)
+                    self._last_timeout=int(time.time() * 1000)
                     prprequest = json.loads(self._decode_data(data))
                     if prprequest["type"]==ShellManager.REQ_TYPE_INITIALIZE:
                         sid=prprequest["id"]
                         if agent.is_windows():
                             shl = Windows(self, sid, prprequest["cols"], prprequest["rows"])
                         else:
-                            shl = Linux(self, sid, prprequest["cols"], prprequest["rows"])
+                            shl = LinuxMac(self, sid, prprequest["cols"], prprequest["rows"])
                         shl.initialize()
                         self._shell_list[sid]=shl
                         self._semaphore.notifyAll()
@@ -193,7 +215,7 @@ class ShellManager(threading.Thread):
     
     def run(self):
         self._timeout_cnt=0;
-        self._last_timeout=long(time.time() * 1000)
+        self._last_timeout=int(time.time() * 1000)
         try:            
             self._semaphore.acquire()
             try:
@@ -202,19 +224,19 @@ class ShellManager(threading.Thread):
                     if bwait:
                         self._semaphore.wait(0.2)
                     bwait=True
-                    elapsed=long(time.time() * 1000)-self._last_timeout
+                    elapsed=int(time.time() * 1000)-self._last_timeout
                     if elapsed<0:
-                        self._last_timeout=long(time.time() * 1000) #Modificato orario pc
+                        self._last_timeout=int(time.time() * 1000) #Modificato orario pc
                     elif elapsed>1000:
                         self._timeout_cnt+=1;
-                        self._last_timeout=long(time.time() * 1000)
-                    if self._timeout_cnt>=SHELL_INTERVALL_TIMEOUT:
+                        self._last_timeout=int(time.time() * 1000)                    
+                    if self._timeout_cnt>=SHELL_INTERVALL_TIMEOUT:                        
                         self.terminate()
-                    else:
+                    else:                        
                         arrem=[]
                         for idx in self._shell_list:
                             try:                                
-                                #apptm=long(time.time() * 1000)                                
+                                #apptm=int(time.time() * 1000)                                
                                 upd=self._shell_list[idx].read_update()
                                 if upd is not None and len(upd)>0:
                                     bwait=False
@@ -222,13 +244,14 @@ class ShellManager(threading.Thread):
                                     snd["id"]=idx
                                     snd["data"]=upd
                                     appsend = json.dumps(snd)
-                                    self._websocket.send_string(appsend)                                    
+                                    self._websocket.send_string(appsend)
                                     '''print("*****************************************************************************\n")
                                     print("*****************************************************************************\n")
                                     print("*****************************************************************************\n")
                                     print("*****************************************************************************\n")
-                                    print("SEND: len:" + str(len(appsend)) + "  time:" + str(long(time.time() * 1000)-apptm) + "\n")'''
-                            except Exception as er:
+                                    print("SEND: len:" + str(len(appsend)) + "  time:" + str(int(time.time() * 1000)-apptm) + "\n")'''
+                            except Exception:
+                                er=utils.get_exception()
                                 try:
                                     snd = {}
                                     snd["id"]=idx
@@ -288,21 +311,34 @@ class ShellManager(threading.Thread):
             self._semaphore.release()
         return ret
 
-class Linux():
+class LinuxMac():
     
     def __init__(self, mgr, sid, col, row):
         self._manager=mgr
         self._id=sid
         self._cols=col
         self._rows=row
-        self._path="/bin/bash"
+        if utils.is_linux():
+            self._path="/bin/bash"
+            if not utils.path_exists(self._path):
+                self._path="/bin/sh"
+        else:
+            self._path="/bin/zsh"
+            if not utils.path_exists(self._path): 
+                self._path="/bin/bash"
+                if not utils.path_exists(self._path):
+                    self._path="/bin/sh"
+        
+            
         self._bterm = False
         self._semaphore = threading.Condition()
+        self._rwenc="utf8"
     
     def get_id(self):
         return self._id
     
     def _getutf8lang(self):
+        altret=None
         try:
             p = subprocess.Popen("locale | grep LANG=", stdout=subprocess.PIPE, shell=True)
             (po, pe) = p.communicate()
@@ -310,9 +346,12 @@ class Linux():
             if len(po) > 0:
                 ar = po.split("\n")[0].split("=")[1].split(".")
                 if ar[1].upper()=="UTF8" or ar[1].upper()=="UTF-8":
-                    return ar[0] 
+                    if ar[0].upper()=="C":
+                        altret = ar[0] + "." + ar[1]
+                    else:
+                        return ar[0] + "." + ar[1]
         except:
-            None
+            None        
         try:                
             p = subprocess.Popen("locale -a", stdout=subprocess.PIPE, shell=True)
             (po, pe) = p.communicate()
@@ -322,18 +361,23 @@ class Linux():
                 for r in arlines:
                     ar = r.split(".")
                     if len(ar)>1 and ar[0].upper()=="EN_US" and (ar[1].upper()=="UTF8" or ar[1].upper()=="UTF-8"):
-                        return ar[0]
+                        if ar[0].upper()=="C":
+                            altret = ar[0] + "." + ar[1]
+                        else:
+                            return ar[0] + "." + ar[1]
                 #If not found get the first utf8
                 for r in arlines:
                     ar = r.split(".")
                     if len(ar)>1 and (ar[1].upper()=="UTF8" or ar[1].upper()=="UTF-8"):
-                        return ar[0]
+                        if ar[0].upper()=="C":
+                            altret = ar[0] + "." + ar[1]
+                        else:
+                            return ar[0] + "." + ar[1]
         except:
             None
-        return None
+        return altret
     
-    def initialize(self):
-        
+    def initialize(self):        
         ppid, pio = pty.fork()
         if ppid == 0: #Processo figlo
             
@@ -359,9 +403,9 @@ class Linux():
             attrs = termios.tcgetattr(stdout)
             iflag, oflag, cflag, lflag, ispeed, ospeed, cc = attrs
             if 'IUTF8' in termios.__dict__:
-                iflag |= (termios.IXON | termios.IXOFF | termios.__dict__['IUTF8'])
+                iflag |= (termios.IXON | termios.IXOFF | termios.__dict__['IUTF8'])                
             else:
-                iflag |= (termios.IXON | termios.IXOFF | 0x40000)
+                iflag |= (termios.IXON | termios.IXOFF | 0x40000)                
             oflag |= (termios.OPOST | termios.ONLCR | termios.INLCR)
             attrs = [iflag, oflag, cflag, lflag, ispeed, ospeed, cc]
             termios.tcsetattr(stdout, termios.TCSANOW, attrs)
@@ -377,7 +421,9 @@ class Linux():
             
             os.dup2(stderr, stdout) 
             os.chdir("/")
-            os.execvpe(self._path, [], env)
+            arapp = self._path.split("/")            
+            nargv=[arapp[len(arapp)-1]]
+            os.execvpe(self._path, nargv, env)
             os._exit(0)
 
         
@@ -390,7 +436,7 @@ class Linux():
         self.pio = pio
         
         self._reader = io.open(pio, 'rb', closefd=False)
-        self._writer = io.open(pio, 'wt', encoding="UTF-8", closefd=False)
+        self._writer = io.open(pio, 'wb', closefd=False)
                 
         try:
             self._manager._cinfo.inc_activities_value("shellSession")
@@ -434,9 +480,7 @@ class Linux():
             return
         if self._bterm == None:
             return
-        if not isinstance(c, unicode):
-            c=c.decode("utf8","replace");
-        self._writer.write(c)
+        self._writer.write(TMP_str_to_bytes(c,self._rwenc))
         self._writer.flush()
 
     def read_update(self):
@@ -449,9 +493,10 @@ class Linux():
         #reader.close()
         #output=self._reader.read(self._rows*self._cols)
         s = self._reader.read()
-        if s is not None and not isinstance(s, unicode):
-            s=s.decode("utf8","replace");
-        return s
+        if s is not None:
+            return TMP_bytes_to_str(s,self._rwenc)
+        else:
+            return s        
 
 
 class Windows():
@@ -465,6 +510,7 @@ class Windows():
         self._semaphore = threading.Condition()
         self._cmd = "cmd.exe"
         self._pty = None
+        self._rwenc="utf8"
 
     def _write_err(self,m):
         self._manager._shlmain._agent_main.write_err("AppShell:: " + m)
@@ -502,11 +548,17 @@ class Windows():
             return
         if c == '\r':
             c = '\r\n'
-        self._pty.write(c)
+        self._pty.write(c)        
 
     def read_update(self):
-        return self._pty.read()
-
+        #return self._pty.read()
+        bt = self._pty.read()
+        if bt is not None and len(bt)>0:
+            return TMP_bytes_to_str(bt, self._rwenc)            
+        else:
+            return bt
+        
+        
     def change_rows_cols(self, rows, cols):
         self._pty.resize(rows, cols)
 

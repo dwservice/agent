@@ -45,7 +45,7 @@ typedef struct _REPARSE_DATA_BUFFER {
 class DiskMng{
 public:
 	DiskMng();
-	wchar_t* getInfo();
+	int getInfo(wchar_t** sret);
 	int isFileJunction(wchar_t* path);
 private:
 

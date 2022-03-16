@@ -11,7 +11,17 @@ import agent
 import re
 import utils
 import ctypes
-import native
+import sys
+
+##### TO FIX 22/09/2021
+try:    
+    import os
+    if sys.version_info[0]==2:      
+        if utils.path_exists(os.path.dirname(__file__) + os.sep + "__pycache__"):
+            utils.path_remove(os.path.dirname(__file__) + os.sep + "__pycache__")
+except: 
+    None
+##### TO FIX 22/09/2021
 
 class FileSystem():
     
@@ -21,17 +31,17 @@ class FileSystem():
     OPERATION_UPLOAD='UPLOAD'
     
     TEXTFILE_BOM_TYPE = [
-                {"Name":"UTF-8",  "Data": "\xef\xbb\xbf"}, 
-                {"Name":"UTF-16BE",  "Data":"\xfe\xff"}, 
-                {"Name":"UTF-16LE",  "Data":"\xff\xfe"}, 
-                {"Name":"UTF-32BE",  "Data":"\x00\x00\xfe\xff"}, 
-                {"Name":"UTF-32LE",  "Data":"\xff\xfe\x00\x00"}, 
-                {"Name":"UTF-7",  "Data":"\x2b\x2f\x76"}, 
-                {"Name":"UTF-1",  "Data":"\xf7\x64\x4c"}, 
-                {"Name":"UTF-EBCDIC",  "Data":"\xdd\x73\x66\x73"}, 
-                {"Name":"UTF-SCSU",  "Data":"\x0e\xfe\xff"}, 
-                {"Name":"UTF-BOCU1",  "Data":"\xfb\xee\x28"}, 
-                {"Name":"UTF-GB-18030",  "Data":"\x84\x31\x95\x33"},
+                {"Name":"UTF-8", "Data": b"\xef\xbb\xbf"}, 
+                {"Name":"UTF-16BE", "Data": b"\xfe\xff"}, 
+                {"Name":"UTF-16LE", "Data": b"\xff\xfe"}, 
+                {"Name":"UTF-32BE", "Data": b"\x00\x00\xfe\xff"}, 
+                {"Name":"UTF-32LE", "Data": b"\xff\xfe\x00\x00"}, 
+                {"Name":"UTF-7", "Data": b"\x2b\x2f\x76"}, 
+                {"Name":"UTF-1", "Data": b"\xf7\x64\x4c"}, 
+                {"Name":"UTF-EBCDIC", "Data": b"\xdd\x73\x66\x73"}, 
+                {"Name":"UTF-SCSU", "Data": b"\x0e\xfe\xff"}, 
+                {"Name":"UTF-BOCU1", "Data": b"\xfb\xee\x28"}, 
+                {"Name":"UTF-GB-18030", "Data": b"\x84\x31\x95\x33"},
             ]
     
     
@@ -54,14 +64,15 @@ class FileSystem():
         enc=None
         text_file = utils.file_open(path, 'rb')
         try:
-            s = text_file.read(10)
-            for bm in self.TEXTFILE_BOM_TYPE :
-                if s.startswith(bm["Data"]):
+            bts = text_file.read(10)
+            for bm in self.TEXTFILE_BOM_TYPE:
+                lnbm = len(bm["Data"])
+                if len(bts)>=lnbm and bts[0:lnbm]==bm["Data"]:                
                     enc=bm
                     break
         finally:
             text_file.close()
-        return enc;
+        return enc
     
     def has_permission(self,cinfo):
         b = self._agent_main.has_app_permission(cinfo,"filesystem") or self._agent_main.has_app_permission(cinfo,"texteditor") or self._agent_main.has_app_permission(cinfo,"logwatch");
@@ -218,7 +229,7 @@ class FileSystem():
                 None
         itm["Name"] = tp + ':' + fname 
         try:
-            itm["LastModified"] = long(utils.path_time(fp)*1000)
+            itm["LastModified"] = int(utils.path_time(fp)*1000)
         except:
                 None
                 
@@ -288,8 +299,9 @@ class FileSystem():
             #Carica la lista
             for fname in lst:
                 #DA GESTIRE COSI EVITA GLI ERRORI MA PER FILENAME NON UTF8 NON RECUPERA ALTRE INFO TIPO LA DIMENSIONE E DATAMODIFICA
-                if not isinstance(fname, unicode):
-                    fname=fname.decode("utf8","replace")
+                if sys.version_info[0]==2:
+                    if not isinstance(fname, unicode):
+                        fname=fname.decode("utf8","replace")
                 
                 if pdir==utils.path_sep:
                     fp = pdir + fname
@@ -561,11 +573,21 @@ class Windows:
             None
         '''
         
-        pi= self._osmodule.getDiskInfo()
-        s=""
-        if pi:
-            s = ctypes.wstring_at(pi)
-            self._osmodule.freeMemory(pi)
+        ##### TO FIX 22/09/2021
+        if hasattr(self._osmodule, "DWAOSUtilGetDiskInfo"):
+            wcp = ctypes.c_wchar_p()
+            sz=self._osmodule.DWAOSUtilGetDiskInfo(ctypes.byref(wcp))
+            if sz>0:
+                s = ctypes.wstring_at(wcp,size=sz)
+            self._osmodule.freeMemory(wcp)
+        else:
+            pi=self._osmodule.getDiskInfo()
+            s=""
+            if pi:
+                s = ctypes.wstring_at(pi)
+                self._osmodule.freeMemory(pi)
+        ##### TO FIX 22/09/2021
+        
         return json.loads(s)
     
     def pathStartswith(self,apppath,pt):

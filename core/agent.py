@@ -12,27 +12,23 @@ import json
 import string
 import random
 import os
-import base64
-import zlib
 import zipfile
 import gzip
-import StringIO
 import signal
 import platform
-import logging.handlers
 import hashlib
 import listener
 import ctypes
 import shutil
 import ipc
 import importlib 
-import urllib
 import applications
 import struct
 import utils
 import mimetypes
 import detectinfo
 import native
+
 
 def is_windows():
     return utils.is_windows()
@@ -71,7 +67,7 @@ def get_prop(prop,key,default=None):
 def generate_key(n):
     c = "".join([string.ascii_lowercase, string.ascii_uppercase,  string.digits])
     return "".join([random.choice(c) 
-                    for x in xrange(n)])
+                    for x in utils.nrange(n)])
         
 def str2bool(v):
         return v.lower() in ("yes", "true", "t", "1")    
@@ -83,36 +79,26 @@ def bool2str(v):
         return 'True'
 
 def hash_password(pwd):
-    encoded = hashlib.sha256(pwd).digest()
-    encoded = base64.b64encode(encoded)
-    return encoded
-
-def check_hash_password(pwd, encoded_pwd):
-    pwd=hash_password(pwd)
-    pwd_len   = len(pwd)
-    encoded_pwd_len = len(encoded_pwd)
-    result = pwd_len ^ encoded_pwd_len
-    if encoded_pwd_len > 0:
-        for i in xrange(pwd_len):
-            result |= ord(pwd[i]) ^ ord(encoded_pwd[i % encoded_pwd_len])
-    return result == 0
+    encoded = hashlib.sha256(utils.str_to_bytes(pwd,"utf8")).digest()
+    encoded = utils.enc_base64_encode(encoded)
+    return utils.bytes_to_str(encoded)
 
 def obfuscate_password(pwd):
-    return base64.b64encode(zlib.compress(pwd))
+    return utils.bytes_to_str(utils.enc_base64_encode(utils.zlib_compress(utils.str_to_bytes(pwd,"utf8"))))
 
 def read_obfuscated_password(enpwd):
-    return zlib.decompress(base64.b64decode(enpwd))
+    return utils.bytes_to_str(utils.zlib_decompress(utils.enc_base64_decode(enpwd)),"utf8")
     
-
 def read_config_file():
     c=None
     try:
-        f = utils.file_open("config.json")
+        f = utils.file_open("config.json", 'rb')
     except:
         e = utils.get_exception()
         raise Exception("Error reading config file. " + utils.exception_to_string(e))
     try:
-        c = json.loads(f.read())
+        s=f.read()
+        c = json.loads(utils.bytes_to_str(s,"utf8"))
     except:
         e = utils.get_exception()
         raise Exception("Error parse config file: " + utils.exception_to_string(e))
@@ -123,18 +109,8 @@ def read_config_file():
 def write_config_file(jo):
     s = json.dumps(jo, sort_keys=True, indent=1)
     f = utils.file_open("config.json", 'wb')
-    f.write(s)
+    f.write(utils.str_to_bytes(s,"utf8"))
     f.close()
-
-class StdRedirect(object):
-    
-    def __init__(self,lg,lv):
-        self._logger = lg;
-        self._level = lv;
-        
-    def write(self, data):
-        for line in data.rstrip().splitlines():
-            self._logger.log(self._level, line.rstrip())
 
 class Agent():
     _STATUS_OFFLINE = 0
@@ -149,8 +125,6 @@ class Agent():
             sys.path.append("..")
         
         #Prepara il log
-        self._logger = logging.getLogger()
-        hdlr = None
         self._noctrlfile=False
         self._bstop=False
         self._runonfly=False
@@ -159,29 +133,21 @@ class Agent():
         self._runonfly_password=None
         self._runonfly_runcode=None
         self._runonfly_ipc=None        
-        self._runonfly_action=None #COMPATIBILITY WITH OLD FOLDER RUNONFLY        
+        self._runonfly_action=None #COMPATIBILITY WITH OLD FOLDER RUNONFLY
+        logconf={}        
         for arg in args: 
             if arg=='-runonfly':
                 self._runonfly=True
             elif arg=='-filelog':
-                hdlr = logging.handlers.RotatingFileHandler(u'dwagent.log', 'a', 1000000, 3)
+                logconf["filename"]=u'dwagent.log'                
             elif arg=='-noctrlfile':
                 signal.signal(signal.SIGTERM, self._signal_handler)
                 self._noctrlfile=True
             elif arg.lower().startswith("runcode="):
                 self._runonfly_runcode=arg[8:]
         if not self._runonfly:
-            self._runonfly_runcode=None
-        if hdlr is None:
-            hdlr = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-        hdlr.setFormatter(formatter)
-        self._logger.addHandler(hdlr) 
-        self._logger.setLevel(logging.INFO)
-        #Reindirizza stdout e stderr
-        sys.stdout=StdRedirect(self._logger,logging.DEBUG)
-        sys.stderr=StdRedirect(self._logger,logging.ERROR)
-        
+            self._runonfly_runcode=None        
+        self._logger = utils.Logger(logconf)        
         #Inizializza campi
         self._task_pool = None
         self._config=None
@@ -197,24 +163,18 @@ class Agent():
             self._cnt_max=30
         self._cnt_random=0
         self._cnt=self._cnt_max
-        self._listenerserver=None
-        self._httpserver=None
+        self._listener_ipc=None
+        self._listener_ipc_load=True
+        self._listener_http=None
+        self._listener_http_load=True
         self._proxy_info=None        
         self._agent_conn = None
         self._agent_conn_version = 0
-        self._main_recovery_id = None #DACANC OLD NODE
-        self._main_recovery_timeout = None #DACANC OLD NODE
-        self._debug_path = None
-        self._debug_indentation_max=-1
-        self._debug_thread_filter=None
-        self._debug_class_filter="apps.*"
-        self._debug_info = {}
         self._sessions={}
         self._libs={}
         self._apps={}
         self._apps_to_reload={}
         self._node_files_info=None
-        self._agent_log_semaphore = threading.Condition()
         self._sessions_semaphore = threading.Condition()
         self._libs_apps_semaphore = threading.Condition()
         self._agent_enabled = True
@@ -249,103 +209,6 @@ class Agent():
             f = utils.file_open("dwagent.stop", 'wb')
             f.close()           
     
-    def _debug_trunc_msg(self, msg, sz):
-        smsg="None"
-        if msg is not None:
-            smsg=u""
-            try:
-                if isinstance(msg, str):
-                    smsg = unicode(msg.decode('ascii', 'ignore'))
-                else:
-                    smsg = str(msg)
-            except:
-                e = utils.get_exception()
-                smsg = u"EXCEPTION:" + unicode(utils.exception_to_string(e))
-            if len(smsg)>sz:
-                smsg=smsg[0:sz] + u" ..."
-            smsg = smsg.replace("\n", " ").replace("\r", " ").replace("\t", "   ")
-        return smsg
-    
-    def _debug_filter_check(self,nm,flt):
-        if flt is not None:
-            ar = flt.split(";")
-            for f in ar:
-                if f.startswith("*") and nm.endswith(f[1:]):
-                    return True
-                elif f.endswith("*") and nm.startswith(f[0:len(f)-1]):
-                    return True
-                elif nm==f:
-                    return True
-            return False
-        return True
-    
-    def _debug_func(self, frame, event, arg): 
-        #sys._getframe(0)
-        if event == "call" or event == "return":
-            try:
-                bshow = True
-                fcode = frame.f_code
-                flocs = frame.f_locals
-                fn = utils.path_absname(unicode(fcode.co_filename))
-                if not fcode.co_name.startswith("<") and fn.startswith(self._debug_path):
-                    fn = fn[len(self._debug_path):]
-                    fn = fn.split(".")[0]
-                    fn = fn.replace(utils.path_sep,".")
-                    nm = fcode.co_name
-                    if flocs is not None and "self" in flocs:
-                        flocssf=flocs["self"]
-                        nm = flocssf.__class__.__name__ + "." +nm
-                    nm=fn + u"." + nm
-                    thdn = threading.current_thread().name
-                    if thdn not in self._debug_info:
-                        self._debug_info[thdn]={}
-                        self._debug_info[thdn]["time"]=[]
-                        self._debug_info[thdn]["indent"]=0
-                    debug_time=self._debug_info[thdn]["time"]
-                    debug_indent=self._debug_info[thdn]["indent"]                    
-                    bshow=self._debug_indentation_max==-1 or debug_indent<=self._debug_indentation_max
-                    #THREAD NAME
-                    if bshow:
-                        bshow=self._debug_filter_check(thdn, self._debug_thread_filter)
-                    #CLASS NAME
-                    if bshow:
-                        bshow=self._debug_filter_check(nm, self._debug_class_filter)
-                    #VISUALIZZA
-                    if bshow:
-                        if event == "return":
-                            debug_indent -= 1
-                        soper=""
-                        arpp = []
-                        if event == "call":
-                            soper="INIT"
-                            debug_time.append(long(time.time() * 1000))
-                            if flocs is not None:
-                                sarg=[]
-                                for k in flocs:
-                                    if not k is "self":
-                                        sarg.append(unicode(k.decode('ascii', 'ignore')) + u"=" + self._debug_trunc_msg(flocs[k], 20))
-                                if len(sarg)>0:
-                                    arpp.append(u"args: " + u",".join(sarg))
-                            
-                        elif event == "return":
-                            soper="TERM"
-                            tm = debug_time.pop()
-                            arpp.append(u"time: " + str(long(time.time() * 1000) - tm) + u" ms")
-                            arpp.append(u"return: " + self._debug_trunc_msg(arg, 80))
-                                
-                        armsg=[]
-                        armsg.append(u"   "*debug_indent + nm + u" > " + soper)
-                        if len(arpp)>0:
-                            armsg.append(u" ")
-                            armsg.append(u"; ".join(arpp))
-                        self.write_debug(u"".join(armsg))
-                        if event == "call":
-                            debug_indent += 1
-                        self._debug_info[thdn]["indent"]=debug_indent
-            except:
-                e = utils.get_exception()
-                self.write_except(e)
-    
     def _write_config_file(self):
         write_config_file(self._config)        
         
@@ -356,7 +219,7 @@ class Agent():
                 self._config = read_config_file()
             except:
                 e = utils.get_exception()
-                self.write_err(str(e))
+                self.write_err(utils.exception_to_string(e))
                 self._config = None
         finally:
             self._config_semaphore.release()
@@ -448,12 +311,20 @@ class Agent():
                 self._agent_password = read_obfuscated_password(self._agent_password)
                 app_url = self._agent_url_primary + "getAgentProperties.dw?key=" + self._agent_key
             else:
-                spapp = ";".join(self.get_supported_applications())
-                app_url = self._agent_url_primary + "getAgentPropertiesOnFly.dw?osTypeCode=" + str(get_os_type_code()) +"&supportedApplications=" + urllib.quote_plus(spapp)
+                #READ installer.ver
+                sver=""
+                ptver="native" + os.sep + "installer.ver"
+                if utils.path_exists(ptver):
+                    fver = utils.file_open(ptver, "rb")
+                    sver="&version=" + utils.bytes_to_str(fver.read())
+                    fver.close()
+                
+                spapp = ";".join(self.get_supported_applications())                
+                app_url = self._agent_url_primary + "getAgentPropertiesOnFly.dw?osTypeCode=" + str(get_os_type_code()) + sver + "&supportedApplications=" + utils.url_parse_quote_plus(spapp)
                 if self._runonfly_runcode is not None:
-                    app_url += "&runCode=" + urllib.quote_plus(self._runonfly_runcode)
+                    app_url += "&runCode=" + utils.url_parse_quote_plus(self._runonfly_runcode)
                 elif "preferred_run_user" in self._config:
-                    app_url += "&preferredRunUser=" + urllib.quote_plus(self._config["preferred_run_user"])
+                    app_url += "&preferredRunUser=" + utils.url_parse_quote_plus(self._config["preferred_run_user"])
             try:
                 prp_url = communication.get_url_prop(app_url, self.get_proxy_info())
                 if "error" in prp_url:
@@ -559,7 +430,7 @@ class Agent():
     
     def install_new_agent(self, user, password, name):
         spapp = ";".join(self.get_supported_applications())
-        url = self._agent_url_primary + "installNewAgent.dw?user=" + urllib.quote_plus(user) + "&password=" + urllib.quote_plus(password) + "&name=" + urllib.quote_plus(name) + "&osTypeCode=" + str(get_os_type_code()) +"&supportedApplications=" + urllib.quote_plus(spapp)
+        url = self._agent_url_primary + "installNewAgent.dw?user=" + utils.url_parse_quote_plus(user) + "&password=" + utils.url_parse_quote_plus(password) + "&name=" + utils.url_parse_quote_plus(name) + "&osTypeCode=" + str(get_os_type_code()) +"&supportedApplications=" + utils.url_parse_quote_plus(spapp)
         try:
             prop = communication.get_url_prop(url, self.get_proxy_info())
         except:
@@ -579,7 +450,7 @@ class Agent():
     
     def install_key(self,  code):
         spapp = ";".join(self.get_supported_applications())
-        url = self._agent_url_primary + "checkInstallCode.dw?code=" + urllib.quote_plus(code) + "&osTypeCode=" + str(get_os_type_code()) +"&supportedApplications=" + urllib.quote_plus(spapp)
+        url = self._agent_url_primary + "checkInstallCode.dw?code=" + utils.url_parse_quote_plus(code) + "&osTypeCode=" + str(get_os_type_code()) +"&supportedApplications=" + utils.url_parse_quote_plus(spapp)
         try:
             prop = communication.get_url_prop(url, self.get_proxy_info())
         except:
@@ -713,7 +584,7 @@ class Agent():
         zfile = zipfile.ZipFile(fpath)
         try:
             for nm in zfile.namelist():
-                #print "UNZIP:" + nm
+                #print("UNZIP:" + nm)
                 npath=unzippath
                 if nm.startswith("LICENSES"):
                     if licpath is not None:
@@ -754,6 +625,15 @@ class Agent():
                 self._unzip_file(app_file, folder)
                 utils.path_remove(app_file)
                 cur_vers[name_file]=rv
+                
+                #TO REMOVE 03/11/2021 KEEP COMPATIBILITY WITH OLD LINUX INSTALLER
+                try:
+                    if name_file=="agent.zip":
+                        if utils.path_exists(folder + "daemon.pyc"):
+                            utils.path_remove(folder + "daemon.pyc")                            
+                except:
+                    None
+                
                 self.write_info("Downloaded file update " + name_file + ".")
                 return True
         return False
@@ -809,11 +689,18 @@ class Agent():
                 if utils.path_exists("apps"):
                     utils.path_remove("apps")
                 if utils.path_exists("LICENSES" + utils.path_sep + "agent"):
-                    utils.path_remove("LICENSES" + utils.path_sep + "agent")               
-                
+                    utils.path_remove("LICENSES" + utils.path_sep + "agent")
             except:
                 None
             #FIX OLD VERSION 2018-12-20
+            
+            #FIX OLD VERSION 2021-09-22
+            try:
+                if utils.path_exists("sharedmem.pyc"):
+                    utils.path_remove("sharedmem.pyc")
+            except:
+                None
+            #FIX OLD VERSION 2021-09-22
             
             
             #Verifica se è presente un aggiornamento incompleto
@@ -823,8 +710,8 @@ class Agent():
                 return False
                 
             #LEGGE 'fileversions.json'
-            f = utils.file_open('fileversions.json')
-            cur_vers = json.loads(f.read())
+            f = utils.file_open("fileversions.json","rb")
+            cur_vers = json.loads(utils.bytes_to_str(f.read(), "utf8"))
             f.close()
             #LEGGE getAgentFile.dw?name=files.xml
             self._agent_url_node=None
@@ -870,11 +757,11 @@ class Agent():
                                 shutil.move("updateTMP" + utils.path_sep + "native" + utils.path_sep + upd_libnm, "native" + utils.path_sep + upd_libnm)
                     
             #AGENT
-            self._check_update_file(cur_vers, rem_vers, "agent.zip",  "updateTMP" + utils.path_sep)
+            self._check_update_file(cur_vers, rem_vers, "agent.zip", "updateTMP" + utils.path_sep)
             if not self._runonfly and not self._agent_native_suffix=="linux_generic":
-                if self._check_update_file(cur_vers, rem_vers, "agentui.zip",  "updateTMP" + utils.path_sep):
+                if self._check_update_file(cur_vers, rem_vers, "agentui.zip", "updateTMP" + utils.path_sep):
                     self._monitor_update_file_create()
-            self._check_update_file(cur_vers, rem_vers, "agentapps.zip",  "updateTMP" + utils.path_sep)
+            self._check_update_file(cur_vers, rem_vers, "agentapps.zip", "updateTMP" + utils.path_sep)
                                     
             #LIB
             if self._agent_native_suffix is not None:
@@ -901,7 +788,7 @@ class Agent():
             if utils.path_exists("updateTMP"):
                 s = json.dumps(cur_vers , sort_keys=True, indent=1)
                 f = utils.file_open("updateTMP" + utils.path_sep + "fileversions.json", "wb")
-                f.write(s)
+                f.write(utils.str_to_bytes(s,"utf8"))
                 f.close()
                 shutil.move("updateTMP", "update")
                 self.write_info("Update ready: Needs reboot.")
@@ -1046,8 +933,9 @@ class Agent():
         appuname=None
         try:
             appuname=str(platform.uname())
-            if len(appuname)>=2:
-                appuname=appuname[1:len(appuname)-1]
+            p=appuname.find("(")
+            if p>=0:
+                appuname=appuname[p+1:len(appuname)-1]
         except:
             None
         if appuname is not None:
@@ -1079,7 +967,7 @@ class Agent():
             if utils.path_exists("dwagent.pid"):
                 try:
                     f = utils.file_open("dwagent.pid")
-                    spid = f.read()
+                    spid = utils.bytes_to_str(f.read())
                     f.close()
                     self._svcpid = int(spid)
                 except:
@@ -1091,6 +979,7 @@ class Agent():
                 f.close()
             
         
+        #GUI LAUNCHER OLD VERSION 03/11/2021 (DO NOT REMOVE)
         if is_mac() and not self._runonfly:
             try:
                 self.get_osmodule().init_guilnc(self)
@@ -1105,16 +994,8 @@ class Agent():
         #Crea taskpool
         self._task_pool = communication.ThreadPool("Task", 50, 30, self.write_except)
 
-        #Avvia agent status
-        if not self._runonfly:
-            try:
-                self._listenerserver=listener.IPCServer(self)
-                self._listenerserver.start()
-            except:
-                asc = utils.get_exception()
-                self.write_except(asc, "INIT STATUSCONFIG LISTENER: ")
-        self._update_ready=False
         
+        self._update_ready=False        
         try:
             bfirstreadconfig=True
             while self.is_run() is True and not self._is_reboot_agent() and not self._update_ready:
@@ -1122,37 +1003,59 @@ class Agent():
                     communication.release_detected_proxy()
                     if self._runonfly:
                         self._update_onfly_status("CONNECTING")
-                    #Ricarica il config file
+                    #Load Config file
                     if self._is_reload_config():
                         self._read_config_file()
                         if self._config is not None:
                             self._reload_config_reset()
                             if bfirstreadconfig:
-                                bfirstreadconfig=False
+                                bfirstreadconfig=False                                
                                 #CARICA DEBUG MODE
-                                self._agent_debug_mode = self.get_config('debug_mode',False)
-                                self._debug_indentation_max = self.get_config('debug_indentation_max',self._debug_indentation_max)
-                                self._debug_thread_filter = self.get_config('debug_thread_filter',self._debug_thread_filter)
-                                self._debug_class_filter = self.get_config('debug_class_filter',self._debug_class_filter)
+                                prfcfg={}
+                                self._agent_debug_mode = self.get_config('debug_mode',False)                                
                                 if self._agent_debug_mode:
-                                    self._logger.setLevel(logging.DEBUG)
-                                    self._debug_path=os.getcwdu()
-                                    if not self._debug_path.endswith(utils.path_sep):
-                                        self._debug_path+=utils.path_sep
-                                    threading.setprofile(self._debug_func)
-                                
-                                
+                                    self._logger.set_level(utils.LOGGER_DEBUG)
+                                    prfcfg["debug_path"]=utils.os_getcwd()                                    
+                                    if not prfcfg["debug_path"].endswith(utils.path_sep):
+                                        prfcfg["debug_path"]+=utils.path_sep                                    
+                                    prfcfg["debug_indentation_max"] = self.get_config('debug_indentation_max',-1)
+                                    prfcfg["debug_thread_filter"] = self.get_config('debug_thread_filter',None)
+                                    prfcfg["debug_class_filter"] = self.get_config('debug_class_filter',None)
+                                    self._debug_profile=utils.DebugProfile(self,prfcfg)
+                                    threading.setprofile(self._debug_profile.get_function)
+                            #ssl_cert_required
+                            if self.get_config('ssl_cert_required', True)==False:
+                                communication.set_cacerts_path("")
                             
-                    
-                    #Avvia il listener (PER USI FUTURI)
+                            
+                    #Start IPC listener
                     if not self._runonfly:
-                        if self._httpserver is None:
-                            try:
-                                self._httpserver = listener.HttpServer(self.get_config('listen_port', 7950), self)
-                                self._httpserver.start()                
-                            except:
-                                ace = utils.get_exception()
-                                self.write_except(ace, "INIT LISTENER: ")
+                        try:
+                            if self.get_config('listener_ipc_enable', True):
+                                if self._listener_ipc_load:
+                                    self._listener_ipc_load=False
+                                    self._listener_ipc=listener.IPCServer(self)
+                                    self._listener_ipc.start()
+                        except:
+                            self._listener_ipc = None
+                            asc = utils.get_exception()
+                            self.write_except(asc, "INIT STATUSCONFIG LISTENER: ")
+                            
+                    #Start HTTP listener (NOT USED)
+                    if not self._runonfly:
+                        if self.get_config('listener_http_enable',True):
+                            if self._listener_http_load:
+                                self._listener_http_load=False
+                                try:
+                                    httpprt=self.get_config('listen_port')
+                                    if httpprt is None:
+                                        httpprt=self.get_config('listener_http_port', 7950)
+                                    self._listener_http = listener.HttpServer(httpprt, self)
+                                    self._listener_http.start()
+                                except:
+                                    self._listener_http = None
+                                    ace = utils.get_exception()
+                                    self.write_except(ace, "INIT LISTENER: ")
                             
                     self._reboot_agent_reset()
                     
@@ -1176,24 +1079,10 @@ class Agent():
                                 #Verifica se ci sono aggiornamenti
                                 if self._check_update() is True:
                                     if self._load_agent_properties() is True:
-                                        if self._agent_conn_version>=11865:
-                                            if self._run_agent() is True and self.get_config('enabled',True):
-                                                self._cnt = self._cnt_max
-                                                self._cnt_random = random.randrange(self._cnt_min, self._cnt_max) #Evita di avere connessioni tutte assieme
-                                                skiponflyretry=True
-                                        else:
-                                            '''
-                                            ##############################
-                                            DACANC OLD NODE
-                                            '''
-                                            if self.OLD_run_agent() is True and self.get_config('enabled',True):
-                                                self._cnt = self._cnt_max
-                                                self._cnt_random = random.randrange(self._cnt_min, self._cnt_max) #Evita di avere connessioni tutte assieme
-                                                skiponflyretry=True
-                                            '''
-                                            ##############################
-                                            '''
-                                            
+                                        if self._run_agent() is True and self.get_config('enabled',True):
+                                            self._cnt = self._cnt_max
+                                            self._cnt_random = random.randrange(self._cnt_min, self._cnt_max) #Evita di avere connessioni tutte assieme
+                                            skiponflyretry=True
                             elif not self._agent_missauth:
                                 self.write_info("Missing agent authentication configuration.")
                                 self._agent_missauth=True
@@ -1220,16 +1109,16 @@ class Agent():
         self._task_pool.destroy()
         self._task_pool = None
         
-        if self._httpserver is not None:
+        if self._listener_http is not None:
             try:
-                self._httpserver.close()
+                self._listener_http.close()
             except:
                 ace = utils.get_exception()
                 self.write_except(ace, "TERM LISTENER: ")
         
-        if self._listenerserver is not None:
+        if self._listener_ipc is not None:
             try:
-                self._listenerserver.close()
+                self._listener_ipc.close()
             except:
                 ace = utils.get_exception()
                 self.write_except(ace, "TERM STATUSCONFIG LISTENER: ")
@@ -1242,7 +1131,7 @@ class Agent():
                 ace = utils.get_exception()
                 self.write_except(ace, "CLOSE RUNONFLY SHAREDMEM: ")
         
-        
+        #GUI LAUNCHER OLD VERSION 03/11/2021 (DO NOT REMOVE)
         if is_mac() and not self._runonfly:
             try:
                 self.get_osmodule().term_guilnc()
@@ -1291,46 +1180,26 @@ class Agent():
         self._brun=False
     
     def kill(self):
-        if self._listenerserver is not None:
+        if self._listener_ipc is not None:
             try:
-                self._listenerserver.close()
+                self._listener_ipc.close()
             except:
                 ace = utils.get_exception()
                 self.write_except(ace, "TERM STATUS LISTENER: ")
 
-    def _write_log(self, level, msg):
-        self._agent_log_semaphore.acquire()
-        try:
-            ar = []
-            ar.append(unicode(threading.current_thread().name))
-            ar.append(u" ")
-            if isinstance(msg, str):
-                msg = unicode(msg, errors='replace')
-            ar.append(msg)
-            self._logger.log(level, u"".join(ar))
-        finally:
-            self._agent_log_semaphore.release()
-
+    
     def write_info(self, msg):
-        self._write_log(logging.INFO,  msg)
+        self._logger.write(utils.LOGGER_INFO,  msg)
 
     def write_err(self, msg):
-        self._write_log(logging.ERROR,  msg)
+        self._logger.write(utils.LOGGER_ERROR,  msg)
         
     def write_debug(self, msg):
         if self._agent_debug_mode:
-            self._write_log(logging.DEBUG,  msg)
+            self._logger.write(utils.LOGGER_DEBUG,  msg)
     
-    def write_except(self, e,  tx = u""):
-        if isinstance(tx, str):
-            tx = unicode(tx, errors='replace')
-        msg = tx
-        msg += utils.exception_to_string(e)
-        msg += u"\n" + utils.get_stacktrace_string()
-        #msg += e.__class__.__name__
-        #if e.args is not None and len(e.args)>0 and e.args[0] != '':
-        #        msg = e.args[0]
-        self._write_log(logging.ERROR,  msg)
+    def write_except(self, e,  tx = u""):        
+        self._logger.write(utils.LOGGER_ERROR,  utils.get_exception_string(e,  tx))
     
     def _update_onfly_status(self,st):
         if self._runonfly:
@@ -1405,14 +1274,22 @@ class Agent():
                 'osTypeCode':  str(get_os_type_code()), 
                 'fileSeparator':  utils.path_sep,
                 'supportedApplications': self._suppapps,                
-            }
+            }        
+        
+        try:
+            spv = platform.python_version()
+            if spv is not None:
+                m['python'] = spv
+        except:
+            None        
+        
         hwnm = detectinfo.get_hw_name()
         if hwnm is not None:
             m["hwName"]=hwnm
         #Send versions info
         if not utils.path_exists(".srcmode"):
-            f = utils.file_open('fileversions.json')
-            cur_vers = json.loads(f.read())
+            f = utils.file_open("fileversions.json","rb")
+            cur_vers = json.loads(utils.bytes_to_str(f.read(),"utf8"))
             f.close()
             for vn in cur_vers:
                 if vn[0:4]!="app_":
@@ -1493,141 +1370,6 @@ class Agent():
             self._reload_agent_reset()
             
 
-    '''
-    #######################################################################
-    #######################################################################
-    #######################################################################
-    DACANC OLD NODE
-    ''' 
-    def OLD_run_agent(self):
-        self.write_info("Initializing agent (key: " + self._agent_key + ", node: " + self._agent_server + ")..." )
-        try:
-            appconn = None
-            try:
-                appconn = OLDConnection(self, None, 'AG' + self._agent_key, self._agent_password)
-                self._agent_conn=OLDMainMessage(self, appconn)
-            except:
-                ee = utils.get_exception()
-                if appconn is not None:
-                    appconn.close()
-                raise ee
-                                           
-            self._sessions_semaphore.acquire()
-            try:
-                self._OLDconnections={} 
-                self._main_recovery_id=None 
-                self._main_recovery_timeout=None 
-            finally:
-                self._sessions_semaphore.release()
-            self._node_files_info=None
-            self._sessions={}
-            self._apps={}
-            self._apps_to_reload={}
-            self._reload_agent_reset()
-            #ready agent
-            self._suppapps=";".join(self.get_supported_applications())
-            self._update_supported_apps(True)
-            m = self._get_sys_info()
-            m["name"]="ready"
-            m["supportedKeepAlive"]=True
-            m["supportedRecovery"]=self.get_config_str('recovery_session')
-            self._agent_conn.send_message(m)
-            self._agent_status = self._STATUS_ONLINE
-            self.write_info("Initialized agent (key: " + self._agent_key + ", node: " + self._agent_server + ")." )
-            if self._runonfly:
-                self._update_onfly_status("CONNECTED")
-                self._runonfly_conn_retry=0
-                try:
-                    if self._runonfly_runcode is None:
-                        self._set_config("preferred_run_user",self._agent_key.split('@')[1])
-                except:
-                    None
-            while self.is_run() and not self._is_reboot_agent() and not self._is_reload_config() and not self._agent_conn.is_close():
-                time.sleep(1)
-                if not self._check_reloads():
-                    break;                
-                self._update_supported_apps(False)
-
-            if self._runonfly:
-                self._runonfly_user=None
-                self._runonfly_password=None
-            return True
-        except:
-            inst = utils.get_exception()
-            self.write_except(inst)
-            return False
-        finally:
-            self.OLDclose_all_sessions()
-            if self._agent_conn is not None:
-                self.write_info("Terminated agent (key: " + self._agent_key + ", node: " + self._agent_server + ")." )
-                appmm = self._agent_conn
-                self._agent_conn=None
-                self._sessions={}
-                self._unload_apps()
-                appmm.close()                
-            self._reload_agent_reset()
-    
-    def OLDclose_all_sessions(self):
-        self._sessions_semaphore.acquire()
-        try:
-            for sid in self._sessions.keys():
-                try:
-                    #self._fire_close_conn_apps(sid)
-                    self._sessions[sid].close()
-                    #del conn[sid]
-                except:
-                    ex = utils.get_exception()
-                    self.write_err(str(ex))
-            self._sessions={}
-        finally:
-            self._sessions_semaphore.release()        
-        self._unload_apps()
-    
-    def OLDopen_connection(self, msg):
-        self._sessions_semaphore.acquire()
-        try:
-            cn = OLDConnection(self,msg["id"],msg["userName"],msg["password"])
-            self._OLDconnections[cn.get_id()]=cn
-        finally:
-            self._sessions_semaphore.release()
-        m = {
-                'name': 'response', 
-                'requestKey':  msg["requestKey"], 
-            }
-        return m
-            
-    def OLDclose_connection(self, cn):
-        self._sessions_semaphore.acquire()
-        try:
-            if cn.get_id() in self._OLDconnections:
-                del self._OLDconnections[cn.get_id()]
-        finally:
-            self._sessions_semaphore.release()
-    
-    def OLDopen_session(self, msg):
-        sid=msg["idSession"]
-        rid=msg["idRaw"]
-        self._sessions_semaphore.acquire()
-        try:
-            if not rid in self._OLDconnections:
-                raise Exception("Connection not found (id: " + rid + ")")
-            sinfo=OLDSession(self,self._OLDconnections[rid],sid,msg)
-            self._sessions[sid]=sinfo                
-        finally:
-            self._sessions_semaphore.release()
-        m = {
-                'name': 'response', 
-                'requestKey':  msg["requestKey"], 
-            }
-        self.write_info("Open session (id=" + sid + ")")
-        return m            
-    '''
-    #######################################################################
-    #######################################################################
-    #######################################################################
-    '''  
-            
-    
     def get_supported_applications(self):
         return applications.get_supported(self)
     
@@ -1689,8 +1431,8 @@ class Agent():
             elif tp=="lib":
                 zipname="lib_" + name + "_" + self._agent_native_suffix + ".zip"
             if self._update_libs_apps_file_exists(arfiles, zipname):
-                f = utils.file_open('fileversions.json')
-                cur_vers = json.loads(f.read())
+                f = utils.file_open("fileversions.json","rb")
+                cur_vers = json.loads(utils.bytes_to_str(f.read(),"utf8"))
                 f.close()
                 if tp=="app" and not utils.path_exists("app_" + name):
                     utils.path_makedirs("app_" + name)
@@ -1698,7 +1440,7 @@ class Agent():
                 if bup:                
                     s = json.dumps(cur_vers , sort_keys=True, indent=1)
                     f = utils.file_open("fileversions.json", "wb")
-                    f.write(s)
+                    f.write(utils.str_to_bytes(s,"utf8"))
                     f.close()
                     if tp=="app":
                         self.write_info("App " + name + " updated.")
@@ -1785,8 +1527,8 @@ class Agent():
         if utils.path_exists(".srcmode"):
             pthfc=".." + utils.path_sep + pthfc
         if utils.path_exists(pthfc):
-            f = utils.file_open(pthfc)             
-            conf = json.loads(f.read())
+            f = utils.file_open(pthfc,"rb")
+            conf = json.loads(utils.bytes_to_str(f.read(),"utf8"))
             f.close()
             return conf
         else:
@@ -1953,7 +1695,7 @@ class Agent():
                     self.write_info("Close session (id: " + sid + ", node: " + sht  + ")")                    
                 except:
                     ex = utils.get_exception()
-                    self.write_err(str(ex))
+                    self.write_err(utils.exception_to_string(ex))
             self._sessions={}
         finally:
             self._sessions_semaphore.release()        
@@ -2074,7 +1816,7 @@ class Connection():
         self._raw.open(prop_conn, proxy_info)
     
     def send(self,data):
-        self._raw.send(data)        
+        self._raw.send(data)
     
     def set_events(self,evts):
         if evts is None:
@@ -2103,7 +1845,7 @@ class Connection():
             
     def _on_data(self, dt):
         if self._evt_on_data is not None:
-            self._evt_on_data(dt)    
+            self._evt_on_data(dt)
     
     def _set_recovering(self, r, d):
         bcloseraw=False
@@ -2284,7 +2026,7 @@ class ConnectionPool():
             conn = Connection(self._agent,self,prop_conn,self._proxy_info)
             conn._id=sid
             self._list[sid]=conn
-            #print "ConnectionPool: " + str(len(self._list)) + "   (open_connection)"
+            #print("ConnectionPool: " + str(len(self._list)) + "   (open_connection)")
         finally:
             self._semaphore.release()
         return conn       
@@ -2296,7 +2038,7 @@ class ConnectionPool():
                 if conn._id in self._list:
                     del self._list[conn._id]
                     conn._id=None
-                #print "ConnectionPool: " + str(len(self._list)) + "   (close_connection)"
+                #print("ConnectionPool: " + str(len(self._list)) + "   (close_connection)")
         finally:
             self._semaphore.release()
     
@@ -2317,10 +2059,10 @@ class Message():
     
     def __init__(self, agent, conn):
         self._agent=agent
-        self._temp_msg={"length":0, "read":0, "data":utils.Bytes()}
+        self._temp_msg={"length":0, "read":0, "data":bytearray()}
         self._bwsendcalc=communication.BandwidthCalculator()
         self._lastacttm=time.time()
-        self._lastreqcnt=0l
+        self._lastreqcnt=0
         self._send_response_recovery=[]
         self._conn=conn
         self._conn.set_events({"on_close" : self._on_close, "on_data" : self._on_data, "on_recovery": self._on_recovery})
@@ -2344,7 +2086,7 @@ class Message():
                 rms=len(data)-p
                 if rms<c:
                     c=rms
-                self._temp_msg["data"].append_bytes(data.new_buffer(p,c))
+                self._temp_msg["data"]+=data[p:p+c]
                 self._temp_msg["read"]+=c            
                 p=p+c
                 if self._temp_msg["read"]==self._temp_msg["length"]:
@@ -2353,8 +2095,8 @@ class Message():
                 self._conn._semaphore.release()
             if dt is not None:
                 try:
-                    dt.decompress_zlib()
-                    msg=json.loads(dt.to_str("utf8"))                    
+                    dt = utils.zlib_decompress(dt)
+                    msg=json.loads(dt.decode("utf8"))
                     if self._check_recovery_msg(msg):
                         self._agent._task_pool.execute(self._fire_msg, msg)
                 except:
@@ -2368,11 +2110,11 @@ class Message():
             self._conn._semaphore.acquire()
             try:
                 rc = msg["requestCount"]
-                if rc>self._lastreqcnt+1l:
+                if rc>self._lastreqcnt+1:
                     msgskip={}
                     msgskip["requestKey"]="SKIP"
-                    msgskip["begin"]=self._lastreqcnt+1l
-                    msgskip["end"]=rc-1l
+                    msgskip["begin"]=self._lastreqcnt+1
+                    msgskip["end"]=rc-1
                     self._agent._task_pool.execute(self.send_message, msgskip)
                 self._lastreqcnt=rc                
             finally:
@@ -2422,7 +2164,7 @@ class Message():
         try:
             self._temp_msg["length"]=0
             self._temp_msg["read"]=0
-            self._temp_msg["data"]=utils.Bytes()
+            self._temp_msg["data"]=bytearray()
         finally:
             self._conn._semaphore.release()
             
@@ -2435,36 +2177,36 @@ class Message():
     def get_send_buffer_size(self):
         return self._bwsendcalc.get_buffer_size()
     
-    def _send_conn(self,conn,data):
+    def _send_conn(self,conn,dt):
         pos=0
-        tosnd=len(data)
+        tosnd=len(dt)
         while tosnd>0:
             bfsz=self.get_send_buffer_size()
             if bfsz>=tosnd:
                 if pos==0:
-                    conn.send(data)
+                    conn.send(dt)
                 else:
-                    conn.send(data.new_buffer(pos,tosnd))
+                    conn.send(utils.buffer_new(dt,pos,tosnd))
                 self._bwsendcalc.add(tosnd)
                 tosnd=0
-            else:
-                conn.send(data.new_buffer(pos,bfsz))
+            else:                
+                conn.send(utils.buffer_new(dt,pos,bfsz))
                 self._bwsendcalc.add(bfsz)
                 tosnd-=bfsz
                 pos+=bfsz
-            
+                
     
     def send_message(self,msg):
         while True:
             try:
-                appm=utils.Bytes()
-                appm.append_str(json.dumps(msg), "utf8")
-                appm.compress_zlib()
-                appm.insert_int(0, len(appm))
-                self._send_conn(self._conn, appm)
+                
+                dt = utils.zlib_compress(bytearray(json.dumps(msg),"utf8"))
+                ba=bytearray(struct.pack("!I",len(dt)))
+                ba+=dt
+                self._send_conn(self._conn, ba)
                 break
             except:
-                e = utils.get_exception()                
+                e = utils.get_exception()
                 if not self._conn.wait_recovery():
                     raise e
            
@@ -2602,503 +2344,6 @@ class AgentConn(Message):
                     #self.send_message(self._connection,m)
 
 
-'''
-#######################################################################
-#######################################################################
-#######################################################################
-DACANC OLD NODE
-''' 
-                
-class OLDConnection():
-    def __init__(self, agent, sid, user, password):
-        self._evt_on_data=None
-        self._evt_on_close=None
-        self._evt_on_recovery=None
-        self._evt_on_except=None        
-        self._agent=agent
-        self._id=sid
-        self._user=user
-        self._semaphore = threading.Condition()
-        self._recovering=False
-        self._destroy=False
-        self._allow_recovery=False
-        self._password=password
-        prop_conn = self._get_prop_conn()
-        prop_conn['userName'] = self._user
-        prop_conn['password'] = self._password        
-        self._raw = communication.Connection({"on_data": self._on_data, "on_except": self._on_except, "on_close":self._on_close})
-        self._raw.open(prop_conn, self._agent.get_proxy_info())
-    
-    def _get_prop_conn(self):
-        prop_conn = {}
-        prop_conn['host'] = self._agent._agent_server
-        prop_conn['port'] = self._agent._agent_port        
-        prop_conn['instance'] = self._agent._agent_instance
-        prop_conn['localeID'] = 'en_US'
-        prop_conn['version'] = self._agent._agent_version
-        return prop_conn
-    
-    def get_id(self):
-        return self._id
-    
-    def send(self,data):
-        self._raw.send(data)        
-    
-    def set_events(self,evts):
-        if evts is None:
-            evts={}
-        if "on_data" in evts:
-            self._evt_on_data=evts["on_data"]
-        else:
-            self._evt_on_data=None
-        if "on_close" in evts:
-            self._evt_on_close=evts["on_close"]
-        else:
-            self._evt_on_close=None        
-        if "on_recovery" in evts:
-            self._evt_on_recovery=evts["on_recovery"]
-        else:
-            self._evt_on_recovery=None
-        if "on_except" in evts:
-            self._evt_on_except=evts["on_except"]
-        else:
-            self._evt_on_except=None
-            
-    def _on_data(self, dt):
-        if self._evt_on_data is not None:
-            self._evt_on_data(dt)
-    
-    
-    def _set_recovering(self, r, d):
-        bcloseraw=False
-        self._semaphore.acquire()
-        try:
-            self._recovering=r
-            if d is not None:
-                if self._destroy==True and d==False:
-                    bcloseraw=True
-                else:
-                    self._destroy=d
-            self._semaphore.notify_all()
-        finally:
-            self._semaphore.release()
-        if bcloseraw:
-            self._raw.close()
-        
-    
-    def wait_recovery(self):
-        self._semaphore.acquire()
-        try:
-            self._semaphore.wait(0.5)
-            while not self._destroy and self._recovering:
-                self._semaphore.wait(0.2)
-            return not self._destroy
-        finally:
-            self._semaphore.release()
-    
-    def _on_close(self):
-        #RECOVERY CONN
-        self._set_recovering(True,None)
-        brecon=False
-        breconmsg=False  
-        self._agent._sessions_semaphore.acquire()
-        try:
-            crecid = self._agent._main_recovery_id
-            crectimeout = self._agent._main_recovery_timeout
-        finally:
-            self._agent._sessions_semaphore.release()
-        if crecid is not None and self._allow_recovery and self._raw.is_connection_lost() and self._raw.is_close():
-            breconmsg=True            
-            if self._id is None:
-                self._agent.write_info("Recovering connection (main)..." )
-            else:
-                self._agent.write_info("Recovering connection (id: " + self._id + ")..." )
-            cntretry=utils.Counter()
-            cntwait=utils.Counter()
-            while not cntretry.is_elapsed(crectimeout):          
-                if cntwait.is_elapsed(2):
-                    cntwait.reset()
-                    try:
-                        prop = self._get_prop_conn()
-                        prop['userName'] = self._user
-                        if self._id is None:
-                            prop['password'] = "RECOVERY:" + crecid
-                        else:
-                            prop['password'] = "RECOVERY:" + crecid + "@" + self._id                            
-                        appraw = communication.Connection({"on_data": self._on_data, "on_except": self._on_except, "on_close":self._on_close})
-                        appraw.open(prop, self._agent.get_proxy_info())
-                        self._raw=appraw
-                        brecon = True
-                        break
-                    except:
-                        None
-                else:
-                    time.sleep(0.2)
-                self._semaphore.acquire()
-                try:
-                    if self._destroy==True:
-                        return
-                finally:
-                    self._semaphore.release()
-        
-        if not brecon:
-            if breconmsg:
-                if self._id is None:
-                    self._agent.write_info("Recovery connection failed (main)." )
-                else:
-                    self._agent.write_info("Recovery connection failed (id: " + self._id + ")." )
-            self._set_recovering(False,True)
-            self._agent.OLDclose_connection(self)
-            if self._evt_on_close is not None:
-                self._evt_on_close()            
-        else:
-            if breconmsg:
-                if self._id is None:
-                    self._agent.write_info("Recovered connection (main)." )
-                else:
-                    self._agent.write_info("Recovered connection (id: " + self._id + ")." )
-            if self._evt_on_recovery is not None:
-                self._evt_on_recovery()
-            self._set_recovering(False,False)
-                
-    def _on_except(self,e):        
-        if self._evt_on_except is not None:
-            self._evt_on_except(e)
-        else:
-            self._agent.write_except(e)
-    
-    def is_close(self):
-        self._semaphore.acquire()
-        try:
-            return self._destroy
-        finally:
-            self._semaphore.release()        
-    
-    def close(self):
-        self._set_recovering(False,True)
-        if self._id is not None:
-            self._agent.OLDclose_connection(self)            
-        self._raw.close()
-    
-                
-class OLDMainMessage(Message):    
-    
-    def __init__(self, agent, conn):
-        Message.__init__(self, agent, conn)
-        self._conn._allow_recovery=True
-    
-    def _fire_msg(self, msg):
-        try:
-            #if self._agent._connection is not None:
-            #    return
-            resp = None
-            msg_name = msg["name"]
-            if msg_name=="recoveryInfo":
-                self._agent._sessions_semaphore.acquire()
-                try:
-                    self._agent._main_recovery_id=msg["id"]
-                    self._agent._main_recovery_timeout=(msg["timeout"]+5)
-                finally:
-                    self._agent._sessions_semaphore.release()                
-            elif msg_name=="updateInfo":
-                if "agentGroup" in msg:
-                    self._agent._agent_group=msg["agentGroup"]
-                if "agentName" in msg:
-                    self._agent._agent_name=msg["agentName"]
-            elif msg_name=="keepAlive":
-                m = {
-                    'name':  'okAlive' 
-                }
-                self.send_message(m)
-            elif msg_name=="rebootOS":
-                self._agent._reboot_os()
-            elif msg_name=="reboot":
-                self._agent._reboot_agent()
-            elif msg_name=="reload":
-                self._agent.write_info("Request reload Agent.")
-                #WAIT RANDOM TIME BEFORE TO REBOOT AGENT
-                wtime=random.randrange(0, 6*3600) # 6 ORE
-                self._agent._reload_agent(wtime)
-            elif msg_name=="reloadApps":
-                self._agent.write_info("Request reload Apps: " + msg["appsUpdated"] + ".")
-                self._agent._libs_apps_semaphore.acquire()
-                try:
-                    self._agent._node_files_info=None
-                    arAppsUpdated = msg["appsUpdated"].split(";")
-                    for appmn in arAppsUpdated:
-                        self._agent._apps_to_reload[appmn]=True
-                finally:
-                    self._agent._libs_apps_semaphore.release()
-            elif msg_name=="reloadLibs":
-                self._agent.write_info("Request reload Libs: " + msg["libsUpdated"] + ".")
-                self._agent._libs_apps_semaphore.acquire()
-                try:
-                    self._agent._node_files_info=None
-                    arLibsUpdated = msg["libsUpdated"].split(";")
-                    for libmn in arLibsUpdated:
-                        self._agent._set_reload_apps_with_lib_deps(libmn)
-                finally:
-                    self._agent._libs_apps_semaphore.release()
-            elif msg_name=="openConnection":
-                resp=self._agent.OLDopen_connection(msg)
-            elif msg_name=="openSession":
-                resp=self._agent.OLDopen_session(msg)
-            if resp is not None:
-                self.send_response(msg, resp)
-        except:
-            e = utils.get_exception()
-            self._agent.write_except(e)
-            if 'requestKey' in msg:
-                m = {
-                    'name': 'error' , 
-                    'requestKey':  msg['requestKey'] , 
-                    'class':  e.__class__.__name__ , 
-                    'message':  utils.exception_to_string(e)
-                }
-                self.send_message(m)
-                #if self._agent._connection is not None:
-                    #self.send_message(self._connection,m)
-
-class OLDSession(Message):
-    
-    def __init__(self, agent, conn, idses, msg):
-        Message.__init__(self, agent, conn)
-        self._conn._allow_recovery=True
-        self._bclose = False
-        self._idsession= idses
-        self._permissions = json.loads(msg["permissions"])
-        self._ipaddress = None        
-        if "ipAddress" in msg:
-            self._ipaddress = msg["ipAddress"]
-        self._country_code = None
-        if "countryCode" in msg:
-            self._country_code = msg["countryCode"]
-        self._country_name = None
-        if "countryName" in msg:
-            self._country_name = msg["countryName"]
-        self._user_name = None
-        if "userName" in msg:
-            self._user_name = msg["userName"]
-        self._access_type = None            
-        if "accessType" in msg:
-            self._access_type = msg["accessType"]            
-        
-        self._activities = {}
-        self._activities["screenCapture"] = False
-        self._activities["shellSession"] = False
-        self._activities["downloads"] = 0
-        self._activities["uploads"] = 0
-
-    def get_idsession(self):
-        return self._idsession
-    
-    def get_permissions(self):
-        return self._permissions
-    
-    def inc_activities_value(self, k):
-        self._agent._sessions_semaphore.acquire()
-        try:
-            self._activities[k]+=1
-        finally:
-            self._agent._sessions_semaphore.release()
-    
-    def dec_activities_value(self, k):
-        self._agent._sessions_semaphore.acquire()
-        try:
-            self._activities[k]-=1
-        finally:
-            self._agent._sessions_semaphore.release()
-    
-    def get_activities(self):
-        return self._activities
-        
-    def _fire_msg(self,msg):
-        try:
-            msg_name = msg["name"]
-            if msg_name=="request":
-                self.send_response(msg,self._request(msg))
-            elif msg_name=="keepalive":
-                m = {
-                    'name': 'response' , 
-                    'requestKey':  msg['requestKey'] , 
-                    'message':  "okalive"
-                }
-                self.send_message(m)
-            elif msg_name=="download":
-                self.send_message(self._download(msg))
-            elif msg_name=="upload":
-                self.send_message(self._upload(msg))
-            elif msg_name=="websocket":
-                self.send_message(self._websocket(msg))
-            elif msg_name=="websocketsimulate":
-                self.send_message(self._websocketsimulate(msg))
-            else:
-                raise Exception("Invalid message name: " + msg_name)                
-        except:
-            e = utils.get_exception()
-            self._agent.write_except(e)
-            if 'requestKey' in msg:
-                m = {
-                    'name': 'error' , 
-                    'requestKey':  msg['requestKey'] , 
-                    'class':  e.__class__.__name__ , 
-                    'message':  utils.exception_to_string(e)
-                }
-                self.send_message(m)
-            
-    def _request(self, msg):
-        resp = ""
-        try:
-            app_name = msg["module"]
-            cmd_name = msg["command"]
-            params = {}
-            params["requestKey"]=msg['requestKey']
-            sck = "parameter_";
-            for key in msg.iterkeys():
-                if key.startswith(sck):
-                    params[key[len(sck):]]=msg[key]
-            resp=self._agent.invoke_app(app_name, cmd_name, self, params)
-            if resp is not None:
-                resp = ":".join(["K", resp])
-            else:
-                resp = "K:null"
-        except:
-            e = utils.get_exception()
-            m = utils.exception_to_string(e)
-            self._agent.write_debug(m)
-            resp=  ":".join(["E", m])
-        return resp        
-    
-    def _websocket(self, msg):        
-        rid=msg["idRaw"]
-        wsock=None
-        self._agent._sessions_semaphore.acquire()
-        try:
-            if not rid in self._agent._OLDconnections:
-                raise Exception("Connection not found (id: " + rid + ")")
-            wsock = WebSocket(self,self._agent._OLDconnections[rid], msg)  
-        finally:
-            self._agent._sessions_semaphore.release()
-        resp = {}        
-        try:
-            self._agent.invoke_app(msg['module'],  "websocket",  self,  wsock)            
-            if not wsock.is_accept():
-                raise Exception("WebSocket not accepted")
-        except:
-            e = utils.get_exception()
-            try:
-                wsock.close()
-            except:
-                None
-            resp["error"]=utils.exception_to_string(e)            
-        resp['name']='response'
-        resp['requestKey']=msg['requestKey']
-        return resp
-    
-    def _websocketsimulate(self, msg):
-        rid=msg["idRaw"]
-        wsock=None
-        self._agent._sessions_semaphore.acquire()
-        try:
-            if not rid in self._agent._OLDconnections:
-                raise Exception("Connection not found (id: " + rid + ")")
-            wsock = WebSocketSimulate(self,self._agent._OLDconnections[rid], msg)  
-        finally:
-            self._agent._sessions_semaphore.release()
-        resp = {}
-        try:
-            self._agent.invoke_app(msg['module'],  "websocket",  self,  wsock)
-            if not wsock.is_accept():
-                raise Exception("WebSocket not accepted")
-        except:
-            e = utils.get_exception()
-            try:
-                wsock.close()
-            except:
-                None
-            resp["error"]=utils.exception_to_string(e)
-        resp['name']='response'
-        resp['requestKey']=msg['requestKey']
-        return resp    
-    
-    def _download(self, msg):
-        rid=msg["idRaw"]
-        fdownload = None
-        self._agent._sessions_semaphore.acquire()
-        try:
-            if not rid in self._agent._OLDconnections:
-                raise Exception("Connection not found (id: " + rid + ")")
-            fdownload = Download(self, self._agent._OLDconnections[rid], msg)
-        finally:
-            self._agent._sessions_semaphore.release()
-        resp = {}   
-        try:
-            self._agent.invoke_app(msg['module'],  "download",  self,  fdownload)
-            if fdownload.is_accept():
-                mt = mimetypes.guess_type(fdownload.get_path())
-                if mt is None or mt[0] is None or not isinstance(mt[0], str):
-                    resp["Content-Type"] = "application/octet-stream"
-                else:
-                    resp["Content-Type"] = mt[0]
-                resp["Content-Disposition"] = "attachment; filename=\"" + fdownload.get_name() + "\"; filename*=UTF-8''" + urllib.quote(fdownload.get_name().encode("utf-8"), safe='')
-                #ret["Cache-Control"] = "no-cache, must-revalidate" NON FUNZIONA PER IE7
-                #ret["Pragma"] = "no-cache"
-                resp["Expires"] = "Sat, 26 Jul 1997 05:00:00 GMT"
-                resp["Length"] = str(fdownload.get_length())
-            else:
-                raise Exception("Download file not accepted")
-        except:
-            e = utils.get_exception()
-            try:
-                fdownload.close()
-            except:
-                None            
-            resp["error"]=utils.exception_to_string(e)
-        resp['name']='response'
-        resp['requestKey']=msg['requestKey']
-        return resp
-    
-    def _upload(self, msg):
-        rid=msg["idRaw"]
-        fupload = None
-        self._agent._sessions_semaphore.acquire()
-        try:
-            if not rid in self._agent._OLDconnections:
-                raise Exception("Connection not found (id: " + rid + ")")
-            fupload = Upload(self, self._agent._OLDconnections[rid], msg)
-        finally:
-            self._agent._sessions_semaphore.release()
-        resp = {}
-        try:
-            self._agent.invoke_app(msg['module'],  "upload",  self,  fupload)
-            if not fupload.is_accept():
-                raise Exception("Upload file not accepted")
-        except:
-            e = utils.get_exception()
-            try:
-                fupload.close()
-            except:
-                None
-            resp["error"]=utils.exception_to_string(e)
-        resp['name']='response'
-        resp['requestKey']=msg['requestKey']
-        return resp
-    
-    def _on_close(self):
-        self._agent._task_pool.execute(self._agent.close_session,self)
-    
-    def close(self):
-        self._agent._task_pool.execute(self._agent.close_session,self)
-        Message.close(self) 
-
-'''
-#######################################################################
-#######################################################################
-#######################################################################
-'''
-     
-
-
 
 class Session(Message):
     
@@ -3206,7 +2451,7 @@ class Session(Message):
             params = {}
             params["requestKey"]=msg['requestKey']
             sck = "parameter_";
-            for key in msg.iterkeys():
+            for key in msg:
                 if key.startswith(sck):
                     params[key[len(sck):]]=msg[key]
             resp=self._agent.invoke_app(app_name, cmd_name, self, params)
@@ -3280,7 +2525,7 @@ class Session(Message):
                     resp["Content-Type"] = "application/octet-stream"
                 else:
                     resp["Content-Type"] = mt[0]
-                resp["Content-Disposition"] = "attachment; filename=\"" + fdownload.get_name() + "\"; filename*=UTF-8''" + urllib.quote(fdownload.get_name().encode("utf-8"), safe='')
+                resp["Content-Disposition"] = "attachment; filename=\"" + fdownload.get_name() + "\"; filename*=UTF-8''" + utils.url_parse_quote(fdownload.get_name().encode("utf-8"), safe='')
                 #ret["Cache-Control"] = "no-cache, must-revalidate" NON FUNZIONA PER IE7
                 #ret["Pragma"] = "no-cache"
                 resp["Expires"] = "Sat, 26 Jul 1997 05:00:00 GMT"
@@ -3367,20 +2612,20 @@ class WebSocket:
         self._parent._set_last_activity_time()
         if not self._bclose:
             if self._data is None:
-                self._data=data
+                self._data=bytearray(data)
             else:
-                self._data.append_bytes(data)
+                self._data+=data
             try:
                 while True:
                     if self._len==-1:
                         if len(self._data)>=4:
-                            self._len = struct.unpack('!i', self._data[0:4])[0]
+                            self._len=struct.unpack('!i', self._data[0:4])[0]
                         else:
                             break
                     if self._len>=0 and len(self._data)-4>=self._len:
                         apptp = self._data[5]
-                        appdata = self._data.new_buffer(5,self._len)
-                        self._data = self._data.new_buffer(4+self._len)
+                        appdata = self._data[5:5+self._len]
+                        del self._data[0:4+self._len]
                         self._len=-1;
                         if self._on_data is not None:
                             self._on_data(self,apptp,appdata)
@@ -3394,38 +2639,42 @@ class WebSocket:
     def get_send_buffer_size(self):
         return self._parent.get_send_buffer_size()
     
+    
     def send_list_string(self,data):
         self._parent._set_last_activity_time()
         if not self._bclose:
-            dtsend=utils.Bytes()
+            st=struct.Struct("!IB")
+            ba=bytearray()
             for i in range(len(data)):
-                dt=utils.Bytes(data[i])
-                dt.encode_len_byte_data(WebSocket.DATA_STRING)
-                dtsend.append_bytes(dt)                
-            self._parent._send_conn(self._conn,dtsend)
+                dt=data[i]
+                ba+=bytearray(st.pack(len(dt)+1,WebSocket.DATA_STRING))
+                ba+=dt   
+            self._parent._send_conn(self._conn,ba)
     
     def send_list_bytes(self,data):
         self._parent._set_last_activity_time()
         if not self._bclose:
-            dtsend=utils.Bytes()
+            st=struct.Struct("!IB")
+            ba=bytearray()
             for i in range(len(data)):
                 dt=data[i]
-                dt.encode_len_byte_data(WebSocket.DATA_BYTES)
-                dtsend.append_bytes(dt)
-            self._parent._send_conn(self._conn,dtsend)
+                ba+=bytearray(st.pack(len(dt)+1,WebSocket.DATA_BYTES))
+                ba+=dt
+            self._parent._send_conn(self._conn,ba)
     
     def send_string(self,data):
         self._parent._set_last_activity_time()
-        if not self._bclose:
-            dtsend=utils.Bytes(data)
-            dtsend.encode_len_byte_data(WebSocket.DATA_STRING)
-            self._parent._send_conn(self._conn,dtsend)
+        if not self._bclose:            
+            ba=bytearray(struct.pack("!IB",len(data)+1,WebSocket.DATA_STRING))
+            ba+=utils.str_to_bytes(data)
+            self._parent._send_conn(self._conn,ba)
     
     def send_bytes(self,data):
         self._parent._set_last_activity_time()
-        if not self._bclose:
-            data.encode_len_byte_data(WebSocket.DATA_BYTES)
-            self._parent._send_conn(self._conn,data)
+        if not self._bclose:            
+            ba=bytearray(struct.pack("!IB",len(data)+1,WebSocket.DATA_BYTES))
+            ba+=data
+            self._parent._send_conn(self._conn,ba)
     
     def _on_close_conn(self):
         self._destroy(True)
@@ -3471,9 +2720,9 @@ class WebSocketSimulate:
             if "on_data" in events:
                 self._on_data = events["on_data"]
         self._qry_len=-1
-        self._qry_data=utils.Bytes()
+        self._qry_data=bytearray()
         self._pst_len=-1
-        self._pst_data=utils.Bytes()
+        self._pst_data=bytearray()
         self._qry_or_pst="qry"
         self._data_list=[]
         self._baccept=True
@@ -3489,44 +2738,46 @@ class WebSocketSimulate:
         if not self._bclose:
             try:
                 if self._qry_or_pst=="qry":
-                    self._qry_data.append_bytes(data)
+                    self._qry_data+=data
                 else:
-                    self._pst_data.append_bytes(data)
+                    self._pst_data+=data
                 if self._qry_or_pst=="qry":
                     if self._qry_len==-1:
                         if len(self._qry_data)>=4:
                             self._qry_len = struct.unpack('!i', self._qry_data[0:4])[0]
-                            self._qry_data = self._qry_data.new_buffer(4)
+                            del self._qry_data[0:4]
                     if self._qry_len!=-1 and len(self._qry_data)>=self._qry_len:
-                        self._pst_data=self._qry_data.new_buffer(self._qry_len)
-                        self._qry_data=self._qry_data.new_buffer(0,self._qry_len)
+                        self._pst_data=self._qry_data[self._qry_len:]
+                        del self._qry_data[self._qry_len:]
                         self._qry_or_pst="pst"
                 if self._qry_or_pst=="pst":
                     if self._pst_len==-1:
                         if len(self._pst_data)>=4:
                             self._pst_len = struct.unpack('!i', self._pst_data[0:4])[0]
-                            self._pst_data = self._pst_data.new_buffer(4)      
+                            del self._pst_data[0:4]
                     if self._pst_len!=-1 and len(self._pst_data)>=self._pst_len:
                         prpqry=None
                         if self._qry_len>0:
-                            prpqry=communication.xml_to_prop(self._qry_data.to_str("utf8"))
-                        self._qry_data=self._pst_data.new_buffer(self._pst_len)
-                        self._pst_data=self._pst_data.new_buffer(0,self._pst_len)
+                            prpqry=communication.xml_to_prop(self._qry_data)
+                        self._qry_data=self._pst_data[self._pst_len:]
+                        del self._pst_data[self._pst_len:]
                         prppst=None
                         if self._pst_len>0:
-                            prppst=communication.xml_to_prop(self._pst_data.to_str("utf8"))
+                            prppst=communication.xml_to_prop(self._pst_data)
                         self._qry_or_pst="qry"
                         self._qry_len=-1
                         self._pst_len=-1
-                        self._pst_data=""
+                        self._pst_data=bytearray()
                         
                         if self._on_data is not None:
                             cnt = int(prppst["count"])
                             for i in range(cnt):
                                 tpdata = prppst["type_" + str(i)]
-                                prprequest = utils.Bytes(prppst["data_" + str(i)])
+                                prprequest = prppst["data_" + str(i)]
                                 if tpdata==WebSocketSimulate.DATA_BYTES:
-                                    prprequest.decode_base64()
+                                    prprequest=utils.enc_base64_decode(prprequest)
+                                else:
+                                    prprequest=utils.str_to_bytes(prprequest,"utf8")
                                 self._on_data(self, tpdata, prprequest)
                         #Invia risposte
                         arsend=None
@@ -3560,13 +2811,15 @@ class WebSocketSimulate:
                             self.close()
                             if self._on_close is not None:
                                 self._on_close()
-            except:
+            except:                
                 self.close()
                 if self._on_close is not None:
                     self._on_close()
                     
     
     def _send_response(self,sdata):
+        st_I=struct.Struct("!I")
+        
         prop = {}
         prop["Cache-Control"] = "no-cache, must-revalidate"
         prop["Pragma"] = "no-cache"
@@ -3575,27 +2828,27 @@ class WebSocketSimulate:
         prop["Content-Type"] = "application/json; charset=utf-8"
         #prop["Content-Type"] = "application/octet-stream"
         
+        bts = bytearray()
         
-        bts = utils.Bytes()
         #AGGIUNGE HEADER
         shead = communication.prop_to_xml(prop)
-        bts.append_int(len(shead))
-        bts.append_str(shead,"ascii")
-        
+        bts+=st_I.pack(len(shead))
+        bts+=bytearray(shead,"ascii")
+
         #COMPRESS RESPONSE
-        appout = StringIO.StringIO()
+        appout = utils.BytesIO()
         f = gzip.GzipFile(fileobj=appout, mode='w', compresslevel=5)
-        f.write(sdata)
+        f.write(utils.str_to_bytes(sdata))
         f.close()
         dt = appout.getvalue()
         
         #BODY LEN
         ln=len(dt)
         
-        #BODY
-        bts.append_int(ln)
+        #BODY        
+        bts+=st_I.pack(ln)
         if ln>0:
-            bts.append_bytes(utils.Bytes(dt))
+            bts+=dt            
         
         self._parent._send_conn(self._conn,bts)
         
@@ -3617,22 +2870,22 @@ class WebSocketSimulate:
     def _send(self,tpdata,data): 
         self._parent._set_last_activity_time()
         if not self._bclose:
-            dt=data;
+            dt=data
             if tpdata==WebSocketSimulate.DATA_BYTES:
-                dt.encode_base64()
+                dt=utils.bytes_to_str(utils.enc_base64_encode(dt))
             #print("LEN: " + str(len(data)) + " LEN B64: " + str(len(dt)))
-            self._data_list.append({"type": tpdata, "data": dt.to_str("utf8")})
+            self._data_list.append({"type": tpdata, "data": dt})
                         
     
     def _send_list(self,tpdata,data): 
         self._parent._set_last_activity_time()
         if not self._bclose:
             for i in range(len(data)):
-                dt=data[i];
+                dt=data[i]
                 if tpdata==WebSocketSimulate.DATA_BYTES:
-                    dt.encode_base64()
+                    dt=utils.bytes_to_str(utils.enc_base64_encode(dt))
                 #print("LEN: " + str(len(data[i])) + " LEN B64: " + str(len(dt)))
-                self._data_list.append({"type": tpdata, "data": dt.to_str("utf8")})
+                self._data_list.append({"type": tpdata, "data": dt})
             
                 
     def _on_close_conn(self):
@@ -3708,7 +2961,7 @@ class Download():
             fl = utils.file_open(self._path, 'rb')
             bsz=32*1024
             while not self.is_close():
-                bts = utils.file_read(fl,bsz)
+                bts = fl.read(bsz)
                 ln = len(bts)
                 if ln==0:
                     self._status="C"
@@ -3716,7 +2969,7 @@ class Download():
                 self._parent._set_last_activity_time()
                 self._parent._send_conn(self._conn,bts)
                 self._calcbps.add(ln)
-                #print "DOWNLOAD - NAME:" + self._name + " SZ: " + str(len(s)) + " LEN: " + str(self._calcbps.get_transfered()) +  "  BPS: " + str(self._calcbps.get_bps())
+                #print("DOWNLOAD - NAME:" + self._name + " SZ: " + str(len(s)) + " LEN: " + str(self._calcbps.get_transfered()) +  "  BPS: " + str(self._calcbps.get_bps()))
         except:
             self._status="E"
         finally:
@@ -3778,12 +3031,12 @@ class Upload():
         self._name=utils.path_basename(self._path)
         if 'length' not in self._props:
             raise Exception("upload file length in none.")
-        self._length=long(self._props['length'])
+        self._length=int(self._props['length'])
         self._calcbps=communication.BandwidthCalculator() 
             
         sprnpath=utils.path_dirname(path)    
         while True:
-            r="".join([random.choice("0123456789") for x in xrange(6)])            
+            r="".join([random.choice("0123456789") for x in utils.nrange(6)])            
             self._tmpname=sprnpath + utils.path_sep + "temporary" + r + ".dwsupload";
             if not utils.path_exists(self._tmpname):
                 utils.file_open(self._tmpname, 'wb').close() #Crea il file per imposta i permessi
@@ -3843,7 +3096,7 @@ class Upload():
         try:
             if not self._bclose:
                 if self._status == "T":
-                    if data[0]==ord('C'): 
+                    if utils.bytes_get(data,0)==ord('C'): 
                         self._enddatafile=True;
                         #SCRIVE FILE
                         try:
@@ -3855,20 +3108,15 @@ class Upload():
                                     utils.path_remove(self._path)
                             shutil.move(self._tmpname, self._path)
                             self._status = "C"
-                            bts = utils.Bytes()
-                            bts.append_str(self._status, "utf8")
-                            self._parent._send_conn(self._conn,bts)
+                            self._parent._send_conn(self._conn, bytearray(self._status, "utf8"))
                         except:
                             self._status = "E"
-                            bts = utils.Bytes()
-                            bts.append_str(self._status, "utf8")
-                            self._parent._send_conn(self._conn,bts)
+                            self._parent._send_conn(self._conn, bytearray(self._status, "utf8"))                            
                         self.close()
                     else: #if data[0]=='D': 
-                        data=data.new_buffer(1)
-                        utils.file_write(self._fltmp, data)
-                        self._calcbps.add(len(data))
-                        #print "UPLOAD - NAME:" + self._name + " LEN: " + str(self._calcbps.get_transfered()) +  "  BPS: " + str(self._calcbps.get_bps())
+                        self._fltmp.write(utils.buffer_new(data,1,len(data)-1))
+                        self._calcbps.add(len(data)-1)
+                        #print("UPLOAD - NAME:" + self._name + " LEN: " + str(self._calcbps.get_transfered()) +  "  BPS: " + str(self._calcbps.get_bps()))
                         
         except:
             self._status = "E"
@@ -3889,7 +3137,7 @@ class Upload():
         self._semaphore.acquire()
         try:
             if not self._bclose:
-                #print "UPLOAD - ONCLOSE"
+                #print("UPLOAD - ONCLOSE")
                 bclose = True
                 self._bclose=True                
                 self._remove_temp_file()
@@ -3910,7 +3158,7 @@ class Upload():
         self._semaphore.acquire()
         try:
             if not self._bclose:
-                #print "UPLOAD - CLOSE"
+                #print("UPLOAD - CLOSE")
                 bclose = True
                 self._bclose=True
                 self._remove_temp_file()
@@ -4013,11 +3261,11 @@ if __name__ == "__main__":
             if name=="ipc":
                 ipc.fmain(sys.argv)
             else:
-                #COMPATIBILITY OLD VERSION 05/05/2021
+                #COMPATIBILITY OLD VERSION 05/05/2021 (TO REMOVE)
                 objlib = importlib.import_module("app_" + name)
                 func = getattr(objlib, 'run_main', None)
                 func(sys.argv)
-        elif a1 is not None and a1.lower()=="guilnc":
+        elif a1 is not None and a1.lower()=="guilnc": #GUI LAUNCHER OLD VERSION 03/11/2021 (DO NOT REMOVE)             
             if is_mac():
                 bmain=False
                 native.fmain(sys.argv)

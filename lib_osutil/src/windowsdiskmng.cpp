@@ -12,7 +12,7 @@ DiskMng::DiskMng(){
 
 }
 
-wchar_t* DiskMng::getInfo() {
+ int DiskMng::getInfo(wchar_t** sret) {
 	JSONWriter jsonw;
 	jsonw.beginArray();
 
@@ -47,7 +47,9 @@ wchar_t* DiskMng::getInfo() {
 	}
 
 	jsonw.endArray();
-	return towcharp(jsonw.getString());
+	wstring str=jsonw.getString();
+	*sret=towcharp(str);
+	return str.length();
 }
 
 

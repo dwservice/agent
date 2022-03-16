@@ -64,7 +64,7 @@ void SystemMng::appendCpuName(JSONWriter* jsonw) {
 	jsonw->addString(L"cpuName",towstring(CPUBrandString));
 }
 
-wchar_t* SystemMng::getInfo() {
+int SystemMng::getInfo(wchar_t** sret) {
 	JSONWriter jsonw;
 	jsonw.beginObject();
 
@@ -83,7 +83,9 @@ wchar_t* SystemMng::getInfo() {
 
 	if(bOsVersionInfoEx == FALSE ) {
 		jsonw.endObject();
-		return towcharp(jsonw.getString());
+		wstring str=jsonw.getString();
+		*sret=towcharp(str);
+		return str.length();
 	}
 
 	pGNSI = (PGNSI) GetProcAddress(GetModuleHandle(TEXT("kernel32.dll")),"GetNativeSystemInfo");
@@ -314,8 +316,9 @@ wchar_t* SystemMng::getInfo() {
 	}
 
 	jsonw.endObject();
-	return towcharp(jsonw.getString());
-
+	wstring str=jsonw.getString();
+	*sret=towcharp(str);
+	return str.length();
 }
 
 #endif

@@ -27,12 +27,12 @@ int isTaskRunning(int pid){
 	return taskmng.isTaskRunning(pid);
 }
 
-wchar_t* getTaskList(){
-	return taskmng.getTaskList();
+ int DWAOSUtilGetTaskList(wchar_t** sret){
+	return taskmng.getTaskList(sret);
 }
 
-wchar_t* getServiceList(){
-	return servicemng.getServiceList();
+int DWAOSUtilGetServiceList(wchar_t** sret){
+	return servicemng.getServiceList(sret);
 }
 
 int startService(wchar_t* serviceName){
@@ -43,16 +43,16 @@ int stopService(wchar_t* serviceName){
 	return servicemng.stopService(serviceName);
 }
 
-wchar_t* getSystemInfo(){
-	return systemmng.getInfo();
+int DWAOSUtilGetSystemInfo(wchar_t** sret){
+	return systemmng.getInfo(sret);
 }
 
-wchar_t* getPerformanceInfo(){
-	return performancemng.getInfo();
+int DWAOSUtilGetPerformanceInfo(wchar_t** sret){
+	return performancemng.getInfo(sret);
 }
 
-wchar_t* getDiskInfo(){
-	return diskmng.getInfo();
+int DWAOSUtilGetDiskInfo(wchar_t** sret){
+	return diskmng.getInfo(sret);
 }
 
 int isFileJunction(wchar_t* path){
@@ -60,10 +60,5 @@ int isFileJunction(wchar_t* path){
 }
 
 int wmain(int argc, wchar_t **argv) {
-	//getTaskList();
-	//getServiceList();
-	//getSystemInfo();
-	getPerformanceInfo();
-	//getDiskInfo();
 	return 0;
 }

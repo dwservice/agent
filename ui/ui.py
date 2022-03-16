@@ -6,12 +6,19 @@ Public License, v. 2.0. If a copy of the MPL was not distributed
 with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
-import messages
+try:
+    from . import messages
+except: #FIX INSTALLER
+    import messages
+try:
+    from . import gdi
+except: #FIX INSTALLER
+    import gdi
 import os
 import sys
 import threading
-import gdi
 import traceback
+import utils
 
 _WIDTH=760
 _HEIGHT=500
@@ -262,7 +269,7 @@ class DialogMessage(gdi.DialogMessage):
             self._yes_action(None)
         if alt==1 and tp==u"CHAR" and c==u"n":
             self._no_action(None)
-        #print tp + " " + c + " " + str(alt)
+        #print(tp + " " + c + " " + str(alt))
         gdi.Window.on_keyboard(self, tp, c, shift, ctrl, alt, meta)
 
 class Window(gdi.Window):
@@ -309,7 +316,7 @@ class Window(gdi.Window):
                                 cmps[i+1].set_selected(True)
                                 self._ui._cur_step_ui.on_selected({"source":cmps[i+1]})
                             break;
-        #print tp + " " + c + " " + str(alt)
+        #print(tp + " " + c + " " + str(alt))
         gdi.Window.on_keyboard(self, tp, c, shift, ctrl, alt, meta)
 '''
             
@@ -317,17 +324,17 @@ class UI():
     def __init__(self, params, step_init):
         self._title = "DWAgent"
         if "title" in params:
-            self._title = unicode(params["title"])
+            self._title = utils.str_new(params["title"])
         self._logo = None
         self._topimage = None
         self._topinfo = None
         self._leftcolor = None
         if "logo" in params:
-            self._logo = unicode(params["logo"])
+            self._logo = utils.str_new(params["logo"])
         if "topimage" in params:
-            self._topimage = unicode(params["topimage"])
+            self._topimage = utils.str_new(params["topimage"])
         if "topinfo" in params:
-            self._topinfo = unicode(params["topinfo"])
+            self._topinfo = utils.str_new(params["topinfo"])
         if "leftcolor" in params:
             self._leftcolor = params["leftcolor"]
         self._step_init=step_init
@@ -357,8 +364,11 @@ class UI():
                 self._gui_enable=True
                 self._guimode_start()
             except Exception as e:
-                self._gui_enable=False
-                self._clmode_start()
+                if gdi.is_linux():
+                    self._gui_enable=False
+                    self._clmode_start()
+                else:
+                    raise e
         else:
             self._gui_enable=False
             self._clmode_start()
@@ -393,31 +403,37 @@ class UI():
             
     def _signal_close(self, signal, frame):
         if self._gui_enable is False:
-            print ""
+            print("")
         if self._is_raw_input:
             raise Exception("#EXIT");
         else:
             self.close()
     
     def _printcl(self, msg):
-        #print "ENC:" + sys.stdout.encoding
-        if sys.stdout.encoding is None:
-            print msg
+        #print("ENC:" + sys.stdout.encoding)
+        if utils.is_py2():
+            if sys.stdout.encoding is None:
+                print(msg)
+            else:
+                print(utils.bytes_to_str(msg.encode(sys.stdout.encoding,'replace')))
         else:
-            print msg.encode(sys.stdout.encoding,'replace')
+            print(msg)
     
     def _raw_input(self,msg,bpasswd=False):
         try:
             appmsg=msg + u" "
-            if sys.stdout.encoding is not None:
-                appmsg=appmsg.encode(sys.stdout.encoding,'replace')
+            if utils.is_py2():
+                if sys.stdout.encoding is not None:
+                    appmsg=appmsg.encode(sys.stdout.encoding,'replace')            
             self._is_raw_input=True
             if not bpasswd:
-                sr = raw_input(appmsg)
+                #sr = raw_input(appmsg)
+                sr = input(appmsg)
             else:
                 import getpass
                 sr = getpass.getpass(appmsg)
-            sr=sr.decode('utf-8','replace')
+            if utils.is_py2():
+                sr=sr.decode('utf-8','replace')            
             if sr.lower()==u"#exit":
                 raise Exception("#EXIT")
             elif sr.lower()==u"#back":
@@ -426,7 +442,7 @@ class UI():
             return sr
         except Exception as e:
             self._is_raw_input=False
-            msg = str(e)
+            msg = utils.exception_to_string(e)
             if msg==u"#EXIT":
                 self.close()
             elif msg==u"#BACK":
@@ -437,7 +453,7 @@ class UI():
             else:
                 self._printcl(u"")
                 self._printcl(u"")
-                self._printcl(messages.get_message('unexpectedError').format(unicode(traceback.format_exc(),errors='replace')))
+                self._printcl(messages.get_message('unexpectedError').format(utils.str_new(traceback.format_exc())))
                 self.close()
             return None
         
@@ -455,7 +471,7 @@ class UI():
             self.wait_message(messages.get_message("waiting"))
             ret=self._cur_step_ui.fire_next_step()
         except Exception:
-            ret=ErrorDialog(messages.get_message('unexpectedError').format(unicode(traceback.format_exc(),errors='replace')))
+            ret=ErrorDialog(messages.get_message('unexpectedError').format(utils.str_new(traceback.format_exc())))
         self._op_complete(ret)
     
     def _clmode_back(self):
@@ -463,7 +479,7 @@ class UI():
             self.wait_message(messages.get_message("waiting"))
             ret=self._cur_step_ui.fire_prev_step()
         except Exception:
-            ret=ErrorDialog(messages.get_message('unexpectedError').format(unicode(traceback.format_exc(),errors='replace')))            
+            ret=ErrorDialog(messages.get_message('unexpectedError').format(utils.str_new(traceback.format_exc())))            
         self._op_complete(ret)
      
     def _clmode_start(self):
@@ -486,7 +502,7 @@ class UI():
             if isinstance(self._cur_step_ui,ErrorDialog):
                 self._cur_step_ui=Message(self._cur_step_ui.get_message())
         except Exception as e:            
-            self._cur_step_ui=Message("Error: " + str(e))        
+            self._cur_step_ui=Message("Error: " + utils.exception_to_string(e))        
         self._prepare_step(self._cur_step_ui)
         self._printcl(u"")
     
@@ -529,7 +545,7 @@ class UI():
             if isinstance(ui,ErrorDialog):
                 ui=Message(ui.get_message())
         except Exception as e:            
-            ui=Message("Error: " + str(e))
+            ui=Message("Error: " + utils.exception_to_string(e))
         return ui
     
     def _guimode_step_init_callback(self,curui):
@@ -660,7 +676,7 @@ class UI():
             self._btnext.set_enable(True)
     
     def _show_error_gui_ok(self,e):
-        if self._wait_ui is not None:
+        if self._wait_ui is not None and e["action"]==u"MOUSECLICK":
             self._prepare_step(self._cur_step_ui)
             
     def _show_error(self,  msg):

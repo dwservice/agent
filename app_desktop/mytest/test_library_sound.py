@@ -36,15 +36,24 @@ if __name__ == "__main__":
     iret = sound_module.DWASoundCaptureStart(ctypes.byref(aconf),common.cb_sound_data,ctypes.byref(capses))
     print("DWASoundCaptureStart: " +str(iret))
     
+    
+    bf = ctypes.create_string_buffer(2048)
+    l = sound_module.DWASoundCaptureGetDetectOutputName(capses,bf,2048);
+    if l>0:
+        sodn=bf.value[0:l]
+    else:
+        sodn=""
+    print("DWASoundCaptureGetDetectOutputName: " +sodn)
+    
     print("SLEEP 2")
     time.sleep(2)
     
     sound_module.DWASoundCaptureStop(capses);
-    print ("DWASoundCaptureStop")
+    print("DWASoundCaptureStop")
     
         
     fulldt = "".join(common._libmap["test_buff_data"])
-    print ("FULL DATA len: " + str(len(fulldt)))
+    print("FULL DATA len: " + str(len(fulldt)))
     
     encses = ctypes.c_void_p()
     sound_module.DWASoundCaptureOPUSEncoderInit(ctypes.byref(aconf),ctypes.byref(encses))
@@ -53,7 +62,7 @@ if __name__ == "__main__":
     #aa = ctypes.POINTER(fulldt)
     
     iret = sound_module.DWASoundCaptureOPUSEncode(encses, fulldt, len(fulldt), common.cb_sound_encode_result)
-    print ("DWASoundCaptureOPUSEncode: " +str(iret))
+    print("DWASoundCaptureOPUSEncode: " +str(iret))
     print("\n\n")
     
     sound_module.DWASoundCaptureOPUSEncoderTerm(encses)

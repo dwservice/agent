@@ -74,7 +74,7 @@ if __name__ == "__main__":
         print("DWAScreenCaptureGetImage: " +str(iret))        
         print("CHANGE NUM:" + str(rgbimage.sizechangearea))
         for i in range(rgbimage.sizechangearea):
-            print (str(rgbimage.changearea[i].x) + " " + str(rgbimage.changearea[i].y) + " " + str(rgbimage.changearea[i].width) + " " + str(rgbimage.changearea[i].height))
+            print(str(rgbimage.changearea[i].x) + " " + str(rgbimage.changearea[i].y) + " " + str(rgbimage.changearea[i].width) + " " + str(rgbimage.changearea[i].height))
         print("MOVE NUM:" + str(rgbimage.sizemovearea))
         
         ucpu = cap_module.DWAScreenCaptureGetCpuUsage()
@@ -91,7 +91,7 @@ if __name__ == "__main__":
                 
         tm = time.time()
         mmap.seek(0)
-        mmap.write("0")
+        mmap.write(b"0")
         mmap.write(rgbimage)
         mmap.write((ctypes.c_char*(rgbimage.width*rgbimage.height*3)).from_address(rgbimage.data))
         print("writemmap tm :" + str(time.time()-tm) + "  POS:" + str(mmap.tell()))

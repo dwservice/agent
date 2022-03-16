@@ -37,7 +37,7 @@ def _test_notify_action(e):
         pp.show()
 
 def _test_popup_menu(e):
-    if e["action"]==u"PERFORMED":
+    if e["action"]==u"MOUSECLICK":
         prnt=None
         if "window" in e:
             prnt=e["window"]

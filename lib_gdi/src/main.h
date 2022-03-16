@@ -70,6 +70,9 @@ extern "C"{
 	int isTaskRunning(int pid);
 #endif
 
+#if defined OS_MAC
+	void DWAGDINSAppSetActivationPolicy(int v);
+#endif
 }
 
 #endif /* MAIN_H_ */

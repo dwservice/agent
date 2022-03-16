@@ -5,17 +5,25 @@ This Source Code Form is subject to the terms of the Mozilla
 Public License, v. 2.0. If a copy of the MPL was not distributed
 with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
-
-import messages
+try:
+    from . import messages
+except: #FIX INSTALLER
+    import messages
+try:
+    from . import images
+except: #FIX INSTALLER
+    import images
+try:
+    from . import gdi
+except: #FIX INSTALLER
+    import gdi 
 import utils
 import json
 import sys
 import subprocess
 import threading
 import listener
-import gdi
 import time
-import images
 import os
 
 _WIDTH=550
@@ -209,13 +217,14 @@ class Main():
         self._config_base_path=None
         self._notifyActivities=None
         try:
-            f = utils.file_open('config.json')
-            self._properties = json.loads(f.read())
+            f = utils.file_open('config.json', "rb")
+            s=f.read()
+            self._properties = json.loads(utils.bytes_to_str(s,"utf8"))
             f.close()
         except Exception:
             None
         if 'name' in self._properties:
-            self._name=unicode(self._properties["name"])
+            self._name=utils.str_new(self._properties["name"])
         applg = gdi._get_logo_from_conf(self._properties, u"ui" + utils.path_sep + u"images" + utils.path_sep + u"custom" + utils.path_sep)
         if applg != "":
             self._logo=applg        
@@ -237,8 +246,9 @@ class Main():
     
     def _set_config_base_path(self, pth):
         self._config_base_path=pth
-        f = utils.file_open(self._config_base_path + os.sep + 'config.json')                
-        self._properties = json.loads(f.read())
+        f = utils.file_open(self._config_base_path + os.sep + 'config.json', "rb")
+        s=f.read()
+        self._properties = json.loads(utils.bytes_to_str(s,"utf8"))
         f.close()
     
     def lock(self):
@@ -262,7 +272,7 @@ class Main():
             except:
                 None
             if self._mode=="systray":
-                print ("An Instance is already running.")
+                print("An Instance is already running.")
             else:
                 self.add_show_file()
             return False
@@ -334,7 +344,7 @@ class Main():
                 self._ipc_client=listener.IPCClient(path=self._config_base_path)
                 self._status_cnt=-1
 
-            cnt=long(self._ipc_client.get_property("counter"))
+            cnt=int(self._ipc_client.get_property("counter"))
             if self._status_cnt!=cnt:
                 if self._status_cnt==-1: #SKIP FIRST READ
                     self._status_cnt=cnt
@@ -343,11 +353,15 @@ class Main():
                     self._status_cnt=cnt                
                     ret["state"] = self._ipc_client.get_property("state")
                     try:
-                        ret["group"] = self._ipc_client.get_property("group").decode("unicode-escape")
+                        ret["group"] = self._ipc_client.get_property("group")
+                        if utils.is_py2():
+                            ret["group"]=ret["group"].decode("unicode-escape")
                     except:
                         None
                     try:
-                        ret["name"] = self._ipc_client.get_property("name").decode("unicode-escape")
+                        ret["name"] = self._ipc_client.get_property("name")
+                        if utils.is_py2():
+                            ret["name"]=ret["name"].decode("unicode-escape")
                     except:
                         None
                     try:
@@ -375,8 +389,8 @@ class Main():
                         self._notifyActivities.update()
                         
                 return ret
-        except Exception as e:
-            print str(e)
+        except Exception as e:            
+            print(utils.get_exception_string(e))
             return ret
         finally:
             self._semaphore.release()
@@ -605,7 +619,7 @@ class Main():
             except Exception as e:
                 dlg = gdi.DialogMessage(gdi.DIALOGMESSAGE_ACTIONS_OK,gdi.DIALOGMESSAGE_LEVEL_ERROR,self._app)
                 dlg.set_title(self._get_message('monitorTitle'))
-                dlg.set_message(str(e))
+                dlg.set_message(utils.exception_to_string(e))
                 dlg.show();
     
     def enable_disable(self, e):
@@ -908,6 +922,11 @@ class Main():
             self.prepare_window()            
             if mode=="systray":
                 self.prepare_systray()
+                try:
+                    if utils.is_mac():
+                        gdi.mac_nsapp_set_activation_policy(1)
+                except:
+                    None
             else:
                 self._app.show()
             
@@ -952,7 +971,7 @@ def fmain(args): #SERVE PER MACOS APP
                 main.start("info")
         sys.exit(0)
     except Exception as e:
-        print str(e)
+        print(utils.get_exception_string(e))
         sys.exit(1)
 
 def ctrlHandler(ctrlType):    

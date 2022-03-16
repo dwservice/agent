@@ -9,9 +9,27 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import json
 import utils
 import agent
-import sys
 import shutil
 import random
+
+##### TO FIX 22/09/2021
+try:
+    TMP_bytes_to_str=utils.bytes_to_str
+    TMP_str_to_bytes=utils.str_to_bytes
+    TMP_nrange=utils.nrange
+except:
+    TMP_bytes_to_str=lambda b, enc="ascii": b.decode(enc, errors="replace")
+    TMP_str_to_bytes=lambda s, enc="ascii": s.encode(enc, errors="replace")
+    TMP_nrange=xrange
+try:    
+    import os
+    import sys
+    if sys.version_info[0]==2:        
+        if utils.path_exists(os.path.dirname(__file__) + os.sep + "__pycache__"):
+            utils.path_remove(os.path.dirname(__file__) + os.sep + "__pycache__")
+except: 
+    None
+##### TO FIX 22/09/2021
 
 class TextEditor():
     
@@ -41,15 +59,8 @@ class TextEditor():
         self._write(path,  params)
         return None
 
-    def _remove_bom(self, s):
-        for bm in self._get_app_filesystem().TEXTFILE_BOM_TYPE :
-            if s.startswith(bm["Data"]):
-                s=s[len(bm["Data"]):]
-                break
-        return s
-    
     def _get_bom_byname(self, nm):
-        for bm in self._get_app_filesystem().TEXTFILE_BOM_TYPE :
+        for bm in self._get_app_filesystem().TEXTFILE_BOM_TYPE:
             if nm==bm["Name"]:
                 return bm
         return None
@@ -64,24 +75,18 @@ class TextEditor():
         bom=False
         text_file = utils.file_open(path, 'rb')
         try:
-            s = text_file.read()
-            for bm in self._get_app_filesystem().TEXTFILE_BOM_TYPE :
-                if s.startswith(bm["Data"]):
+            bts = text_file.read()
+            for bm in self._get_app_filesystem().TEXTFILE_BOM_TYPE:
+                lnbm = len(bm["Data"])
+                if len(bts)>=lnbm and bts[0:lnbm]==bm["Data"]:
                     enc=bm["Name"]
+                    bts=bts[lnbm:] #REMOVE BOM
                     bom=True
                     break
             
             if not bom:
-                #Verifica prima utf8
-                enc="UTF-8"
-                try:
-                    s=s.decode(enc)
-                except:
-                    enc=sys.getfilesystemencoding()
-                    s=s.decode(enc, 'replace')
-            else:
-                s=self._remove_bom(s)
-                s=s.decode(enc, 'replace')
+                enc="utf8"                
+            s=TMP_bytes_to_str(bts,enc)
             endline=utils.line_sep
             if s.find("\r\n")>0:
                 endline="\r\n"
@@ -94,7 +99,7 @@ class TextEditor():
             prop["encoding"]=enc
             prop["endline"]=endline
             sret=s.splitlines()
-            for i in range(len(sret)):
+            for i in TMP_nrange(len(sret)):
                 sret[i]=sret[i].rstrip('\n').rstrip('\r')
             prop["text"] = "\n".join(sret)
         finally:
@@ -107,7 +112,9 @@ class TextEditor():
         if "encoding" in prop:
             enc = prop["encoding"]
         else:
-            enc =  sys.getfilesystemencoding()
+            enc =  None
+        if enc is None:
+            enc = "utf8"
         if "endline" in prop:
             endl = prop["endline"]
         else:
@@ -118,29 +125,23 @@ class TextEditor():
         pathtmp = None
         sprnpath=utils.path_dirname(path);    
         while True:
-            r="".join([random.choice("0123456789") for x in xrange(6)])            
+            r="".join([random.choice("0123456789") for x in TMP_nrange(6)])            
             pathtmp=sprnpath + utils.path_sep + "temporary" + r + ".dwstext";
             if not utils.path_exists(pathtmp):
                 utils.file_open(pathtmp, 'wb').close() #Crea il file per imposta i permessi
                 self._agent_main.get_osmodule().fix_file_permissions("CREATE_FILE",pathtmp)
-                if (enc is not None):
-                    flgop="w"
-                    if "bom" in prop and prop["bom"]=='true':
-                        bm = self._get_bom_byname(enc)
-                        if bm is not None:
-                            #Scrive BOM
-                            text_file = utils.file_open(pathtmp, 'wb')
-                            text_file.write(bm["Data"])
-                            text_file.close()
-                            flgop="a"
-                    text_file = utils.file_open(pathtmp, flgop, enc)
-                else:
-                    text_file = utils.file_open(pathtmp, 'w')
+                text_file = utils.file_open(pathtmp, 'wb')
+                if "bom" in prop and prop["bom"]=='true':
+                    bm = self._get_bom_byname(enc)
+                    if bm is not None:
+                        #Write BOM
+                        text_file = utils.file_open(pathtmp, 'wb')
+                        text_file.write(bm["Data"])                        
                 break
         try:
             s = prop["text"]
-            s = endl.join(s.split("\n"))
-            text_file.write(s)
+            s = endl.join(s.split("\n"))            
+            text_file.write(TMP_str_to_bytes(s,enc))
         finally:
             text_file.close()
         if utils.path_exists(path):

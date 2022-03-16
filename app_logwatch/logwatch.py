@@ -9,7 +9,17 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import json
 import utils
 import agent
-import sys
+
+##### TO FIX 22/09/2021
+try:    
+    import os
+    import sys
+    if sys.version_info[0]==2:
+        if utils.path_exists(os.path.dirname(__file__) + os.sep + "__pycache__"):
+            utils.path_remove(os.path.dirname(__file__) + os.sep + "__pycache__")
+except: 
+    None
+##### TO FIX 22/09/2021
 
 class LogWatch():
     
@@ -32,9 +42,8 @@ class LogWatch():
     def req_read(self, cinfo ,params):
         path = self.check_and_replace_path(cinfo, agent.get_prop(params,'path',None),  self._get_app_filesystem().OPERATION_VIEW)
         position = agent.get_prop(params,'position','')
-        maxline = int(agent.get_prop(params,'position','1000'))
-        
-        fpos = -1l
+        maxline = int(agent.get_prop(params,'position','1000'))        
+        fpos = -1
         flen = utils.path_size(path)
         if  position!="":
             fpos = int(position)
@@ -46,7 +55,11 @@ class LogWatch():
             enc=None
             if bm is not None:
                 enc = bm["Name"]
-            f = utils.file_open(path, 'r')
+            else:
+                enc = None
+            if enc is None:
+                enc = "utf8"
+            f = utils.file_open(path, 'r',  encoding=enc, errors='replace')
             try:
                 if (fpos!=-1):
                     f.seek(fpos)
@@ -54,16 +67,6 @@ class LogWatch():
                     ln = f.readline()
                     if ln=="":
                         break
-                    if enc is None:
-                        enc="UTF-8"
-                        try:
-                            ln=ln.decode(enc)
-                        except:
-                            enc=sys.getfilesystemencoding()
-                            ln=ln.decode(enc, 'replace')
-                    else:
-                        ln=ln.decode(enc, 'replace')
-                    
                     arl.append(ln.rstrip('\n').rstrip('\r'))
                     if len(arl)>=maxline+1:
                         arl.remove(arl[0])

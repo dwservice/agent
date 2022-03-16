@@ -19,7 +19,7 @@ using namespace std;
 class TaskMng{
 public:
 	TaskMng();
-	wchar_t* getTaskList();
+	int getTaskList(wchar_t** sret);
 	int taskKill(int pid);
 	int isTaskRunning(int pid);
 private:

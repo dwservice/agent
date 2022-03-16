@@ -886,10 +886,11 @@ void DWAScreenCaptureSetPrivacyMode(bool b){
 }
 
 int wmain(int argc, wchar_t **argv) {
-	DWAScreenCaptureLoad();
+	/*DWAScreenCaptureLoad();
 	MONITORS_INFO moninfo;
 	DWAScreenCaptureGetMonitorsInfo(&moninfo);
-	DWAScreenCaptureUnload();
+	DWAScreenCaptureUnload();*/
+	DWAScreenCaptureInputKeyboard("CHAR","76", false, false, false, false);
 	return 0;
 }
 
