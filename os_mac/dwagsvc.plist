@@ -8,8 +8,7 @@
 	<string>@LDNAME_SERVICE@</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>@PATH_DWA@/native/dwagsvc</string>
-		<string>run</string>
+		<string>@PATH_DWA@/native/dwagguilnc</string>
 	</array>
 	<key>OnDemand</key>
 	<false/>

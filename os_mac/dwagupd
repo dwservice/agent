@@ -46,15 +46,27 @@ copy_recursive(){
 
 check_update(){
 	PATH_DWA=$1
-	if [ -d "$1/update" ]; then
-		if copy_recursive "$1/update/" "$1/"; then
-			if ! rm -r -f "$1/update"; then
+	INST_VER=0
+	if [ -f "${PATH_DWA}/native/installer.ver" ]; then
+		INST_VER=$(cat "${PATH_DWA}/native/installer.ver")
+	fi
+	if [ -d "${PATH_DWA}/update" ]; then
+		if copy_recursive "${PATH_DWA}/update/" "${PATH_DWA}/"; then
+			if ! rm -r -f "${PATH_DWA}/update"; then
 				echo "Update error."
 				return 1
 			fi
 		else
 			echo "Update error."
 			return 1
+		fi
+	fi
+	#03/11/2021 COMPATIBILITY OLD VERSION dwagsvc
+	if [ $INST_VER -le 0 ]; then
+		if [ -f "${PATH_DWA}/agent.py" ]; then
+			export LD_LIBRARY_PATH=${PATH_DWA}/runtime/lib
+			export PYTHONIOENCODING=utf-8
+			"${PATH_DWA}/runtime/bin/dwagent" -m compileall -l "${PATH_DWA}"
 		fi
 	fi
 	return 0

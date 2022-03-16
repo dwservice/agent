@@ -55,7 +55,7 @@ class CompileAll():
                 self._dependency("lib_gcc", "8.1.0", arstatus)
                 self._dependency("lib_stdcpp", "8.1.0", arstatus)
             self._dependency("lib_z", "1.2.11", arstatus)
-            self._dependency("lib_turbojpeg", "2.0.3", arstatus)
+            self._dependency("lib_turbojpeg", "2.1.1", arstatus)
             self._dependency("lib_opus", "21.3.1", arstatus)
             self._dependency("lib_rtaudio", "5.1.0", arstatus)
             utils.info("END DEPENDENCIES")

@@ -5,20 +5,28 @@ This Source Code Form is subject to the terms of the Mozilla
 Public License, v. 2.0. If a copy of the MPL was not distributed
 with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
-
+try:
+    from . import messages
+except: #FIX INSTALLER
+    import messages
+try:
+    from . import gdi
+except: #FIX INSTALLER
+    import gdi
+try:
+    from . import ui
+except: #FIX INSTALLER
+    import ui
 import os
 import hashlib
 import json
 import shutil
 import time
 import sys
-import messages
-import ui
 import communication
 import stat
 import platform
 import listener
-import gdi
 import importlib
 import zlib
 import base64
@@ -26,7 +34,6 @@ import ipc
 import ctypes
 import subprocess
 import utils
-import traceback
 
 
 _MAIN_URL = "https://www.dwservice.net/"
@@ -34,6 +41,7 @@ _MAIN_URL_QA = "https://qa.dwservice.net/"
 _MAIN_URL_DEV = "https://dev.dwservice.net/dws_site/"
 _NATIVE_PATH = u'native'
 _RUNTIME_PATH = u'runtime'
+_INSTALLER_VERSION=1
 
 def get_native():
     if gdi.is_windows():
@@ -53,49 +61,6 @@ def stop_monitor(installpath):
         utils.path_remove(stopfilename) 
     except:
         None
-
-def exception_to_string(e):
-    bamsg=False;
-    try:
-        if len(e.message)>0:
-            bamsg=True;
-    except:
-        None
-    try:
-        appmsg=None
-        if bamsg:
-            appmsg=e.message
-        elif isinstance(e, unicode) or isinstance(e, str):
-            appmsg=e
-        else:
-            try:
-                appmsg=unicode(e)
-            except:
-                appmsg=str(e)
-        try:
-            if isinstance(appmsg, unicode):
-                return appmsg
-            elif isinstance(appmsg, str):
-                return appmsg.decode("UTF8")
-        except:
-            return unicode(appmsg, errors='replace')
-    except:
-        return "Unexpected error."
-
-def get_stacktrace_string():
-    try:
-        s = traceback.format_exc();
-        if s is None:
-            s=u""
-        if isinstance(s, unicode):
-            return s;
-        else:
-            try:
-                return s.decode("UTF8")
-            except:
-                return unicode(s, errors='replace')
-    except:
-        return "Unexpected error."
 
 class NativeLinux:
     def __init__(self):
@@ -126,9 +91,10 @@ class NativeLinux:
     
     def get_install_path(self) :
         if utils.path_exists(self._etc_path):
-            f = utils.file_open(self._etc_path)
+            f = utils.file_open(self._etc_path,"rb")
             try:
-                ar = json.loads(f.read())
+                s=f.read()
+                ar = json.loads(utils.bytes_to_str(s,"utf8"))
                 pth = ar['path']
                 if utils.path_exists(pth):
                     return pth
@@ -247,7 +213,7 @@ class NativeLinux:
     def start_runonfly(self, runcode):
         pargs=[]
         pargs.append(sys.executable)
-        pargs.append(u'agent.pyc')
+        pargs.append(u'agent.py')
         pargs.append(u'-runonfly')
         pargs.append(u'-filelog')
         if runcode is not None:
@@ -311,7 +277,7 @@ class NativeLinux:
             ar = {'path': self._install_path}
             s = json.dumps(ar, sort_keys=True, indent=1)
             f = utils.file_open(self._etc_path, 'wb')
-            f.write(s)
+            f.write(utils.str_to_bytes(s,"utf8"))            
             f.close()
             return True
         except:
@@ -338,7 +304,7 @@ class NativeMac:
         self._current_path = None
         self._install_path = None
         self._svcnm = None
-        self._guilncnm = None
+        #self._guilncnm = None
         self._systraynm = None
         self._logo_path=u"/ui/images/logo.icns"
 
@@ -346,11 +312,11 @@ class NativeMac:
         self._name=k
         if self._name.lower()==u"dwagent":            
             self._svcnm = u"net.dwservice.agsvc"
-            self._guilncnm = u"net.dwservice.agguilnc"
+            #self._guilncnm = u"net.dwservice.agguilnc"
             self._systraynm = u"net.dwservice.agsystray"
         else:
             self._svcnm = u"com.apiremoteaccess." + self._name.lower() + u"svc"
-            self._guilncnm = u"com.apiremoteaccess." + self._name.lower() + u"lnc"
+            #self._guilncnm = u"com.apiremoteaccess." + self._name.lower() + u"lnc"
             self._systraynm = u"com.apiremoteaccess." + self._name.lower() +  u"systray"
         
     def set_logo_path(self, pth):
@@ -444,10 +410,10 @@ class NativeMac:
             self._install_log.flush()
             utils.system_call(u"for USER in `users`; do launchctl bootout gui/`id -u $USER` /Library/LaunchAgents/" + pn + "; done", shell=True, stdout=self._install_log, stderr=subprocess.STDOUT)
             self._install_log.flush()
-        
+            
     def stop_service(self):
         #Arresta GUILauncher
-        self._bootout_agent(self._guilncnm + u".plist")
+        #self._bootout_agent(self._guilncnm + u".plist")
         ret =utils.system_call(self._install_path + utils.path_sep + u"native" + utils.path_sep + u"dwagsvc stop", shell=True, stdout=self._install_log, stderr=subprocess.STDOUT)
         self._install_log.flush()
         return ret==0
@@ -456,9 +422,9 @@ class NativeMac:
         ret = utils.system_call(self._install_path + utils.path_sep + u"native" + utils.path_sep + u"dwagsvc start", shell=True, stdout=self._install_log, stderr=subprocess.STDOUT)
         self._install_log.flush()
         bret = (ret==0)
-        if bret:
-            #Avvia GUILauncher
-            self._bootstrap_agent(self._guilncnm + u".plist")
+        #if bret:
+        #Avvia GUILauncher
+        #    self._bootstrap_agent(self._guilncnm + u".plist")
         return bret
     
     def get_replace_list(self):
@@ -468,7 +434,7 @@ class NativeMac:
             u"@PATH_DWA@": self._install_path,
             u"@PATH_LOGOOS@": self._install_path + self._logo_path,
             u"@LDNAME_SERVICE@": self._svcnm ,
-            u"@LDNAME_GUILNC@": self._guilncnm ,
+            #u"@LDNAME_GUILNC@": self._guilncnm ,
             u"@LDNAME_SYSTRAY@": self._systraynm 
         }
     
@@ -493,13 +459,17 @@ class NativeMac:
         self.replace_key_file(fapp, "utf-8", lstrepl)
         utils.path_change_permissions(fapp,  stat.S_IRUSR + stat.S_IWUSR + stat.S_IRGRP + stat.S_IROTH)
         
+        
         #GUI Launcher
         fapp=pth + utils.path_sep + "dwagguilnc"
         utils.path_change_permissions(fapp,  stat.S_IRWXU + stat.S_IRGRP + stat.S_IXGRP + stat.S_IROTH + stat.S_IXOTH)
         
+        '''
         fapp=pth + utils.path_sep + "dwagguilnc.plist"
         self.replace_key_file(fapp, "utf-8", lstrepl)
         utils.path_change_permissions(fapp,  stat.S_IRUSR + stat.S_IWUSR + stat.S_IRGRP + stat.S_IROTH)
+        '''
+        
     
     def prepare_file_app(self, pth):
         utils.path_makedir(pth + u"/DWAgent.app/Contents/Resources")
@@ -562,7 +532,7 @@ class NativeMac:
     def start_runonfly(self, runcode):
         pargs=[]
         pargs.append(sys.executable)
-        pargs.append(u'agent.pyc')
+        pargs.append(u'agent.py')
         pargs.append(u'-runonfly')
         pargs.append(u'-filelog')
         if runcode is not None:
@@ -572,7 +542,11 @@ class NativeMac:
         return subprocess.Popen(pargs, env=libenv)
 
     def prepare_runtime_by_os(self,ds):
-        return False;
+        utils.path_makedir(ds)
+        utils.path_makedir(ds + utils.path_sep + u"bin")
+        utils.path_makedir(ds + utils.path_sep + u"lib")
+        utils.path_symlink(sys.executable, ds + utils.path_sep + u"bin" + utils.path_sep + self._name.lower())
+        return True;
     
     def install_service(self):
         ret = utils.system_call(self._install_path + utils.path_sep + u"native" + utils.path_sep + u"dwagsvc install", shell=True, stdout=self._install_log, stderr=subprocess.STDOUT)
@@ -626,173 +600,194 @@ class NativeMac:
 
 
 if gdi.is_windows():
-    import types
-    import _subprocess
-    from ctypes import byref, windll, c_char_p, c_wchar_p, c_void_p, Structure, sizeof, c_wchar, WinError
-    from ctypes.wintypes import BYTE, WORD, LPWSTR, BOOL, DWORD, LPVOID, HANDLE
-
-    class NativeWindowsPopenUnicodeSTARTUPINFOW(Structure):
-        _fields_ = [
-            ("cb",              DWORD),  ("lpReserved",    LPWSTR),
-            ("lpDesktop",       LPWSTR), ("lpTitle",       LPWSTR),
-            ("dwX",             DWORD),  ("dwY",           DWORD),
-            ("dwXSize",         DWORD),  ("dwYSize",       DWORD),
-            ("dwXCountChars",   DWORD),  ("dwYCountChars", DWORD),
-            ("dwFillAtrribute", DWORD),  ("dwFlags",       DWORD),
-            ("wShowWindow",     WORD),   ("cbReserved2",   WORD),
-            ("lpReserved2",     ctypes.POINTER(BYTE)), ("hStdInput",     HANDLE),
-            ("hStdOutput",      HANDLE), ("hStdError",     HANDLE),
+    
+    if utils.is_py2():
+        import types
+        import _subprocess
+        from ctypes import byref, windll, c_char_p, c_wchar_p, c_void_p, Structure, sizeof, c_wchar, WinError
+        from ctypes.wintypes import BYTE, WORD, LPWSTR, BOOL, DWORD, LPVOID, HANDLE
+    
+        class NativeWindowsPopenUnicodeSTARTUPINFOW(Structure):
+            _fields_ = [
+                ("cb",              DWORD),  ("lpReserved",    LPWSTR),
+                ("lpDesktop",       LPWSTR), ("lpTitle",       LPWSTR),
+                ("dwX",             DWORD),  ("dwY",           DWORD),
+                ("dwXSize",         DWORD),  ("dwYSize",       DWORD),
+                ("dwXCountChars",   DWORD),  ("dwYCountChars", DWORD),
+                ("dwFillAtrribute", DWORD),  ("dwFlags",       DWORD),
+                ("wShowWindow",     WORD),   ("cbReserved2",   WORD),
+                ("lpReserved2",     ctypes.POINTER(BYTE)), ("hStdInput",     HANDLE),
+                ("hStdOutput",      HANDLE), ("hStdError",     HANDLE),
+            ]
+        
+        
+        class NativeWindowsPopenUnicodePROCESS_INFORMATION(Structure):
+            _fields_ = [
+                ("hProcess",         HANDLE), ("hThread",          HANDLE),
+                ("dwProcessId",      DWORD),  ("dwThreadId",       DWORD),
+            ]
+        
+        
+        class NativeWindowsPopenUnicodeHANDLE(ctypes.c_void_p):
+        
+            def __init__(self, *a, **kw):
+                super(NativeWindowsPopenUnicodeHANDLE, self).__init__(*a, **kw)
+                self.closed = False
+        
+            def Close(self):
+                if not self.closed:
+                    windll.kernel32.CloseHandle(self)
+                    self.closed = True
+        
+            def __int__(self):
+                return self.value
+    
+        
+        NativeWindowsPopenUnicodeCreateProcessW = windll.kernel32.CreateProcessW
+        NativeWindowsPopenUnicodeCreateProcessW.argtypes = [
+            c_char_p, c_wchar_p, c_void_p,
+            c_void_p, BOOL, DWORD, LPVOID, c_char_p,
+            ctypes.POINTER(NativeWindowsPopenUnicodeSTARTUPINFOW), ctypes.POINTER(NativeWindowsPopenUnicodePROCESS_INFORMATION),
         ]
+        NativeWindowsPopenUnicodeCreateProcessW.restype = BOOL
     
-    
-    class NativeWindowsPopenUnicodePROCESS_INFORMATION(Structure):
-        _fields_ = [
-            ("hProcess",         HANDLE), ("hThread",          HANDLE),
-            ("dwProcessId",      DWORD),  ("dwThreadId",       DWORD),
-        ]
-    
-    
-    class NativeWindowsPopenUnicodeHANDLE(ctypes.c_void_p):
-    
-        def __init__(self, *a, **kw):
-            super(NativeWindowsPopenUnicodeHANDLE, self).__init__(*a, **kw)
-            self.closed = False
-    
-        def Close(self):
-            if not self.closed:
-                windll.kernel32.CloseHandle(self)
-                self.closed = True
-    
-        def __int__(self):
-            return self.value
-
-    
-    NativeWindowsPopenUnicodeCreateProcessW = windll.kernel32.CreateProcessW
-    NativeWindowsPopenUnicodeCreateProcessW.argtypes = [
-        c_char_p, c_wchar_p, c_void_p,
-        c_void_p, BOOL, DWORD, LPVOID, c_char_p,
-        ctypes.POINTER(NativeWindowsPopenUnicodeSTARTUPINFOW), ctypes.POINTER(NativeWindowsPopenUnicodePROCESS_INFORMATION),
-    ]
-    NativeWindowsPopenUnicodeCreateProcessW.restype = BOOL
-
-    class NativeWindowsPopenUnicode(subprocess.Popen):
+        class NativeWindowsPopenUnicode(subprocess.Popen):
+            
+            def _createProcessW(self, executable, args, _p_attr, _t_attr,
+                              inherit_handles, creation_flags, env, cwd,
+                              startup_info):
+                si = NativeWindowsPopenUnicodeSTARTUPINFOW(
+                    dwFlags=startup_info.dwFlags,
+                    wShowWindow=startup_info.wShowWindow,
+                    cb=sizeof(NativeWindowsPopenUnicodeSTARTUPINFOW),
+                    hStdInput=int(startup_info.hStdInput),
+                    hStdOutput=int(startup_info.hStdOutput),
+                    hStdError=int(startup_info.hStdError),
+                )    
+                wenv = None
+                if env is not None:
+                    '''
+                    env = (utils.str_new("").join([
+                        utils.str_new("%s=%s\0") % (k, v)
+                        for k, v in env.items()])) + utils.str_new("\0")
+                    '''
+                    appenv=[]
+                    for k, v in env.items():
+                        k = utils.str_new(k)
+                        n= ctypes.windll.kernel32.GetEnvironmentVariableW(k, None, 0)
+                        if n>0:
+                            buf= ctypes.create_unicode_buffer(u'\0'*n)
+                            ctypes.windll.kernel32.GetEnvironmentVariableW(k, buf, n)
+                            appenv.append(utils.str_new("%s=%s\0") % (k , buf.value))
+                    appenv.append(utils.str_new("\0"))
+                    env = utils.str_new("").join(appenv)
+                    wenv = (c_wchar * len(env))()
+                    wenv.value = env
+            
+                pi = NativeWindowsPopenUnicodePROCESS_INFORMATION()
+                creation_flags |= 0x00000400 #CREATE_UNICODE_ENVIRONMENT
+            
+                if NativeWindowsPopenUnicodeCreateProcessW(executable, args, None, None,
+                                  inherit_handles, creation_flags,
+                                  wenv, cwd, byref(si), byref(pi)):
+                    return (NativeWindowsPopenUnicodeHANDLE(pi.hProcess), NativeWindowsPopenUnicodeHANDLE(pi.hThread),
+                            pi.dwProcessId, pi.dwThreadId)
+                raise WinError()
         
-        def _createProcessW(self, executable, args, _p_attr, _t_attr,
-                          inherit_handles, creation_flags, env, cwd,
-                          startup_info):
-            si = NativeWindowsPopenUnicodeSTARTUPINFOW(
-                dwFlags=startup_info.dwFlags,
-                wShowWindow=startup_info.wShowWindow,
-                cb=sizeof(NativeWindowsPopenUnicodeSTARTUPINFOW),
-                hStdInput=int(startup_info.hStdInput),
-                hStdOutput=int(startup_info.hStdOutput),
-                hStdError=int(startup_info.hStdError),
-            )    
-            wenv = None
-            if env is not None:
-                '''
-                env = (unicode("").join([
-                    unicode("%s=%s\0") % (k, v)
-                    for k, v in env.items()])) + unicode("\0")
-                '''
-                appenv=[]
-                for k, v in env.items():
-                    k = unicode(k)
-                    n= ctypes.windll.kernel32.GetEnvironmentVariableW(k, None, 0)
-                    if n>0:
-                        buf= ctypes.create_unicode_buffer(u'\0'*n)
-                        ctypes.windll.kernel32.GetEnvironmentVariableW(k, buf, n)
-                        appenv.append(unicode("%s=%s\0") % (k , buf.value))
-                appenv.append(unicode("\0"))
-                env = unicode("").join(appenv)
-                wenv = (c_wchar * len(env))()
-                wenv.value = env
         
-            pi = NativeWindowsPopenUnicodePROCESS_INFORMATION()
-            creation_flags |= 0x00000400 #CREATE_UNICODE_ENVIRONMENT
+            def _execute_child(self, args, executable, preexec_fn, close_fds,
+                                   cwd, env, universal_newlines,
+                                   startupinfo, creationflags, shell, to_close,
+                                   p2cread, p2cwrite,
+                                   c2pread, c2pwrite,
+                                   errread, errwrite):
+                    """Execute program (MS Windows version)"""
         
-            if NativeWindowsPopenUnicodeCreateProcessW(executable, args, None, None,
-                              inherit_handles, creation_flags,
-                              wenv, cwd, byref(si), byref(pi)):
-                return (NativeWindowsPopenUnicodeHANDLE(pi.hProcess), NativeWindowsPopenUnicodeHANDLE(pi.hThread),
-                        pi.dwProcessId, pi.dwThreadId)
-            raise WinError()
-    
-    
-        def _execute_child(self, args, executable, preexec_fn, close_fds,
-                               cwd, env, universal_newlines,
-                               startupinfo, creationflags, shell, to_close,
-                               p2cread, p2cwrite,
-                               c2pread, c2pwrite,
-                               errread, errwrite):
-                """Execute program (MS Windows version)"""
-    
-                if not isinstance(args, types.StringTypes):
-                    args = subprocess.list2cmdline(args)
-    
-                # Process startup details
-                if startupinfo is None:
-                    startupinfo = subprocess.STARTUPINFO()
-                if None not in (p2cread, c2pwrite, errwrite):
-                    startupinfo.dwFlags |= _subprocess.STARTF_USESTDHANDLES
-                    startupinfo.hStdInput = p2cread
-                    startupinfo.hStdOutput = c2pwrite
-                    startupinfo.hStdError = errwrite
-    
-                if shell:
-                    startupinfo.dwFlags |= _subprocess.STARTF_USESHOWWINDOW
-                    startupinfo.wShowWindow = _subprocess.SW_HIDE
-                    comspec = os.environ.get("COMSPEC", unicode("cmd.exe"))
-                    args = unicode('{} /c "{}"').format (comspec, args)
-                    if (_subprocess.GetVersion() >= 0x80000000 or
-                            utils.path_basename(comspec).lower() == "command.com"):
-                        w9xpopen = self._find_w9xpopen()
-                        args = unicode('"%s" %s') % (w9xpopen, args)
-                        creationflags |= _subprocess.CREATE_NEW_CONSOLE
-    
-                def _close_in_parent(fd):
-                    fd.Close()
-                    to_close.remove(fd)
-    
-                try:
-                    hp, ht, pid, tid = self._createProcessW(executable, args,
-                                             None, None,
-                                             int(not close_fds),
-                                             creationflags,
-                                             env,
-                                             cwd,
-                                             startupinfo)
-                except subprocess.pywintypes.error, e:
-                    raise WindowsError(*e.args)
-                finally:
-                    if p2cread is not None:
-                        _close_in_parent(p2cread)
-                    if c2pwrite is not None:
-                        _close_in_parent(c2pwrite)
-                    if errwrite is not None:
-                        _close_in_parent(errwrite)
-    
-                self._child_created = True
-                self._handle = hp
-                self.pid = pid
-                ht.Close()
-
-
-
-    NativeWindowsRegCloseKey = ctypes.windll.advapi32.RegCloseKey
-    NativeWindowsRegCloseKey.restype = ctypes.c_long
-    NativeWindowsRegCloseKey.argtypes = [ctypes.c_void_p]
-    
-    NativeWindowsRegOpenKeyEx = ctypes.windll.advapi32.RegOpenKeyExW
-    NativeWindowsRegOpenKeyEx.restype = ctypes.c_long
-    NativeWindowsRegOpenKeyEx.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_ulong,
-                             ctypes.c_ulong, ctypes.POINTER(ctypes.c_void_p)]
-    
-    RegQueryValueEx = ctypes.windll.advapi32.RegQueryValueExW
-    RegQueryValueEx.restype = ctypes.c_long
-    RegQueryValueEx.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.POINTER(ctypes.wintypes.DWORD), ctypes.POINTER(ctypes.wintypes.DWORD),
+                    if not isinstance(args, types.StringTypes):
+                        args = subprocess.list2cmdline(args)
+        
+                    # Process startup details
+                    if startupinfo is None:
+                        startupinfo = subprocess.STARTUPINFO()
+                    if None not in (p2cread, c2pwrite, errwrite):
+                        startupinfo.dwFlags |= _subprocess.STARTF_USESTDHANDLES
+                        startupinfo.hStdInput = p2cread
+                        startupinfo.hStdOutput = c2pwrite
+                        startupinfo.hStdError = errwrite
+        
+                    if shell:
+                        startupinfo.dwFlags |= _subprocess.STARTF_USESHOWWINDOW
+                        startupinfo.wShowWindow = _subprocess.SW_HIDE
+                        comspec = os.environ.get("COMSPEC", utils.str_new("cmd.exe"))
+                        args = utils.str_new('{} /c "{}"').format (comspec, args)
+                        if (_subprocess.GetVersion() >= 0x80000000 or
+                                utils.path_basename(comspec).lower() == "command.com"):
+                            w9xpopen = self._find_w9xpopen()
+                            args = utils.str_new('"%s" %s') % (w9xpopen, args)
+                            creationflags |= _subprocess.CREATE_NEW_CONSOLE
+        
+                    def _close_in_parent(fd):
+                        fd.Close()
+                        to_close.remove(fd)
+        
+                    try:
+                        hp, ht, pid, tid = self._createProcessW(executable, args,
+                                                 None, None,
+                                                 int(not close_fds),
+                                                 creationflags,
+                                                 env,
+                                                 cwd,
+                                                 startupinfo)
+                    except subprocess.pywintypes.error as e:
+                        raise WindowsError(*e.args)
+                    finally:
+                        if p2cread is not None:
+                            _close_in_parent(p2cread)
+                        if c2pwrite is not None:
+                            _close_in_parent(c2pwrite)
+                        if errwrite is not None:
+                            _close_in_parent(errwrite)
+        
+                    self._child_created = True
+                    self._handle = hp
+                    self.pid = pid
+                    ht.Close()
+        
+        NativeWindowsRegCloseKey = ctypes.windll.advapi32.RegCloseKey
+        NativeWindowsRegCloseKey.restype = ctypes.c_long
+        NativeWindowsRegCloseKey.argtypes = [ctypes.c_void_p]
+        
+        NativeWindowsRegOpenKeyEx = ctypes.windll.advapi32.RegOpenKeyExW
+        NativeWindowsRegOpenKeyEx.restype = ctypes.c_long
+        NativeWindowsRegOpenKeyEx.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_ulong,
+                                 ctypes.c_ulong, ctypes.POINTER(ctypes.c_void_p)]
+        
+        RegQueryValueEx = ctypes.windll.advapi32.RegQueryValueExW
+        RegQueryValueEx.restype = ctypes.c_long
+        RegQueryValueEx.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.POINTER(ctypes.wintypes.DWORD), ctypes.POINTER(ctypes.wintypes.DWORD),
                                 ctypes.POINTER(ctypes.wintypes.BYTE), ctypes.POINTER(ctypes.wintypes.DWORD)]
 
+    else:        
+        
+        from ctypes.wintypes import BYTE, WORD, LPWSTR, BOOL, DWORD, LPVOID, HANDLE
+        
+        NativeWindowsPopenUnicode=subprocess.Popen
+                        
+        dll_advapi32 = ctypes.WinDLL("advapi32")
+        NativeWindowsRegCloseKey = dll_advapi32.RegCloseKey
+        NativeWindowsRegCloseKey.restype = ctypes.c_long
+        NativeWindowsRegCloseKey.argtypes = [ctypes.c_void_p]
+        
+        NativeWindowsRegOpenKeyEx = dll_advapi32.RegOpenKeyExW
+        NativeWindowsRegOpenKeyEx.restype = ctypes.c_long
+        NativeWindowsRegOpenKeyEx.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_ulong,
+                                 ctypes.c_ulong, ctypes.POINTER(ctypes.c_void_p)]
+        
+        RegQueryValueEx = dll_advapi32.RegQueryValueExW
+        RegQueryValueEx.restype = ctypes.c_long
+        RegQueryValueEx.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.POINTER(ctypes.wintypes.DWORD), ctypes.POINTER(ctypes.wintypes.DWORD),
+                                ctypes.POINTER(ctypes.wintypes.BYTE), ctypes.POINTER(ctypes.wintypes.DWORD)]
+        
 
 
 class NativeWindows:
@@ -824,7 +819,7 @@ class NativeWindows:
         #self._install_log=log
 
     def get_proposal_path(self):
-        return unicode(os.environ["ProgramFiles"]) + utils.path_sep + self._name
+        return utils.str_new(os.environ["ProgramFiles"]) + utils.path_sep + self._name
     
     def get_install_path(self) :
         vret = None
@@ -865,11 +860,11 @@ class NativeWindows:
                 if gdi.is_windows_process_elevated():
                     return None
                 else:
-                    f = utils.file_open(u"runasadmin.install", "wb", encoding='utf-8')
+                    f = utils.file_open(u"runasadmin.install", "w", encoding='utf-8')
                     f.close()
                     raise SystemExit
             else:
-                f = utils.file_open(u"runasadmin.run", "wb", encoding='utf-8')
+                f = utils.file_open(u"runasadmin.run", "w", encoding='utf-8')
                 f.close()
                 raise SystemExit
         else:
@@ -883,14 +878,14 @@ class NativeWindows:
                 if onlycheck:
                     return messages.get_message("windowsAdminPrivileges")
                 else:
-                    f = utils.file_open(u"runasadmin.install", "wb", encoding='utf-8')
+                    f = utils.file_open(u"runasadmin.install", "w", encoding='utf-8')
                     f.close()
                     raise SystemExit
         else:
             if onlycheck:
                 return messages.get_message("windowsAdminPrivileges")
             else:
-                f = utils.file_open(u"runasadmin.install", "wb", encoding='utf-8')
+                f = utils.file_open(u"runasadmin.install", "w", encoding='utf-8')
                 f.close()
                 raise SystemExit
                         
@@ -965,7 +960,7 @@ class NativeWindows:
             bsvcok=False
             cmd=u'"' + u'native' + utils.path_sep + u'dwagsvc.exe" startRunOnFly'
             appout = NativeWindowsPopenUnicode(cmd, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate() 
-            lines = appout[0].splitlines()
+            lines = utils.bytes_to_str(appout[0],"utf8").splitlines()
             for l in lines:
                 if l=='OK':
                     bsvcok = True
@@ -981,7 +976,7 @@ class NativeWindows:
     
     def executecmd(self, cmd):
         appout = NativeWindowsPopenUnicode(cmd, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-        lines = appout[0].splitlines()
+        lines = utils.bytes_to_str(appout[0],"utf8").splitlines()
         for l in lines:
             if l=='OK':
                 return True
@@ -1105,8 +1100,9 @@ class Install:
         if utils.path_exists("install.json"):
             f=None
             try:
-                f = utils.file_open("install.json")
-                appjs = json.loads(f.read())
+                f = utils.file_open("install.json","rb")
+                s=f.read()
+                appjs = json.loads(utils.bytes_to_str(s,"utf8"))
             except:
                 None
             finally:
@@ -1145,12 +1141,12 @@ class Install:
             self._gotoopt="install"        
                 
         if "name" in self._options:
-            self._name=unicode(self._options["name"])
+            self._name=utils.str_new(self._options["name"])
             self._native.set_name(self._name)
         else:
             self._native.set_name(u"DWAgent")
         
-        self._current_path=os.getcwdu()
+        self._current_path=utils.os_getcwd()
         if self._current_path.endswith(utils.path_sep) is True:
             self._current_path=self._current_path[0:len(self._current_path)-1]
         self._native.set_current_path(self._current_path)
@@ -1202,7 +1198,7 @@ class Install:
         if not self._silent:
             chs = ui.Chooser()
             if "welcometext" in self._options:
-                m=unicode(self._options["welcometext"])
+                m=utils.str_new(self._options["welcometext"])
             else:            
                 m=self._get_message('welcomeLicense') + "\n\n" 
                 m+=self._get_message('welcomeSecurity') + "\n\n" 
@@ -1291,7 +1287,7 @@ class Install:
                 try:
                     if self._install_log_path is not None:
                         if self._install_log is None:
-                            self._install_log = utils.file_open(self._install_log_path, "wb", encoding='utf-8')
+                            self._install_log = utils.file_open(self._install_log_path, "w", encoding='utf-8')
                         self._append_log(self._get_message('alreadyInstalled'))
                         self._install_log.close()
                         self._install_log=None
@@ -1398,17 +1394,26 @@ class Install:
             fd.write(zfile.read(nm))
             fd.close()
         zfile.close()
+        
+        #TO REMOVE 03/11/2021 KEEP COMPATIBILITY WITH OLD LINUX INSTALLER
+        try:
+            if name=="agent.zip":
+                if utils.path_exists(unzippath + "daemon.pyc"):
+                    utils.path_remove(unzippath + "daemon.pyc")                    
+        except:
+            None
     
     def load_prop_json(self, fname):
-        f = utils.file_open(fname)
-        prp  = json.loads(f.read())
+        f = utils.file_open(fname, "rb")
+        s=f.read()
+        prp  = json.loads(utils.bytes_to_str(s,"utf8"))
         f.close()
         return prp        
     
     def store_prop_json(self, prp, fname):
         s = json.dumps(prp, sort_keys=True, indent=1)
         f = utils.file_open(fname, 'wb')
-        f.write(s)
+        f.write(utils.str_to_bytes(s,"utf8"))
         f.close()
     
     def obfuscate_password(self, pwd):
@@ -1446,7 +1451,7 @@ class Install:
         
         msg=dwnmsg.format(u'config.xml')
         self._uinterface.wait_message(msg,  iniperc,  pstart)
-        prpconf = communication.get_url_prop(self._get_main_url() + "getAgentFile.dw?name=config.xml", self._proxy )
+        prpconf = communication.get_url_prop(self._get_main_url() + "getAgentFile.dw?name=config.xml", self._proxy)
         if "name" in self._options:
             prpconf["name"] = self._options["name"]
         if "topinfo" in self._options:
@@ -1484,8 +1489,8 @@ class Install:
         self.store_prop_json(prpconf, pth + utils.path_sep + u'config.json')
         
         if not (self._runWithoutInstall and utils.path_exists(pth + utils.path_sep + u"config.json") 
-                and utils.path_exists(pth + utils.path_sep + u"fileversions.json") and utils.path_exists(pth + utils.path_sep + u"agent.pyc") 
-                and utils.path_exists(pth + utils.path_sep + u"communication.pyc") and utils.path_exists(pth + utils.path_sep + u"ipc.pyc")):
+                and utils.path_exists(pth + utils.path_sep + u"fileversions.json") and utils.path_exists(pth + utils.path_sep + u"agent.py") 
+                and utils.path_exists(pth + utils.path_sep + u"communication.py") and utils.path_exists(pth + utils.path_sep + u"ipc.py")):
             msg=dwnmsg.format('files.xml')
             self._uinterface.wait_message(msg, iniperc,  pstart)
             prpfiles = communication.get_url_prop(self._get_main_url() + "getAgentFile.dw?name=files.xml", self._proxy )
@@ -1503,7 +1508,7 @@ class Install:
                 if appnsfx is not None:
                     fls.append({'name':u'agentupd_' + appnsfx + '.zip', 'unzippath':u'native'})
             
-            fls.append({'name':'agent.zip', 'unzippath':''})
+            fls.append({'name':'agent.zip', 'unzippath':u''})
             if not self._runWithoutInstall:
                 fls.append({'name':u'agentui.zip', 'unzippath':u''})
             fls.append({'name':u'agentapps.zip', 'unzippath':u''})
@@ -1631,9 +1636,18 @@ class Install:
         
         if not utils.path_exists(_NATIVE_PATH):
             raise Exception(self._get_message('missingNative'))            
-        ds= self._install_path.get() + utils.path_sep + "native"
+        ds=self._install_path.get() + utils.path_sep + "native"
         msg=self._get_message('copyFiles')
         self._copy_tree(_NATIVE_PATH,ds,msg,0.76, 0.8)
+        
+        #CREATE installer.ver
+        dsver=ds + utils.path_sep + "installer.ver"
+        if utils.path_exists(dsver):
+            utils.path_remove(dsver)
+        fver = utils.file_open(dsver,"wb")
+        fver.write(utils.str_to_bytes(str(_INSTALLER_VERSION)))
+        fver.close()
+        
     
     def _install_service(self, pstart, pend):
         if self._bmock:
@@ -1992,8 +2006,8 @@ class Install:
                 chs.next_step(self.step_config_install_request)
                 return chs
             else:
-                self._append_log(u"Error Configure: " + exception_to_string(e))
-                return ui.ErrorDialog(exception_to_string(e))
+                self._append_log(u"Error Configure: " + utils.exception_to_string(e))
+                return ui.ErrorDialog(utils.exception_to_string(e))
         finally:
             if page is not None:
                 page.close()
@@ -2002,7 +2016,7 @@ class Install:
         try:
             if not self._bmock:
                 if self._install_log is not None:
-                    self._install_log.write(unicode(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())) + u" - " + txt + u"\n")
+                    self._install_log.write(utils.str_new(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())) + u" - " + txt + u"\n")
                     self._install_log.flush()
         except:
             None    
@@ -2023,13 +2037,16 @@ class Install:
         if utils.path_exists(u"fileversions.json"):            
             fver = self.load_prop_json('fileversions.json')
             if 'agent.zip' in fver:
-                lver = long(fver['agent.zip'])
+                lver = int(fver['agent.zip'])
                 if lver<1484751796000:
                     self._append_log(u"Fixing old version...")
                     sys.path.insert(0,self._install_path.get())
                     objlib = importlib.import_module("agent")
                     try:
-                        reload(objlib)
+                        if utils.is_py2():
+                            reload(objlib)                            
+                        else:
+                            importlib.reload(objlib)
                         func = getattr(objlib,  'Main')
                         appcls = func(["-runonfly","-filelog"])
                         #IMPOSTARE IL PROXY
@@ -2167,7 +2184,7 @@ class Install:
                 
                 #Scrive pid
                 f = utils.file_open(u"dwagent.pid", 'wb')
-                f.write(str(os.getpid()))
+                f.write(utils.str_to_bytes(str(os.getpid())))
                 f.close()            
                  
                 #Avvia il servizio
@@ -2252,8 +2269,8 @@ class Install:
             utils.system_changedir(self._current_path)
             self._runWithoutInstallAgentCloseEnd=True
             #Se non è partito l'agente potrebbe dipendere da un problema di file corrotti
-            self._append_log(u"Error: " + exception_to_string(e) + u"\n" + get_stacktrace_string())
-            return ui.Message(self._get_message("runWithoutInstallationUnexpectedError").format(utils.path_absname(self._install_path.get())) + "\n\n" + str(e))
+            self._append_log(u"Error: " + utils.exception_to_string(e) + u"\n" + utils.get_stacktrace_string())
+            return ui.Message(self._get_message("runWithoutInstallationUnexpectedError").format(utils.path_absname(self._install_path.get())) + "\n\n" + utils.exception_to_string(e))
             
         
         utils.system_changedir(self._current_path)
@@ -2357,9 +2374,9 @@ class Install:
                         None
             
         
-        self._install_path.set(unicode(pth))
+        self._install_path.set(utils.str_new(pth))
         #Imposta path per native
-        self._native.set_install_path(unicode(pth))
+        self._native.set_install_path(utils.str_new(pth))
         self._native.set_install_log(self._install_log)
             
             
@@ -2402,10 +2419,10 @@ class Install:
                 self._append_log(u"Download files.OK!")
             except Exception as e:
                 if not self._silent:
-                    self._append_log(u"Error Download files: " + exception_to_string(e) + u"\n" + get_stacktrace_string())
+                    self._append_log(u"Error Download files: " + utils.exception_to_string(e) + u"\n" + utils.get_stacktrace_string())
                     chs = ui.Chooser()
                     chs.set_key("retryDownload")
-                    chs.set_message(exception_to_string(e) + u"\n\n" + self._get_message('errorConnectionQuestion'))
+                    chs.set_message(utils.exception_to_string(e) + u"\n\n" + self._get_message('errorConnectionQuestion'))
                     chs.add("configProxy", self._get_message('yes'))
                     chs.add("noTryAgain", self._get_message('noTryAgain'))
                     chs.set_variable(ui.VarString("noTryAgain"))
@@ -2417,7 +2434,7 @@ class Install:
                     chs.next_step(self.step_install)
                     return chs
                 else:
-                    raise Exception(u"Error Download files: " + exception_to_string(e) + u"\n" + get_stacktrace_string())
+                    raise Exception(u"Error Download files: " + utils.exception_to_string(e) + u"\n" + utils.get_stacktrace_string())
             
             if not self._runWithoutInstall:
                 #Copia Runtime
@@ -2482,8 +2499,8 @@ class Install:
                     return self.step_runonfly(curui)
             
         except Exception as e:            
-            self._append_log(u"Error Install: " + exception_to_string(e))
-            return ui.ErrorDialog(exception_to_string(e)) 
+            self._append_log(u"Error Install: " + utils.exception_to_string(e))
+            return ui.ErrorDialog(utils.exception_to_string(e)) 
             
 
 class Uninstall:
@@ -2519,14 +2536,15 @@ class Uninstall:
         
         confjson={}
         try:
-            f = utils.file_open('config.json')
-            confjson = json.loads(f.read())
+            f = utils.file_open("config.json", "rb")
+            s=f.read()
+            confjson = json.loads(utils.bytes_to_str(s,"utf8"))
             f.close()
         except Exception:
             None
         prmsui={}
         if "name" in confjson:
-            self._name=unicode(confjson["name"])
+            self._name=utils.str_new(confjson["name"])
             self._native.set_name(self._name)
         else:
             self._native.set_name(u"DWAgent")
@@ -2559,7 +2577,7 @@ class Uninstall:
             return ui.Message(self._get_message('notInstalled'))
         else:
             if self._silent==False:
-                self._install_path = unicode(self._install_path)
+                self._install_path = utils.str_new(self._install_path)
                 #Conferma disinstallazione
                 chs = ui.Chooser()
                 chs.set_message(self._get_message('confirmUninstall'))
@@ -2592,7 +2610,7 @@ class Uninstall:
     def _append_log(self, txt):
         try:
             if self._install_log is not None:
-                self._install_log.write(unicode(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())) + u" - " + txt + u"\n")
+                self._install_log.write(utils.str_new(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())) + u" - " + txt + u"\n")
                 self._install_log.flush()
         except:
             None   
@@ -2631,8 +2649,8 @@ class Uninstall:
             self._append_log(u"End Uninstallation.")
             return ui.Message(self._get_message('endUninstall'))
         except Exception as e:
-            self._append_log(u"Error Uninstall: " + exception_to_string(e))
-            return ui.ErrorDialog(exception_to_string(e))
+            self._append_log(u"Error Uninstall: " + utils.exception_to_string(e))
+            return ui.ErrorDialog(utils.exception_to_string(e))
             
 
 def fmain(args): #SERVE PER MACOS APP

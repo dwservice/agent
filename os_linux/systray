@@ -11,5 +11,5 @@ PATH_DWA_NATIVE="$PATH_DWA/native"
 cd "${PATH_DWA}"
 export LD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
 export PYTHONIOENCODING=utf-8
-"${PATH_DWA_RUNTIME}/@EXE_NAME@" monitor.pyc systray &
+"${PATH_DWA_RUNTIME}/@EXE_NAME@" monitor.py systray &
 exit 0

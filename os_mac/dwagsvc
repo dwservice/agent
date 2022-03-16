@@ -9,15 +9,21 @@ PATH_DWA="@PATH_DWA@"
 PATH_DWA_NATIVE="$PATH_DWA/native"
 PATH_DWA_RUNTIME="$PATH_DWA/runtime/bin"
 PATH_DWA_RUNTIME_LIBRARY="$PATH_DWA/runtime/lib"
+INST_VER=0
+if [ -f "${PATH_DWA_NATIVE}/installer.ver" ]; then
+	INST_VER=$(cat "${PATH_DWA_NATIVE}/installer.ver")
+fi
 
 run() {
 	. "${PATH_DWA_NATIVE}/dwagupd"
 	if check_update "${PATH_DWA}"; then
 		cd "${PATH_DWA}"
-		#BIGSUR FIX
-		unlink "${PATH_DWA_RUNTIME_LIBRARY}/libz.1.dylib"
+		#BIGSUR FIX		
+		if [ -f "${PATH_DWA_RUNTIME_LIBRARY}/libz.1.dylib" ]; then
+			unlink "${PATH_DWA_RUNTIME_LIBRARY}/libz.1.dylib"
+		fi
 		export DYLD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
-        "${PATH_DWA_RUNTIME}/@EXE_NAME@" agent.pyc -filelog -noctrlfile
+        "${PATH_DWA_RUNTIME}/@EXE_NAME@" agent.py -filelog -noctrlfile
 	fi
 }
 

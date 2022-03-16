@@ -1,4 +1,41 @@
 #!/bin/sh
+#This Source Code Form is subject to the terms of the Mozilla
+#Public License, v. 2.0. If a copy of the MPL was not distributed
+#with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+check_mac_ver(){
+        MACVER=$(sw_vers -productVersion)
+        i=1
+        for v in $(echo $MACVER | tr "." "\n")
+        do
+                if [ $i -eq 1 ]; then
+                        if [ ! $v -eq 10 ]; then
+                                break
+                        fi
+                else
+                        if [ $v -lt 7 ]; then
+                                return 1
+                        fi
+                        break
+                fi
+                ((i=i+1))
+        done
+        return 0
+}
+
+check_py_ver(){
+	if [ "$1" ]; then
+		if [ -f "$1" ]; then
+			PYVER=$($1 --version 2>&1)
+			PYV=$(echo $PYVER | sed 's/.* \([0-9]\).\([0-9]*\).*/\1\2/')
+			if [ "$PYV" -ge "36" ] || [ "$PYV" -eq "27" ]; then				
+				return 0
+			fi
+		fi
+	fi
+	return 1
+}
+
 
 PATH_DWA="$1"
 PATH_DWA_NATIVE="$PATH_DWA/native"
@@ -12,25 +49,47 @@ do shell script "'$0' '$1' Y GOTOOPT=install LANG='$LANGUAGE'" with administrato
 EOF
 	exit $?
 else
-	cd "${PATH_DWA}"
-	EXENM="dwagent"
-	if [ -f "${PATH_DWA}/install.json" ]; then
-		EXEAP=`grep \"name\" "${PATH_DWA}/install.json" | cut -d ':' -f 2 | cut -d '"' -f 2 | tr '[A-Z]' '[a-z]'`
-		if [ $? -gt 0 ]; then
-			exit 1
+	cd "${PATH_DWA}"	
+	check_mac_ver
+	if [ "$?" = "0" ]; then
+		EXENM="dwagent"
+		if [ -f "${PATH_DWA}/install.json" ]; then
+			EXEAP=`grep \"name\" "${PATH_DWA}/install.json" | cut -d ':' -f 2 | cut -d '"' -f 2 | tr '[A-Z]' '[a-z]'`
+			if [ $? -gt 0 ]; then
+				exit 1
+			fi
+			if [ ! -z "${EXEAP}" ]; then
+				EXENM=${EXEAP}
+				mv "${PATH_DWA_RUNTIME}/dwagent" "${PATH_DWA_RUNTIME}/$EXENM"		
+			fi
 		fi
-		if [ ! -z "${EXEAP}" ]; then
-			EXENM=${EXEAP}
-			mv "${PATH_DWA_RUNTIME}/dwagent" "${PATH_DWA_RUNTIME}/$EXENM"		
+		#BIGSUR FIX
+		if [ -f "${PATH_DWA_RUNTIME_LIBRARY}/libz.1.dylib" ]; then
+			unlink "${PATH_DWA_RUNTIME_LIBRARY}/libz.1.dylib"
 		fi
-	fi
-	#BIGSUR FIX
-	unlink "${PATH_DWA_RUNTIME_LIBRARY}/libz.1.dylib"
-	export DYLD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
-	if [ -z "$3" ] && [ -z "$4" ]; then
-		"${PATH_DWA_RUNTIME}/$EXENM" installer.pyc
+		export DYLD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
+		if [ -z "$3" ] && [ -z "$4" ]; then
+			"${PATH_DWA_RUNTIME}/$EXENM" installer.py
+		else
+			"${PATH_DWA_RUNTIME}/$EXENM" installer.py $3 $4
+		fi
 	else
-		"${PATH_DWA_RUNTIME}/$EXENM" installer.pyc $3 $4
+		rm -r -f "${PATH_DWA}/runtime"
+		PYPTH=$(which "python3" 2>/dev/null)
+		check_py_ver $PYPTH
+		if [ "$?" = "1" ]; then
+			PYPTH=$(which "python2.7" 2>/dev/null)
+			check_py_ver $PYPTH
+        	if [ "$?" = "1" ]; then
+				echo "Error: Missing Python. Required version 3.6+ or 2.7."
+				exit 1
+			fi
+		fi
+		if [ -z "$3" ] && [ -z "$4" ]; then
+			"${PYPTH}" installer.py
+		else
+			"${PYPTH}" installer.py $3 $4
+		fi
 	fi
 fi
 exit 0

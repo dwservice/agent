@@ -4,11 +4,13 @@ Public License, v. 2.0. If a copy of the MPL was not distributed
 with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 */
 
-#include "../../../agent/lib_gdi/src/main.h"
+#include "windowsgdi.h"
 #include <string>
 #include <time.h>
 #include <algorithm>
 #include <fstream>
+
+//#include <VersionHelpers.h>
 
 #include "7zip/7z.h"
 #include "7zip/7zAlloc.h"
@@ -33,6 +35,9 @@ bool silent=false;
 int margc=0;
 wchar_t **margv;
 
+OSVERSIONINFOEX m_osVerInfo = { 0 };
+bool m_osVerInfoLoaded=false;
+
 
 typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
 LPFN_ISWOW64PROCESS fnIsWow64Process;
@@ -42,6 +47,37 @@ using namespace std;
 wstring tmpPath;
 bool bRunAsAdmin=false;
 wstring runtimeExe=L"dwagent.exe";
+
+
+
+void initOSVersionInfo(){
+	if (m_osVerInfoLoaded==false) {
+		m_osVerInfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+
+		if (!GetVersionEx((OSVERSIONINFO*)&m_osVerInfo)) {
+			m_osVerInfo.dwOSVersionInfoSize = 0;
+		}else{
+			m_osVerInfoLoaded=true;
+		}
+	}
+}
+
+bool isWin8OrLater(){
+	initOSVersionInfo();
+	if ((m_osVerInfo.dwMajorVersion > 6) || ((m_osVerInfo.dwMajorVersion == 6) && (m_osVerInfo.dwMinorVersion>=2))){
+		return true;
+	}
+	return false;
+}
+
+bool isWin10OrLater(){
+	initOSVersionInfo();
+	if ((m_osVerInfo.dwMajorVersion > 6) || ((m_osVerInfo.dwMajorVersion == 6) && (m_osVerInfo.dwMinorVersion>=4))){
+	//if (m_osVerInfo.dwMajorVersion > 6){
+		return true;
+	}
+	return false;
+}
 
 wstring getExePath(){
 	wchar_t strPathName[MAX_PATH];
@@ -103,37 +139,6 @@ int Buf_EnsureSize(CBuf *dest, size_t size)
   return Buf_Create(dest, size, &g_AllocTmp);
 }
 
-SRes Utf16_To_Char(CBuf *buf, const UInt16 *s
-    #ifndef _USE_UTF8
-    , UINT codePage
-    #endif
-    )
-{
-  unsigned len = 0;
-  for (len = 0; s[len] != 0; len++);
-
-  {
-    unsigned size = len * 3 + 100;
-    if (!Buf_EnsureSize(buf, size))
-      return SZ_ERROR_MEM;
-    {
-      buf->data[0] = 0;
-      if (len != 0)
-      {
-        char defaultChar = '_';
-        BOOL defUsed;
-        unsigned numChars = 0;
-        numChars = WideCharToMultiByte(codePage, 0, (LPCWSTR)s, len, (char *)buf->data, size, &defaultChar, &defUsed);
-        if (numChars == 0 || numChars >= size)
-          return SZ_ERROR_FAIL;
-        buf->data[numChars] = 0;
-      }
-      return SZ_OK;
-    }
-  }
-
-}
-
 WRes MyCreateDir(const UInt16 *name){
   return CreateDirectoryW((LPCWSTR)name, NULL) ? 0 : GetLastError();
 }
@@ -142,7 +147,7 @@ WRes OutFile_OpenUtf16(CSzFile *p, const UInt16 *name){
   return OutFile_OpenW(p, (LPCWSTR)name);
 }
 
-bool decompressFile(wstring pathcmp){
+bool decompressFile(wstring pathcmp, bool progress){
 
 	bool bret=true;
 	CFileInStream archiveStream;
@@ -183,11 +188,13 @@ bool decompressFile(wstring pathcmp){
 		size_t outBufferSize = 0;
 
 		for (i = 0; i < db.NumFiles; i++){
-			int newperc=(int)(((float)(i+1)/(float)db.NumFiles)*100);
-			if (percent!=newperc){
-				percent=newperc;
-				if (!silent){
-					repaint(winid, 0, 0, winw, winh);
+			if (progress){
+				int newperc=(int)(((float)(i+1)/(float)db.NumFiles)*100);
+				if (percent!=newperc){
+					percent=newperc;
+					if (!silent){
+						repaint(winid, 0, 0, winw, winh);
+					}
 				}
 			}
 			size_t offset = 0;
@@ -593,7 +600,6 @@ void readInstallConfig(){
 	}
 }
 
-
 DWORD WINAPI thread_func(LPVOID lpParameter){
 	if (loadTmpPathByArgs()==true){
 		bRunAsAdmin=true;
@@ -629,34 +635,57 @@ DWORD WINAPI thread_func(LPVOID lpParameter){
 		//Path del file compresso
 		wstring pathcmp(L"win.7z");
 		if (splitFile(pathcmp)){
-			if (decompressFile(pathcmp)){
-				if (isWow64()){
-					MoveFileExW(L"runtime\\bit64",L"runtime64",1);
-					MoveFileExW(L"runtime\\Lib",L"runtime64\\Lib",1);
-					deleteDir(L"runtime");
-					MoveFileExW(L"runtime64",L"runtime",1);
-					MoveFileExW(L"native_win_x86_64",L"native",1);
-					deleteDir(L"native_win_x86_32");
+			if (decompressFile(pathcmp,false)){
+				bool bok=false;
+				if (isWin10OrLater()){
+					if (decompressFile(L"runtimepy3.7z",true)){
+						if (isWow64()){
+							MoveFileExW(L"runtimepy3\\bit64",L"runtime",1);
+						}else{
+							MoveFileExW(L"runtimepy3\\bit32",L"runtime",1);
+						}
+						MoveFileExW(L"runtimepy3\\pyfiles",L"runtime\\pyfiles",1);
+						deleteDir(L"runtimepy3");
+						bok=true;
+					}
 				}else{
-					deleteDir(L"runtime\\bit64");
-					MoveFileExW(L"native_win_x86_32",L"native",1);
-					deleteDir(L"native_win_x86_64");
+					if (decompressFile(L"runtimepy2.7z",true)){
+						if (isWow64()){
+							MoveFileExW(L"runtimepy2\\bit64",L"runtime",1);
+						}else{
+							MoveFileExW(L"runtimepy2\\bit32",L"runtime",1);
+						}
+						MoveFileExW(L"runtimepy2\\Lib",L"runtime\\Lib",1);
+						CopyFileW(L"runtime\\Microsoft.VC90.CRT.manifest",L"runtime\\DLLs\\Microsoft.VC90.CRT.manifest",FALSE);
+						CopyFileW(L"runtime\\msvcm90.dll",L"runtime\\DLLs\\msvcm90.dll",FALSE);
+						CopyFileW(L"runtime\\msvcp90.dll",L"runtime\\DLLs\\msvcp90.dll",FALSE);
+						CopyFileW(L"runtime\\msvcr90.dll",L"runtime\\DLLs\\msvcr90.dll",FALSE);
+						deleteDir(L"runtimepy2");
+						bok=true;
+					}
 				}
-				CopyFileW(L"runtime\\Microsoft.VC90.CRT.manifest",L"runtime\\DLLs\\Microsoft.VC90.CRT.manifest",FALSE);
-				CopyFileW(L"runtime\\msvcm90.dll",L"runtime\\DLLs\\msvcm90.dll",FALSE);
-				CopyFileW(L"runtime\\msvcp90.dll",L"runtime\\DLLs\\msvcp90.dll",FALSE);
-				CopyFileW(L"runtime\\msvcr90.dll",L"runtime\\DLLs\\msvcr90.dll",FALSE);
-
-				readInstallConfig();
-				if (runtimeExe.compare(L"dwagent.exe")!=0){
-					wstring apps;
-					apps.append(L"runtime\\");
-					apps.append(runtimeExe);
-					MoveFileExW(L"runtime\\dwagent.exe",apps.c_str(),1);
-				}
-				if (!runInstaller()){
+				if (bok==true){
+					if (isWow64()){
+						MoveFileExW(L"native_win_x86_64",L"native",1);
+						deleteDir(L"native_win_x86_32");
+					}else{
+						MoveFileExW(L"native_win_x86_32",L"native",1);
+						deleteDir(L"native_win_x86_64");
+					}
+					readInstallConfig();
+					if (runtimeExe.compare(L"dwagent.exe")!=0){
+						wstring apps;
+						apps.append(L"runtime\\");
+						apps.append(runtimeExe);
+						MoveFileExW(L"runtime\\dwagent.exe",apps.c_str(),1);
+					}
+					if (!runInstaller()){
+						bRunAsAdmin=false;
+						showMessage(L"Error run installer.");
+					}
+				}else{
 					bRunAsAdmin=false;
-					showMessage(L"Error run installer.");
+					showMessage(L"Error decompress file.");
 				}
 			}else{
 				bRunAsAdmin=false;
@@ -676,8 +705,6 @@ DWORD WINAPI thread_func(LPVOID lpParameter){
 	if (!silent){
 		destroyWindow(winid);
 	}
-
-
 	return 0;
 }
 

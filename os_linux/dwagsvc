@@ -24,7 +24,10 @@ PATH_DWA_NATIVE="$PATH_DWA/native"
 PATH_DWA_RUNTIME="$PATH_DWA/runtime/bin"
 PATH_DWA_RUNTIME_LIBRARY="$PATH_DWA/runtime/lib"
 TIMEOUT_START_STOP=30
-
+INST_VER=0
+if [ -f "${PATH_DWA_NATIVE}/installer.ver" ]; then
+	INST_VER=$(cat "${PATH_DWA_NATIVE}/installer.ver")
+fi
 
 install_systemctl(){
 	if [ ! -f /etc/systemd/system/@EXE_NAME@.service ]; then
@@ -287,7 +290,7 @@ run() {
 				cd "${PATH_DWA}"
 				export LD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
 				export PYTHONIOENCODING=utf-8
-				"${PATH_DWA_RUNTIME}/@EXE_NAME@" agent.pyc -filelog
+				"${PATH_DWA_RUNTIME}/@EXE_NAME@" agent.py -filelog
 			fi
 			for X in $(seq 5)
 			do
@@ -312,7 +315,7 @@ start_internal() {
 		rem_file dwagent.start
 		export LD_LIBRARY_PATH=${PATH_DWA_RUNTIME_LIBRARY}
 		export PYTHONIOENCODING=utf-8
-		"${PATH_DWA_RUNTIME}/@EXE_NAME@" "${PATH_DWA}/daemon.pyc" "${PATH_DWA_NATIVE}/dwagsvc" run  > "${PATH_DWA_NATIVE}/service.log" 2>&1
+		"${PATH_DWA_RUNTIME}/@EXE_NAME@" "${PATH_DWA}/daemon.py" "${PATH_DWA_NATIVE}/dwagsvc" run  > "${PATH_DWA_NATIVE}/service.log" 2>&1
 		c=0
 		while [ ! -f dwagent.start ]
 		do

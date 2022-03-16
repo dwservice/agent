@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
   
   
   chdir(path_dwa);
-  char *args[] = {cmd_to_execute, (char*)"monitor.pyc", (char*)"systray", NULL};
+  char *args[] = {cmd_to_execute, (char*)"monitor.py", (char*)"systray", NULL};
   char *env[] = {env_library, NULL};
   execve(cmd_to_execute, args , env);
   

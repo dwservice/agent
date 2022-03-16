@@ -24,18 +24,6 @@
 		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
 	</natures>
-	<linkedResources>
-		<link>
-			<name>src/main.h</name>
-			<type>1</type>
-			<locationURI>WORKSPACE_LOC/agent/lib_gdi/src/main.h</locationURI>
-		</link>
-		<link>
-			<name>src/windowsgdi.cpp</name>
-			<type>1</type>
-			<locationURI>WORKSPACE_LOC/agent/lib_gdi/src/windowsgdi.cpp</locationURI>
-		</link>
-	</linkedResources>
 	<variableList>
 		<variable>
 			<name>copy_PARENT</name>

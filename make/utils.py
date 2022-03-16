@@ -9,7 +9,7 @@ import platform
 import compileall
 import os
 import shutil
-import urllib2
+import sys
 import zipfile
 import tarfile
 import codecs
@@ -40,19 +40,48 @@ def is_linux():
 def is_mac():
     return _bismac
 
-def info(msg):
-    print msg    
+def is_py2():
+    return sys.version_info[0]==2
 
+if is_py2():
+    def _py2_str_new(o):
+        if isinstance(o, unicode):
+            return o 
+        elif isinstance(o, str):
+            return o.decode("utf8", errors="replace")
+        else:
+            return str(o).decode("utf8", errors="replace")
+    str_new=_py2_str_new
+    str_is_unicode=lambda s: isinstance(s, unicode) #TO REMOVE
+    import urllib2
+    url_open=urllib2.urlopen
+else:
+    str_new=str
+    str_is_unicode=lambda s: isinstance(s, str) #TO REMOVE
+    import urllib
+    import urllib.request
+    url_open=urllib.request.urlopen
+bytes_to_str=lambda b, enc="ascii": b.decode(enc, errors="replace")
+
+def info(msg):
+    print(msg)
+    
 def exception_to_string(e):
-    if isinstance(e, unicode) or isinstance(e, str) or len(e.message)==0:
-        try:
-            return unicode(e)
-        except:
-            return str(e)
-    elif isinstance(e.message, unicode):
-        return e.message;
-    else:
-        return unicode(e.message, errors='replace')
+    bamsg=False;
+    try:
+        if len(e.message)>0:
+            bamsg=True;
+    except:
+        None
+    try:
+        appmsg=None
+        if bamsg:
+            appmsg=str_new(e.message)
+        else:
+            appmsg=str_new(e)
+        return appmsg
+    except:
+        return u"Unexpected error."
 
 def remove_path(src):
     info("remove path " + src)
@@ -70,7 +99,7 @@ def init_path(pth):
 
 def download_file(url,dest):
     info("download file " + url)
-    infile = urllib2.urlopen(url)
+    infile = url_open(url)
     with open(dest,'wb') as outfile:
         outfile.write(infile.read())
     
@@ -131,13 +160,13 @@ def system_exec(cmd,wkdir):
     scmd=cmd
     if not isinstance(scmd, str):
         scmd=" ".join(cmd)
-    print "Execute: " + scmd
+    print("Execute: " + scmd)
     p = subprocess.Popen(cmd, cwd=wkdir, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     (o,e) = p.communicate()
-    if not o == "":
-        print "Output:\n" + o
-    if not e == "":
-        print "Error:\n" + e
+    if len(o)>0:
+        print("Output:\n" + bytes_to_str(o,"utf8"))
+    if len(e)>0:
+        print("Error:\n" + bytes_to_str(e,"utf8"))
         #return False
     return True            
 
@@ -215,7 +244,7 @@ def compile_lib(mainconf):
     lflgs=""
     if is_windows():        
         if not "windows" in mainconf:
-            print "NO CONFIGURATION."
+            print("NO CONFIGURATION.")
             return None
         cconf = mainconf["windows"]        
         if "cpp_compiler_flags" in cconf:
@@ -226,7 +255,7 @@ def compile_lib(mainconf):
         cconf["linker"]="g++ " + lflgs + " %LIBRARY_PATH% -s -municode -o %OUTNAME% %SRCFILES% %LIBRARIES%"
     elif is_linux():
         if not "linux" in mainconf:
-            print "NO CONFIGURATION."
+            print("NO CONFIGURATION.")
             return None
         cconf = mainconf["linux"]
         if "cpp_compiler_flags" in cconf:
@@ -237,7 +266,7 @@ def compile_lib(mainconf):
         cconf["linker"]="g++ " + lflgs + " %LIBRARY_PATH% -s -shared -o %OUTNAME% %SRCFILES% %LIBRARIES%"
     elif is_mac():    
         if not "mac" in mainconf:
-            print "NO CONFIGURATION."
+            print("NO CONFIGURATION.")
             return None
         cconf = mainconf["mac"]
         if "cpp_compiler_flags" in cconf:
@@ -308,7 +337,7 @@ def xml_to_prop(s):
     return prp
 
 def get_node_url():
-    contents = urllib2.urlopen(MAIN_URL + "getAgentFile.dw?name=files.xml").read();
+    contents = url_open(MAIN_URL + "getAgentFile.dw?name=files.xml").read();
     prp = xml_to_prop(contents)
     return prp["nodeUrl"]
     
