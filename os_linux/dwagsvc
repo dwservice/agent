@@ -97,6 +97,28 @@ install_updatercd(){
 	fi
 }
 
+install_openrc(){
+	if [ ! -f /etc/init.d/@EXE_NAME@ ]; then
+		ln -s "${PATH_DWA_NATIVE}/dwagsvc" /etc/init.d/@EXE_NAME@
+		if [ $? -eq 0 ]; then
+			rc-update add @EXE_NAME@
+			if [ $? -eq 0 ]; then
+				echo "openrc" > "${PATH_DWA_NATIVE}/service.mng"
+				echo "Installed"
+			else
+				echo "Error: Add rc-update."
+				RETVAL=11
+			fi
+		else
+			echo "Error: Create symbolic link."
+			RETVAL=12
+		fi
+	else
+		echo "Error: Service already installed."
+		RETVAL=1
+	fi
+}
+
 install_rclocal(){
 	if [ ! -f /etc/rc.d/rc.@EXE_NAME@ ]; then
 		ln -s "${PATH_DWA_NATIVE}/dwagsvc" /etc/rc.d/rc.@EXE_NAME@
@@ -124,6 +146,8 @@ install(){
     	install_chkconfig
 	elif [ "$(which "update-rc.d" 2>/dev/null)" ]; then
         install_updatercd
+	elif [ "$(which "rc-update" 2>/dev/null)" ]; then
+        install_openrc
     elif [ -f /etc/rc.d/rc.local ]; then
     	install_rclocal
 	else
@@ -207,6 +231,31 @@ delete_updatercd(){
 	fi
 }
 
+delete_openrc(){
+	if [ -f /etc/init.d/@EXE_NAME@ ]; then
+		rc-update del @EXE_NAME@
+		if [ $? -eq 0 ]; then
+			rm /etc/init.d/@EXE_NAME@
+			if [ $? -eq 0 ]; then
+				if [ -f "${PATH_DWA_NATIVE}/service.mng" ]; then
+					rm "${PATH_DWA_NATIVE}/service.mng"
+				fi
+				echo "Deleted"
+			else
+				echo "Error: Remove symbolic link."
+				RETVAL=12
+			fi
+		else
+			echo "Error: Del rc-update."
+			RETVAL=11
+		fi
+	else
+		rc-update del @EXE_NAME@ > /dev/null 2>&1
+		echo "Error: Service not installed."
+		RETVAL=1
+	fi
+}
+
 delete_rclocal(){
 	if [ -f /etc/rc.d/rc.@EXE_NAME@ ]; then
     	if [ -f /etc/rc.d/rc.local ]; then
@@ -239,6 +288,8 @@ delete(){
 			delete_chkconfig
 		elif [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "updatercd" ]; then
 			delete_updatercd
+		elif [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "openrc" ]; then
+			delete_openrc
         elif [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "rclocal" ]; then
 			delete_rclocal
 		fi				
@@ -249,6 +300,8 @@ delete(){
 			delete_chkconfig
 		elif [ "$(which "update-rc.d" 2>/dev/null)" ]; then
 			delete_updatercd
+		elif [ "$(which "rc-update" 2>/dev/null)" ]; then
+			delete_openrc
         elif [ -f /etc/rc.d/rc.local ]; then
         	delete_rclocal
 		else
@@ -356,6 +409,14 @@ start() {
 			else
 				start_internal
 			fi
+		elif [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "openrc" ]; then
+			if [ "$(which "start-stop-daemon" 2>/dev/null)" ]; then
+				if ! start-stop-daemon --start --quiet --oknodo --exec "${PATH_DWA_NATIVE}/dwagsvc" -- start_internal; then
+					RETVAL=1
+				fi
+			else
+				start_internal
+			fi
 		else
 			start_internal
 		fi				
@@ -373,6 +434,14 @@ start() {
 				start_internal
 			fi
 		elif [ "$(which "update-rc.d" 2>/dev/null)" ]; then
+			if [ "$(which "start-stop-daemon" 2>/dev/null)" ]; then
+				if ! start-stop-daemon --start --quiet --oknodo --exec "${PATH_DWA_NATIVE}/dwagsvc" -- start_internal; then
+					RETVAL=1
+				fi
+			else
+				start_internal
+			fi
+		elif [ "$(which "rc-update" 2>/dev/null)" ]; then
 			if [ "$(which "start-stop-daemon" 2>/dev/null)" ]; then
 				if ! start-stop-daemon --start --quiet --oknodo --exec "${PATH_DWA_NATIVE}/dwagsvc" -- start_internal; then
 					RETVAL=1
@@ -421,6 +490,8 @@ stop() {
 			stop_internal
 		elif [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "updatercd" ]; then
 			stop_internal
+		elif [ "$(cat "${PATH_DWA_NATIVE}/service.mng")" = "openrc" ]; then
+			stop_internal
 		else
 			stop_internal
 		fi				
@@ -432,6 +503,8 @@ stop() {
 		elif [ "$(which "chkconfig" 2>/dev/null)" ]; then
 			stop_internal
 		elif [ "$(which "update-rc.d" 2>/dev/null)" ]; then
+			stop_internal
+		elif [ "$(which "rc-update" 2>/dev/null)" ]; then
 			stop_internal
 		else
 			stop_internal
