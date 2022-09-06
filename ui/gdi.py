@@ -857,7 +857,9 @@ class Window:
             oldc.on_focus_lost(e)
         if self._focus_sequence_index is not None:
             if self._activate:
-                self.get_focus_component().on_focus_get(e)
+                newc=self.get_focus_component()
+                if newc is not None:
+                    newc.on_focus_get(e)
             else:
                 self._focus_sequence_index_lost=self._focus_sequence_index
             
@@ -1278,13 +1280,22 @@ class Component:
             if "window" not in e:
                 e["window"]=self._window
             self._action(e)
-        
+    
+    def _set_window_tree(self, c, w):
+        if c._window is not None:
+            self._window._focus_sequence.remove(c)            
+        c._window=w;
+        if self._window is not None:
+            self._window._add_focus_sequence(c)
+        if c._container:
+            for appc in c._components:
+                self._set_window_tree(appc,w)
+    
     def add_component(self, c):
         if self._container:
-            c._window=self._window;
             c._parent=self;
             self._components.append(c)
-            self._window._add_focus_sequence(c)
+            self._set_window_tree(c,self._window)    
             c.repaint()
     
     def remove_component(self, crem):
@@ -1295,14 +1306,15 @@ class Component:
                         c.remove_all_components()
                     c._destroy()
                     bchangefocus=False
-                    if self._window.get_focus_component()==c:
+                    if self._window is not None and self._window.get_focus_component()==c:
                         self._window._set_focus_component_byindex(None)
                     self._components.remove(c)
-                    self._window._focus_sequence.remove(c)
-                    if bchangefocus:
-                        self._window.next_focus_component()
-                    xy=self._get_win_pos()
-                    _repaint(self._window._id,c._x+xy[0],c._y+xy[1],c._w,c._h)
+                    self._set_window_tree(c, None)
+                    if self._window is not None:
+                        if bchangefocus:
+                            self._window.next_focus_component()
+                        xy=self._get_win_pos()
+                        _repaint(self._window._id,c._x+xy[0],c._y+xy[1],c._w,c._h)
                     break
     
     def get_components(self):
@@ -1316,14 +1328,16 @@ class Component:
                     c.remove_all_components()
                 c._destroy()
                 bchangefocus=False
-                if self._window.get_focus_component()==c:
+                if self._window is not None and self._window.get_focus_component()==c:
                         self._window._set_focus_component_byindex(None)
                 self._components.remove(c)
-                self._window._focus_sequence.remove(c)
+                if self._window is not None and c in self._window._focus_sequence:
+                    self._window._focus_sequence.remove(c)
                 if bchangefocus:
                         self._window.next_focus_component()
                 xy=self._get_win_pos()
-                _repaint(self._window._id,c._x+xy[0],c._y+xy[1],c._w,c._h)
+                if self._window is not None:
+                    _repaint(self._window._id,c._x+xy[0],c._y+xy[1],c._w,c._h)
     
     def focus(self):
         if self._window:
@@ -1466,7 +1480,7 @@ class Component:
         
         
     def repaint_parent(self):
-        if self._parent is not None and self._window._id is not None:
+        if self._parent is not None and self._window is not None and self._window._id is not None:
             #print("repaint_parent")
             self._parent.repaint()
         elif self._window is not None and self._window._id is not None:
@@ -1665,7 +1679,10 @@ class Label(Component):
         gapw=2;
         s = self._text 
         if s!=u"":
-            pobj.pen_color(self._foreground)
+            if self._enable:
+                pobj.pen_color(self._foreground)
+            else:
+                pobj.pen_color("a0a0a0")
             ar=[]
             appar = s.split(u"\n")
             for appsr in appar:
@@ -1851,7 +1868,10 @@ class RadioButton(Component):
         #if self._window.get_mouse_enter_component()==self:
         #    pobj.pen_color("f8fbfd")
         #else:            
-        pobj.pen_color(_STYLE_EDITOR_BACKGROUND_COLOR)
+        if self._enable:
+            pobj.pen_color(_STYLE_EDITOR_BACKGROUND_COLOR)
+        else:
+            pobj.pen_color("f2f2f2")
         rsz=18
         ty=int((self._h/2)-(rsz/2))
         pobj.fill_ellipse(2,ty,rsz,rsz)
@@ -1866,9 +1886,12 @@ class RadioButton(Component):
         
         s = self._text 
         if s!=u"":
-            pobj.pen_color(self._foreground)
+            if self._enable:
+                pobj.pen_color(self._foreground)
+            else:
+                pobj.pen_color("a0a0a0")
             ty=(self._h/2)-(pobj.get_text_height()/2)
-            pobj.draw_text(s,rsz+10,ty)
+            pobj.draw_text(s,rsz+8,ty)
         pobj.clear_clip_rectangle()
             
     def on_mouse(self,tp,x,y,b):
@@ -1878,7 +1901,7 @@ class RadioButton(Component):
                 self.focus()
                 if not self._selected:
                     old_selected=None
-                    if self._group is not None:
+                    if self._group is not None and self._window is not None:
                         for c in self._window.get_all_components():
                             if isinstance(c, RadioButton):
                                 if c._group is not None:
@@ -1957,12 +1980,13 @@ class ImagePanel(Component):
             if self._imgitm is not None:
                 _gdimap["imagemanager"].unload(self._imgitm)
                 self._imgitm=None
-            self._imgitm = _gdimap["imagemanager"].load(self._filename)
+            if utils.path_exists(self._filename):
+                self._imgitm = _gdimap["imagemanager"].load(self._filename)
             self._imgreload=False
         
         if self._imgitm is not None:
             pobj.draw_image(self._imgitm,0,0)            
-                
+         
                 
 class TextBox(Component):
     

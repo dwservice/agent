@@ -13,7 +13,6 @@ wstring towstring(const char* chrs) {
 	wstring str = wstring(dest);
 	free(dest);
 	return str;
-	return L"";
 }
 
 wchar_t* towcharp(wstring str) {

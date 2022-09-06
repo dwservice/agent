@@ -275,9 +275,14 @@ class Agent():
             tm = time.time()
             for sid in self._sessions.keys():
                 sesitm = self._sessions[sid]
-                if tm-sesitm.get_last_activity_time()<=ckint:
+                if tm-sesitm.get_last_activity_time()<=ckint and not sesitm.get_password_request():
                     itm={}
-                    itm["idsession"] = sesitm.get_idsession()
+                    itm["idSession"] = sesitm.get_idsession()
+                    itm["initTime"] = sesitm.get_init_time()
+                    itm["accessType"] = sesitm.get_access_type()
+                    itm["userName"] = sesitm.get_user_name()
+                    itm["ipAddress"] = sesitm.get_ipaddress()
+                    itm["waitAccept"] = sesitm.get_wait_accept()
                     itm["activities"] = sesitm.get_activities()
                     ar.append(itm)
         finally:
@@ -385,7 +390,11 @@ class Agent():
     def set_config_password(self, pwd):
         self._config_semaphore.acquire()
         try:
-            self._config['config_password']=hash_password(pwd)
+            if pwd=="":
+                if "config_password" in self._config:
+                    del self._config['config_password']
+            else:
+                self._config['config_password']=hash_password(pwd)
             self._write_config_file()
         finally:
             self._config_semaphore.release()
@@ -393,6 +402,18 @@ class Agent():
     def check_config_auth(self, usr, pwd):
         cp=self.get_config('config_password', hash_password(""))
         return usr=="admin" and pwd==cp
+    
+    def set_session_password(self, pwd):
+        self._config_semaphore.acquire()
+        try:
+            if pwd=="":
+                if "session_password" in self._config:
+                    del self._config['session_password']
+            else:
+                self._config['session_password']=hash_password(pwd)
+            self._write_config_file()
+        finally:
+            self._config_semaphore.release()
     
     def set_proxy(self, stype,  host,  port,  user,  password):
         if stype is None or (stype!='NONE' and stype!='SYSTEM' and stype!='HTTP' and stype!='SOCKS4' and stype!='SOCKS4A' and stype!='SOCKS5'):
@@ -545,6 +566,13 @@ class Agent():
             else:
                 v="False"
             return v
+        elif (key=="unattended_access"):
+            v = self.get_config(key)
+            if v is None or v is True:
+                v="True"
+            else:
+                v="False"
+            return v
         else:
             raise Exception("INVALID_CONFIG_KEY")
     
@@ -567,8 +595,33 @@ class Agent():
         elif (key=="monitor_tray_icon"):
             b=str2bool(val)
             self._set_config(key, b)
+        elif (key=="unattended_access"):
+            b=str2bool(val)
+            self._set_config(key, b)
         else:
             raise Exception("INVALID_CONFIG_KEY")
+    
+    def accept_session(self, sid):
+        ses=None
+        self._sessions_semaphore.acquire()
+        try:
+            if sid in self._sessions:
+                ses = self._sessions[sid]                
+        finally:
+            self._sessions_semaphore.release()
+        if ses is not None:
+            ses.accept()
+            
+    def reject_session(self, sid):
+        ses=None
+        self._sessions_semaphore.acquire()
+        try:
+            if sid in self._sessions:
+                ses = self._sessions[sid]
+        finally:
+            self._sessions_semaphore.release()
+        if ses is not None:
+            ses.reject()
     
     def _check_hash_file(self, fpath, shash):
         md5 = hashlib.md5()
@@ -803,7 +856,7 @@ class Agent():
         
         #AGGIORNAMENTI LIBRERIE UI
         try:
-            monitor_libnm=None            
+            monitor_libnm=None
             if is_windows():
                 monitor_libnm="dwaggdi.dll"
             elif is_linux():
@@ -1029,17 +1082,16 @@ class Agent():
                             
                             
                     #Start IPC listener
-                    if not self._runonfly:
-                        try:
-                            if self.get_config('listener_ipc_enable', True):
-                                if self._listener_ipc_load:
-                                    self._listener_ipc_load=False
-                                    self._listener_ipc=listener.IPCServer(self)
-                                    self._listener_ipc.start()
-                        except:
-                            self._listener_ipc = None
-                            asc = utils.get_exception()
-                            self.write_except(asc, "INIT STATUSCONFIG LISTENER: ")
+                    try:
+                        if self.get_config('listener_ipc_enable', True):
+                            if self._listener_ipc_load:
+                                self._listener_ipc_load=False
+                                self._listener_ipc=listener.IPCServer(self)
+                                self._listener_ipc.start()
+                    except:
+                        self._listener_ipc = None
+                        asc = utils.get_exception()
+                        self.write_except(asc, "INIT STATUSCONFIG LISTENER: ")
                             
                     #Start HTTP listener (NOT USED)
                     if not self._runonfly:
@@ -1689,10 +1741,8 @@ class Agent():
             for sid in self._sessions.keys():
                 try:
                     ses = self._sessions[sid]
-                    sht = ses.get_host()
-                    self._fire_close_conn_apps(sid)
                     ses.close()
-                    self.write_info("Close session (id: " + sid + ", node: " + sht  + ")")                    
+                    self._fire_close_conn_apps(sid)
                 except:
                     ex = utils.get_exception()
                     self.write_err(utils.exception_to_string(ex))
@@ -1734,13 +1784,14 @@ class Agent():
                         sinfo=Session(self,appconn,sid,msg)
                         self._sessions[sid]=sinfo
                         resp["idSession"]=sid
+                        resp["waitAccept"]=sinfo.get_wait_accept()
+                        resp["passwordRequest"]=sinfo.get_password_request()      
                         if conn_rcr is not None:
                             conn_rcr.set_msg_log("session (id: " + sinfo.get_idsession() + ", node: " + sinfo.get_host()+")")
-                            appconn.set_recovery_conf(conn_rcr)                        
+                            appconn.set_recovery_conf(conn_rcr)
                         break
             finally:
                 self._sessions_semaphore.release()
-            self.write_info("Open session (id: " + sinfo.get_idsession() + ", node: " + sinfo.get_host() + ")")
         except:
             ee = utils.get_exception()
             if appconn is not None:
@@ -1756,11 +1807,9 @@ class Agent():
         self._sessions_semaphore.acquire()
         try:
             sid = ses.get_idsession()
-            sht = ses.get_host()
-            if sid in self._sessions:                
+            if sid in self._sessions:
+                del self._sessions[sid]                
                 self._fire_close_conn_apps(sid)
-                del self._sessions[sid]
-                self.write_info("Close session (id: " + sid + ", node: " + sht  + ")")
             if len(self._sessions)==0:
                 bcloseapps=True
         finally:
@@ -1942,7 +1991,7 @@ class Connection():
         self._set_recovering(False,True)
         if self._cpool is not None:
             self._cpool.close_connection(self)
-            self._cpool=None            
+            self._cpool=None
         self._raw.close()
         
 
@@ -2227,7 +2276,27 @@ class Message():
                 self._send_response_recovery.append(m)
             finally:
                 self._conn._semaphore.release()        
-        self.send_message(m)    
+        self.send_message(m)
+    
+    def send_response_error(self,msg,scls,serr):
+        m = {
+                'name': 'error', 
+                'requestKey':  msg['requestKey'], 
+                'class':  scls, 
+                'message':  serr
+            }
+        if "module" in msg:
+            m["module"] = msg["module"]
+        if "command" in msg:
+            m["command"] = msg["command"]
+        if "requestCount" in msg:
+            m["requestCount"] = msg["requestCount"]
+            self._conn._semaphore.acquire()
+            try:
+                self._send_response_recovery.append(m)
+            finally:
+                self._conn._semaphore.release()        
+        self.send_message(m)
     
     def is_close(self):
         return self._conn.is_close()
@@ -2303,7 +2372,7 @@ class AgentConn(Message):
             elif msg_name=="reload":
                 self._agent.write_info("Request reload Agent.")
                 #WAIT RANDOM TIME BEFORE TO REBOOT AGENT
-                wtime=random.randrange(0, 6*3600) # 6 ORE
+                wtime=random.randrange(0, 12*3600) # 12 HOURS
                 self._agent._reload_agent(wtime)
             elif msg_name=="reloadApps":
                 self._agent.write_info("Request reload Apps: " + msg["appsUpdated"] + ".")
@@ -2343,28 +2412,32 @@ class AgentConn(Message):
                 #if self._agent._connection is not None:
                     #self.send_message(self._connection,m)
 
-
-
 class Session(Message):
     
     def __init__(self, agent, conn, idses, msg):
         self._bclose = False
-        self._idsession= idses
+        self._idsession = idses
+        self._init_time = time.time()
         self._host=conn._prop_conn["host"]
         self._permissions = json.loads(msg["permissions"])
-        self._ipaddress = None        
+        self._password = agent.get_config('session_password')
+        if self._password=="":
+            self._password=None
+        self._password_attempt = 0
+        self._wait_accept = not agent.get_config("unattended_access", True)
+        self._ipaddress = ""        
         if "ipAddress" in msg:
             self._ipaddress = msg["ipAddress"]
-        self._country_code = None
+        self._country_code = ""
         if "countryCode" in msg:
             self._country_code = msg["countryCode"]
-        self._country_name = None
+        self._country_name = ""
         if "countryName" in msg:
             self._country_name = msg["countryName"]
-        self._user_name = None
+        self._user_name = ""
         if "userName" in msg:
             self._user_name = msg["userName"]
-        self._access_type = None            
+        self._access_type = ""
         if "accessType" in msg:
             self._access_type = msg["accessType"]            
         
@@ -2375,12 +2448,49 @@ class Session(Message):
         self._activities["uploads"] = 0
         self._cpool = ConnectionPool(agent,conn._prop_conn,conn._proxy_info)
         Message.__init__(self, agent, conn)
+        self._log_open()
+
+
+    def accept(self):
+        if self._wait_accept:
+            m = {
+                'name':  'sessionAccepted' 
+            }
+            self.send_message(m)
+            self._wait_accept=False
+            self._log_open()            
+
+
+    def reject(self):
+        if self._wait_accept:
+            m = {
+                'name':  'sessionRejected' 
+            }
+            self.send_message(m)
 
     def get_idsession(self):
         return self._idsession
     
+    def get_init_time(self):
+        return self._init_time
+    
+    def get_access_type(self):
+        return self._access_type
+    
+    def get_user_name(self):
+        return self._user_name
+    
+    def get_ipaddress(self):
+        return self._ipaddress
+    
     def get_host(self):
         return self._host
+        
+    def get_password_request(self):
+        return self._password is not None
+    
+    def get_wait_accept(self):
+        return self._wait_accept
     
     def get_permissions(self):
         return self._permissions
@@ -2405,7 +2515,36 @@ class Session(Message):
     def _fire_msg(self,msg):
         try:
             msg_name = msg["name"]
-            if msg_name=="request":
+            if self._password is not None and msg_name!="keepalive" and msg_name!="checkpassword":
+                if 'requestKey' in msg:
+                    self.send_response(msg,"P:null")                    
+                else:
+                    raise Exception("session not accepted")
+            if msg_name=="checkpassword":
+                sresp="E"
+                if self._password is None:
+                    sresp="K"
+                elif self._password==hash_password(msg["password"]):
+                    sresp="K"
+                    self._password=None
+                    self._password_attempt=0
+                    self._log_open()
+                else:
+                    self._password_attempt+=1
+                    if self._password_attempt>=5:
+                        sresp="D"
+                m = {
+                    'name': 'response' , 
+                    'requestKey':  msg['requestKey'] , 
+                    'content':  sresp
+                }
+                self.send_message(m)                
+            elif self._wait_accept and msg_name!="keepalive":
+                if 'requestKey' in msg:
+                    self.send_response(msg,"W:null")                    
+                else:
+                    raise Exception("session not accepted")
+            elif msg_name=="request":
                 self.send_response(msg,self._request(msg))
             elif msg_name=="keepalive":
                 m = {
@@ -2435,13 +2574,7 @@ class Session(Message):
             e = utils.get_exception()
             self._agent.write_except(e)
             if 'requestKey' in msg:
-                m = {
-                    'name': 'error' , 
-                    'requestKey':  msg['requestKey'] , 
-                    'class':  e.__class__.__name__ , 
-                    'message':  utils.exception_to_string(e)
-                }
-                self.send_message(m)
+                self.send_response_error(msg,e.__class__.__name__ ,utils.exception_to_string(e))
             
     def _request(self, msg):
         resp = ""
@@ -2537,7 +2670,7 @@ class Session(Message):
             try:
                 fdownload.close()
             except:
-                None            
+                None
             resp["error"]=utils.exception_to_string(e)
         resp['name']='response'
         resp['requestKey']=msg['requestKey']
@@ -2565,12 +2698,24 @@ class Session(Message):
         resp['requestKey']=msg['requestKey']
         return resp
     
-    def _on_close(self):
-        self._agent._task_pool.execute(self._agent.close_session,self)
+    def _log_open(self):
+        if not self._wait_accept and self._password is None:
+            self._agent.write_info("Open session (id: " + self._idsession + ", ip: " + self._ipaddress + ", node: " + self._host + ")")
+    
+    def _log_close(self):
+        if not self._wait_accept and self._password is None:
+            self._agent.write_info("Close session (id: " + self._idsession + ", ip: " + self._ipaddress + ", node: " + self._host + ")")        
+    
+    def _close_session(self):
+        self._agent.close_session(self)
+        self._log_close()        
+    
+    def _on_close(self):        
+        self._agent._task_pool.execute(self._close_session)
         self._cpool.destroy()
     
     def close(self):
-        self._agent._task_pool.execute(self._agent.close_session,self)
+        self._agent._task_pool.execute(self._close_session)
         Message.close(self)
         self._cpool.destroy()        
             
@@ -2964,14 +3109,14 @@ class Download():
                 bts = fl.read(bsz)
                 ln = len(bts)
                 if ln==0:
-                    self._status="C"
+                    self._status="C"                    
                     break
                 self._parent._set_last_activity_time()
                 self._parent._send_conn(self._conn,bts)
                 self._calcbps.add(ln)
                 #print("DOWNLOAD - NAME:" + self._name + " SZ: " + str(len(s)) + " LEN: " + str(self._calcbps.get_transfered()) +  "  BPS: " + str(self._calcbps.get_bps()))
         except:
-            self._status="E"
+            self._status="E"            
         finally:
             self.close()
             if fl is not None:
@@ -2996,7 +3141,7 @@ class Download():
         try:
             if not self._bclose:
                 if self._status=="T":
-                    self._status="E"
+                    self._status="E"                    
                 self._bclose=True
         finally:
             self._semaphore.release()
@@ -3006,7 +3151,7 @@ class Download():
         try:
             if not self._bclose:
                 if self._status=="T":
-                    self._status="C"
+                    self._status="C"                    
                 self._bclose=True
         finally:
             self._semaphore.release()
@@ -3023,6 +3168,8 @@ class Upload():
         self._props=props
         self._semaphore = threading.Condition()
         self._baccept=False
+        self._bclose=True
+        self._enddatafile=False
         self._conn=conn
         self._conn.set_events({"on_close" : self._on_close_conn, "on_data" : self._on_data_conn})
 
@@ -3033,17 +3180,18 @@ class Upload():
             raise Exception("upload file length in none.")
         self._length=int(self._props['length'])
         self._calcbps=communication.BandwidthCalculator() 
-            
-        sprnpath=utils.path_dirname(path)    
-        while True:
-            r="".join([random.choice("0123456789") for x in utils.nrange(6)])            
-            self._tmpname=sprnpath + utils.path_sep + "temporary" + r + ".dwsupload";
-            if not utils.path_exists(self._tmpname):
-                utils.file_open(self._tmpname, 'wb').close() #Crea il file per imposta i permessi
-                self._agent.get_osmodule().fix_file_permissions("CREATE_FILE",self._tmpname)
-                self._fltmp = utils.file_open(self._tmpname, 'wb')
-                break
+        self._cntSendstatus=None
         try:
+            sprnpath=utils.path_dirname(path)    
+            while True:
+                r="".join([random.choice("0123456789") for x in utils.nrange(6)])            
+                self._tmpname=sprnpath + utils.path_sep + "temporary" + r + ".dwsupload";
+                if not utils.path_exists(self._tmpname):
+                    utils.file_open(self._tmpname, 'wb').close() #Crea il file per imposta i permessi
+                    self._agent.get_osmodule().fix_file_permissions("CREATE_FILE",self._tmpname)
+                    self._fltmp = utils.file_open(self._tmpname, 'wb')
+                    break
+        
             self._bclose = False
             self._status="T"
             self._enddatafile=False
@@ -3108,14 +3256,21 @@ class Upload():
                                     utils.path_remove(self._path)
                             shutil.move(self._tmpname, self._path)
                             self._status = "C"
-                            self._parent._send_conn(self._conn, bytearray(self._status, "utf8"))
+                            self._parent._send_conn(self._conn, bytearray(self._status, "utf8"))                            
                         except:
                             self._status = "E"
                             self._parent._send_conn(self._conn, bytearray(self._status, "utf8"))                            
                         self.close()
                     else: #if data[0]=='D': 
-                        self._fltmp.write(utils.buffer_new(data,1,len(data)-1))
-                        self._calcbps.add(len(data)-1)
+                        lndt=len(data)-1;
+                        self._fltmp.write(utils.buffer_new(data,1,lndt))
+                        self._calcbps.add(lndt)
+                        if self._cntSendstatus is None or self._cntSendstatus.is_elapsed(0.5):
+                            self._parent._send_conn(self._conn, bytearray("T" + str(self._calcbps.get_transfered()) + ";" + str(self._calcbps.get_bps()) , "utf8"))
+                            if self._cntSendstatus is None:
+                                self._cntSendstatus=utils.Counter()
+                            else:
+                                self._cntSendstatus.reset()
                         #print("UPLOAD - NAME:" + self._name + " LEN: " + str(self._calcbps.get_transfered()) +  "  BPS: " + str(self._calcbps.get_bps()))
                         
         except:
@@ -3147,9 +3302,9 @@ class Upload():
             self._semaphore.release()
         if bclose is True:
             self._parent.dec_activities_value("uploads")
-            if self._conn is not None:
-                self._conn.close()
-                self._conn = None
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
                 
             
     
@@ -3167,9 +3322,9 @@ class Upload():
             self._semaphore.release()
         if bclose is True:
             self._parent.dec_activities_value("uploads")
-            if self._conn is not None:
-                self._conn.close()
-                self._conn = None
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
 
 
 class AgentProfiler(threading.Thread):
@@ -3248,7 +3403,7 @@ def fmain(args): #SERVE PER MACOS APP
     sys.exit(0)
     
 
-if __name__ == "__main__":
+if __name__ == "__main__":    
     bmain=True
     if len(sys.argv)>1:
         a1=sys.argv[1]
@@ -3271,7 +3426,4 @@ if __name__ == "__main__":
                 native.fmain(sys.argv)
     if bmain:
         fmain(sys.argv)
-    
-    
-    
     

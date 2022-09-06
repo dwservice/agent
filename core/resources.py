@@ -115,7 +115,7 @@ class ResImage:
     
     def __init__(self, pkgnm):
         if utils.path_exists(".srcmode"):
-            self._pkgnm = pkgnm.split(".")[1]
+            self._pkgnm=pkgnm.split(".")[1]
         else:
             self._pkgnm=pkgnm        
         self._basepth=utils.str_new(self._pkgnm.replace(".",utils.path_sep))

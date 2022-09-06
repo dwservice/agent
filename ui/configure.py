@@ -102,11 +102,20 @@ class Configure:
             raise Exception(sret[6:])
         return sret  
     
-    def change_pwd(self, pwd):
+    def change_config_pwd(self, pwd):
         if pwd!="":
-            sret=self.send_req("change_pwd", {'password':self._change_pwd.get()})
+            sret=self.send_req("change_config_pwd", {'password':self._change_config_pwd.get()})
         else:
-            sret=self.send_req("change_pwd", {'nopassword':'true'})
+            sret=self.send_req("change_config_pwd", {'nopassword':'true'})
+        if sret!="OK":
+            raise Exception(sret[6:])
+        return sret
+    
+    def change_session_pwd(self, pwd):
+        if pwd!="":
+            sret=self.send_req("change_session_pwd", {'password':self._change_session_pwd.get()})
+        else:
+            sret=self.send_req("change_session_pwd", {'nopassword':'true'})
         if sret!="OK":
             raise Exception(sret[6:])
         return sret  
@@ -218,6 +227,7 @@ class Configure:
                 chs = ui.Chooser()
                 chs.set_message(self._get_message('configureChooseOperation'))
                 chs.add("configureChangeInstallKey", self._get_message('configureChangeInstallKey'))
+                chs.add("configurePassword", self._get_message('configurePassword'))
                 if self.is_agent_enable():
                     chs.add("configureDisableAgent", self._get_message('configureDisableAgent'))
                 else:
@@ -233,11 +243,72 @@ class Configure:
     def step_menu_agent_selected(self, curui):
         if curui.get_variable().get()=="configureChangeInstallKey":
             return self.step_menu_agent_install_key(curui)
+        elif curui.get_variable().get()=="configurePassword":
+                return self.step_menu_agent_password(curui)
         elif curui.get_variable().get()=="configureEnableAgent":
             return self.step_menu_agent_enable(curui)
         elif curui.get_variable().get()=="configureDisableAgent":
             return self.step_menu_agent_disable(curui)
-            
+    
+    
+    def step_menu_agent_password(self, curui):
+        chs = ui.Chooser()
+        chs.set_message(self._get_message('configureChooseOperation'))
+        chs.add("configureSetPassword", self._get_message('configureSetPassword'))
+        chs.add("configureRemovePassword", self._get_message('configureRemovePassword'))
+        chs.set_variable(self._password_menu_sel)
+        chs.prev_step(self.step_menu_agent)
+        chs.next_step(self.step_config_agent_password)
+        return chs
+
+    def step_config_agent_password(self, curui):
+        if curui.get_variable().get()=='configureSetPassword':
+            self._change_session_pwd=ui.VarString("", True)
+            self._change_resession_pwd=ui.VarString("", True)
+            ipt = ui.Inputs()
+            ipt.set_key("set_password")
+            ipt.set_message(self._get_message('configurePassword'))
+            ipt.add('password', self._get_message('password'), self._change_session_pwd,  True)
+            ipt.add('rePassword', self._get_message('rePassword'), self._change_resession_pwd,  True)
+            ipt.prev_step(self.step_menu_agent_password)
+            ipt.next_step(self.step_config_agent_password_procede)
+            return ipt
+        elif curui.get_variable().get()=='configureRemovePassword':
+            chs = ui.Chooser()
+            chs.set_key("remove_password")
+            chs.set_message(self._get_message('configureRemovePasswordQuestion'))
+            chs.add("yes", self._get_message('yes'))
+            chs.add("no", self._get_message('no'))
+            chs.set_variable(ui.VarString("no"))
+            chs.set_accept_key("yes")
+            chs.prev_step(self.step_menu_agent_password)
+            chs.next_step(self.step_config_agent_password_procede)
+            return chs
+    
+    def step_config_agent_password_procede(self, curui):
+        if curui.get_key() is not None and curui.get_key()=='set_password':
+            if self._change_session_pwd.get()==self._change_resession_pwd.get():
+                try:
+                    self.change_session_pwd(self._change_session_pwd.get())
+                    self._password=self._change_session_pwd.get()
+                    msg = ui.Message(self._get_message('configurePasswordUpdated'))
+                    msg.next_step(self.step_menu_main)
+                    return msg
+                except:
+                    return ui.ErrorDialog(self._get_message('configureErrorConnection'))
+            else:
+                return ui.ErrorDialog(self._get_message('configurePasswordErrNoMatch'))
+        elif curui.get_key() is not None and curui.get_key()=='remove_password':
+            if curui.get_variable().get()=='yes':
+                try:
+                    self.change_session_pwd("")
+                    self._password=""
+                    msg = ui.Message(self._get_message('configurePasswordUpdated'))
+                    msg.next_step(self.step_menu_main)
+                    return msg
+                except:
+                    return ui.ErrorDialog(self._get_message('configureErrorConnection'))
+    
     def step_menu_agent_install_key(self, curui):
         chs = ui.Chooser()
         chs.set_message(self._get_message('configureUninstallKeyQuestion'))
@@ -505,13 +576,13 @@ class Configure:
 
     def step_config_monitor_password(self, curui):
         if curui.get_variable().get()=='configureSetPassword':
-            self._change_pwd=ui.VarString("", True)
-            self._change_repwd=ui.VarString("", True)
+            self._change_config_pwd=ui.VarString("", True)
+            self._change_reconfig_pwd=ui.VarString("", True)
             ipt = ui.Inputs()
             ipt.set_key("set_password")
             ipt.set_message(self._get_message('configurePassword'))
-            ipt.add('password', self._get_message('password'), self._change_pwd,  True)
-            ipt.add('rePassword', self._get_message('rePassword'), self._change_repwd,  True)
+            ipt.add('password', self._get_message('password'), self._change_config_pwd,  True)
+            ipt.add('rePassword', self._get_message('rePassword'), self._change_reconfig_pwd,  True)
             ipt.prev_step(self.step_menu_monitor_password)
             ipt.next_step(self.step_config_monitor_password_procede)
             return ipt
@@ -529,10 +600,10 @@ class Configure:
     
     def step_config_monitor_password_procede(self, curui):
         if curui.get_key() is not None and curui.get_key()=='set_password':
-            if self._change_pwd.get()==self._change_repwd.get():
+            if self._change_config_pwd.get()==self._change_reconfig_pwd.get():
                 try:
-                    self.change_pwd(self._change_pwd.get())
-                    self._password=self._change_pwd.get()
+                    self.change_config_pwd(self._change_config_pwd.get())
+                    self._password=self._change_config_pwd.get()
                     msg = ui.Message(self._get_message('configurePasswordUpdated'))
                     msg.next_step(self.step_menu_main)
                     return msg
@@ -543,7 +614,7 @@ class Configure:
         elif curui.get_key() is not None and curui.get_key()=='remove_password':
             if curui.get_variable().get()=='yes':
                 try:
-                    self.change_pwd("")
+                    self.change_config_pwd("")
                     self._password=""
                     msg = ui.Message(self._get_message('configurePasswordUpdated'))
                     msg.next_step(self.step_menu_main)

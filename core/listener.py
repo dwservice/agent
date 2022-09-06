@@ -173,8 +173,12 @@ class IPCConfig(threading.Thread):
             if self._agent.check_config_auth(usr, pwd):
                 return "OK"
         return "ERROR:FORBIDDEN"
-
+    
+    #COMPATIBILITY OLD AGENT UI VERSION 25-05-2022
     def _req_change_pwd(self, prms):
+        return self._req_change_config_pwd(prms)
+
+    def _req_change_config_pwd(self, prms):
         if 'nopassword' in prms:
             nopwd = prms['nopassword']
             if nopwd=='true':
@@ -189,8 +193,23 @@ class IPCConfig(threading.Thread):
         else:
             return "ERROR:INVALID_AUTHENTICATION"
     
+    def _req_change_session_pwd(self, prms):
+        if 'nopassword' in prms:
+            nopwd = prms['nopassword']
+            if nopwd=='true':
+                self._agent.set_session_password("")
+                return "OK"
+            else:
+                return "ERROR:INVALID_AUTHENTICATION"
+        elif 'password' in prms:
+            pwd = prms['password']
+            self._agent.set_session_password(pwd)
+            return "OK"
+        else:
+            return "ERROR:INVALID_AUTHENTICATION"
+    
     def _req_set_config(self, prms):
-        if "key" in prms and "value" in prms :
+        if "key" in prms and "value" in prms:
             key=prms["key"]
             value=prms["value"]
             self._agent.set_config_str(key, value)
@@ -202,7 +221,7 @@ class IPCConfig(threading.Thread):
             key=prms["key"]
             return "OK:" + self._agent.get_config_str(key)
         return "ERROR:INVALID_PARAMETERS."
-        
+    
     def _req_remove_key(self, prms):
         self._agent.remove_key()
         return "OK"
@@ -243,6 +262,19 @@ class IPCConfig(threading.Thread):
         self._agent.set_proxy(ptype,  host,  port,  user,  password)
         return "OK"
 
+    def _req_accept_session(self, prms):
+        if "id" in prms:
+            sid=prms["id"]
+            self._agent.accept_session(sid)
+            return "OK"
+        return "ERROR:INVALID_PARAMETERS."
+    
+    def _req_reject_session(self, prms):
+        if "id" in prms:
+            sid=prms["id"]
+            self._agent.reject_session(sid)
+            return "OK"
+        return "ERROR:INVALID_PARAMETERS."
     
     def close(self):
         self._bclose=True

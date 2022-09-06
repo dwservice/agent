@@ -27,6 +27,9 @@ _WIDTH_LEFT=90
 _CONTENT_WIDTH=_WIDTH-_WIDTH_LEFT
 _CONTENT_HEIGHT=_HEIGHT-_HEIGHT_BOTTOM
 _GAP_TEXT=20
+_BUTTON_WIDTH=140
+_BUTTON_HEIGTH=36
+_BUTTON_GAP=10
 
 class VarString:
         
@@ -227,7 +230,17 @@ class Chooser(BaseUI):
                 self._main._enable_next_button()
             else:
                 self._main._disable_next_button()
-                
+
+
+class Custom(BaseUI):
+        
+    def __init__(self):
+        BaseUI.__init__(self)
+        self._content=None
+        
+    def set_content(self, cnt):
+        self._content=cnt
+            
 class ErrorDialog():
     
     def __init__(self, msg):
@@ -340,11 +353,13 @@ class UI():
         self._step_init=step_init
         self._cur_step_ui=None
         self._wait_ui=None
+        self._wait_panel_on_destroy=None
         self._action=None
         self._closing=False
         self._is_raw_input=False
         self._gui_enable=False
         self._prev_msg_wait=""
+        
     
     def set_action(self,f):
         self._action=f
@@ -415,7 +430,7 @@ class UI():
             if sys.stdout.encoding is None:
                 print(msg)
             else:
-                print(utils.bytes_to_str(msg.encode(sys.stdout.encoding,'replace')))
+                print(msg.encode(sys.stdout.encoding,'replace'))
         else:
             print(msg)
     
@@ -427,8 +442,10 @@ class UI():
                     appmsg=appmsg.encode(sys.stdout.encoding,'replace')            
             self._is_raw_input=True
             if not bpasswd:
-                #sr = raw_input(appmsg)
-                sr = input(appmsg)
+                if utils.is_py2():
+                    sr = raw_input(appmsg)
+                else:
+                    sr = input(appmsg)
             else:
                 import getpass
                 sr = getpass.getpass(appmsg)
@@ -610,11 +627,11 @@ class UI():
         pnl_bottom.set_size(_WIDTH,_HEIGHT_BOTTOM)
         self._app.add_component(pnl_bottom)
         
-        wbtn=140
-        hbtn=36
-        
+        wbtn=_BUTTON_WIDTH
+        hbtn=_BUTTON_HEIGTH
+                
         self._btback = gdi.Button();
-        self._btback.set_position(10, 10)
+        self._btback.set_position(_BUTTON_GAP, _BUTTON_GAP)
         self._btback.set_size(wbtn, hbtn)
         self._btback.set_text(messages.get_message('back'))
         self._btback.set_enable(False);
@@ -622,7 +639,7 @@ class UI():
         pnl_bottom.add_component(self._btback)
                 
         self._btnext = gdi.Button();
-        self._btnext.set_position(10+wbtn+5, 10)
+        self._btnext.set_position(_BUTTON_GAP+wbtn+5, _BUTTON_GAP)
         self._btnext.set_size(wbtn, hbtn)
         self._btnext.set_text(messages.get_message('next'))
         self._btnext.set_enable(False);
@@ -630,7 +647,7 @@ class UI():
         pnl_bottom.add_component(self._btnext)
         
         self._btclose = gdi.Button();
-        self._btclose.set_position(_WIDTH-wbtn-10, 10)
+        self._btclose.set_position(_WIDTH-wbtn-_BUTTON_GAP, _BUTTON_GAP)
         self._btclose.set_size(wbtn, hbtn)
         self._btclose.set_text(messages.get_message('close'))
         self._btclose.set_enable(False);
@@ -653,6 +670,11 @@ class UI():
     def _prepare_main_panel(self):
         if self._gui_enable is True:
             if (self._pnlmain is not None):
+                if self._wait_panel_on_destroy is not None:
+                    self._wait_panel_on_destroy()
+                    #print("self._pnlmain.remove_component(self._wait_panel)")
+                    #self._pnlmain.remove_component(self._wait_panel)
+                self._wait_panel_on_destroy=None
                 self._pnlmain.remove_all_components()
             else:
                 self._pnlmain = gdi.Panel();
@@ -691,6 +713,19 @@ class UI():
             self._printcl(messages.get_message('error') + u": " + msg)
             if self._raw_input(messages.get_message('pressEnter')) is not None:
                 self._prepare_step(self._cur_step_ui)
+            
+    
+    def wait_panel(self, pnl, ondestroy, allowclose=False):
+        if self._gui_enable is True:
+            self._btnext.set_enable(False)
+            self._btback.set_enable(False)
+            self._btclose.set_enable(allowclose)
+            self._prepare_main_panel()
+            self._wait_ui=None
+            self._wait_panel_on_destroy=ondestroy
+            self._pnlmain.add_component(pnl)
+        else:
+            self._show_error("wait_panel allowed only in gui mode.")
             
     
     def wait_message(self, msg, perc=None, progr=None, allowclose=False):
@@ -835,7 +870,7 @@ class UI():
                     return
             self._clmode_next()
                             
-            
+               
     def _show_chooser(self,  chs):
         if self._gui_enable is True:
             self._prepare_main_panel()
@@ -912,5 +947,5 @@ class UI():
                     return
                 chs.get_variable().set(inp['key'])
                 self._clmode_next()
-                
-            
+               
+   

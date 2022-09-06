@@ -15,6 +15,7 @@ import xml.etree.ElementTree
 import os
 import math
 import utils
+import json
 
 BUFFER_SIZE_MAX = 65536-10
 BUFFER_SIZE_MIN = 1024
@@ -361,7 +362,7 @@ def _connect_socket(host, port, proxy_info, timeout=_SOCKET_TIMEOUT_READ):
                     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                     sock.settimeout(timeout)
-                    sock.connect((host, port)) #PROVA A COLLEGARSI SENZA PROXY
+                    sock.connect((host, port)) #TRY TO CONNECT WITHOUT PROXY
                     _set_detected_proxy_none()
                     bprxdet=False
                 except:
@@ -405,7 +406,7 @@ def _connect_socket(host, port, proxy_info, timeout=_SOCKET_TIMEOUT_READ):
                             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                             sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                             sock.settimeout(timeout)
-                            sock.connect((host, port)) #PROVA A COLLEGARSI SENZA PROXY
+                            sock.connect((host, port)) #TRY TO CONNECT WITHOUT PROXY
                             _set_detected_proxy_none()
                             bprxdet=False
                         except:
@@ -494,7 +495,18 @@ def get_url_prop(url, proxy_info=None):
         prpresp = None;
         resp = Response(sock)
         if resp.get_code() == '200':
-            prpresp = xml_to_prop(resp.get_body())
+            rtp="xml"
+            try:
+                hds = resp.get_headers()  
+                if hds is not None and "Content-Type" in hds:
+                    if hds["Content-Type"]=="application/json":
+                        rtp="json"
+            except:
+                None
+            if rtp=="json":
+                prpresp = json.loads(resp.get_body())
+            else:
+                prpresp = xml_to_prop(resp.get_body())
         elif resp.get_code() == '301':
             sredurl=resp.get_headers()["Location"]
         else:
@@ -972,6 +984,7 @@ class ConnectionCheckAlive(threading.Thread):
         self._semaphore.acquire()
         try:
             if self._connection_keepalive_send:
+                #print("SESSION - PING RESET!")
                 self._counter.reset()
                 self._connection_keepalive_send = False
         finally:

@@ -1057,7 +1057,8 @@ class Install:
         self._runWithoutInstallAgentAlive = True
         self._runWithoutInstallAgentCloseByClient=False
         self._runWithoutInstallAgentCloseEnd=True
-        self._bmock=False
+        self._main_monitor=None
+        self._bmock=False        
         
     
     def _get_message(self, key):
@@ -1087,6 +1088,7 @@ class Install:
                     cnt+=1
                     if cnt>=20:
                         break
+            
     
     def start(self, aropts={}):
         self._options=aropts
@@ -1310,7 +1312,6 @@ class Install:
                 self._install_path.set(self._native.get_proposal_path())
                 return self.step_check_install_path(curui)
 
-
     def step_check_install_path(self, curui):
         pth = self._install_path.get()
         if pth.startswith("#DEV#"):
@@ -1477,10 +1478,32 @@ class Install:
         
         if self._runWithoutInstall:
             try:
-                if utils.path_exists(self._install_path.get() + utils.path_sep +  u'config.json'):
+                bmonok=False
+                if self._uinterface.is_gui():
+                    try:
+                        try:
+                            from ui import monitor
+                        except: #FIX INSTALLER
+                            import monitor
+                        bmonok=True
+                    except:
+                        None
+                if utils.path_exists(self._install_path.get() + utils.path_sep +  u'config.json'):				
                     appconf = self.load_prop_json(self._install_path.get() + utils.path_sep +  u'config.json')
                     if "preferred_run_user" in appconf:
                         prpconf["preferred_run_user"]=appconf["preferred_run_user"]
+                    if bmonok:
+                        if "unattended_access" in appconf:
+                            prpconf["unattended_access"]=appconf["unattended_access"]
+                        else:
+                            prpconf["unattended_access"]=False
+                    else:
+                        prpconf["unattended_access"]=True
+                else:
+                    if bmonok:
+                        prpconf["unattended_access"]=False
+                    else:
+                        prpconf["unattended_access"]=True
             except:
                 None
         
@@ -2069,7 +2092,7 @@ class Install:
         return False                
         
     def _step_runonfly_conn_msg(self, usr, pwd):
-        appwmsg=[]        
+        appwmsg=[]
         if "runputcode" in self._options and self._options["runputcode"]:
             if "runtoptext" in self._options:                            
                 appwmsg.append(self._options["runtoptext"])
@@ -2094,8 +2117,32 @@ class Install:
                 appwmsg.append(self._options["runbottomtext"])
             else:
                 appwmsg.append(self._get_message("runWithoutInstallationOnlineBottom"))
-        self._uinterface.wait_message(u"".join(appwmsg), allowclose=True)
-     
+        
+        
+        if not self._uinterface.is_gui() or self._bmock:
+            self._uinterface.wait_message(u"".join(appwmsg), allowclose=True)
+        else:
+            try:
+                try:
+                    from ui import monitor
+                except: #FIX INSTALLER
+                    import monitor
+                self._destroy_main_monitor()
+                self._main_monitor = monitor.Main()
+                self._main_monitor._set_config_base_path(self._install_path.get())
+                pnl = self._main_monitor.prepare_runonfly_panel(self._uinterface._app, self._current_path, u"".join(appwmsg))                
+                self._main_monitor.start("runonfly")
+                self._uinterface.wait_panel(pnl,self._destroy_main_monitor, allowclose=True)
+            except Exception as e:
+                print(u"Error: " + utils.exception_to_string(e) + u"\n" + utils.get_stacktrace_string())
+                self._append_log(u"Error: " + utils.exception_to_string(e) + u"\n" + utils.get_stacktrace_string())
+                self._uinterface.wait_message(u"".join(appwmsg), allowclose=True)
+    
+    def _destroy_main_monitor(self):
+        if self._main_monitor is not None:
+            self._main_monitor.stop()
+            self._main_monitor=None        
+    
     def step_runonfly_putcode(self, curui):
         ipt = ui.Inputs()
         ipt.set_key('configure')
@@ -2498,7 +2545,7 @@ class Install:
                 else:                    
                     return self.step_runonfly(curui)
             
-        except Exception as e:            
+        except Exception as e:
             self._append_log(u"Error Install: " + utils.exception_to_string(e))
             return ui.ErrorDialog(utils.exception_to_string(e)) 
             

@@ -1429,7 +1429,7 @@ class Property():
         try:
             if self._binit:
                 if name in self._fields:
-                    f=self._fields[name];
+                    f=self._fields[name]
                     if len(val)<=f["size"]:
                         self._mmap.seek(4+self._len_def+f["pos"])
                         appv=val + " "*(f["size"]-len(val)) 
@@ -1448,7 +1448,7 @@ class Property():
         try:
             if self._binit:
                 if name in self._fields:
-                    f=self._fields[name];
+                    f=self._fields[name]
                     self._mmap.seek(4+self._len_def+f["pos"])
                     sret = self._mmap_read(f["size"])
                     return sret.strip() 
@@ -2024,7 +2024,7 @@ class ProcessInActiveConsole(Process):
                                 lstret={}
                                 arenv = native.get_instance().get_process_environ(pid)
                                 for apps in arenv:                        
-                                    if apps=="XAUTHORITY" or apps=="DISPLAY" or apps.startswith("WAYLAND_") or apps.startswith("XDG_") or apps.startswith("LC_"):
+                                    if apps=="XAUTHORITY" or apps=="DISPLAY" or apps.startswith("WAYLAND_") or apps.startswith("XDG_") or apps.startswith("LC_") or apps.startswith("LANG"):
                                         lstret[apps]=arenv[apps]
                                         #print("DETECT BY PROCESS- " + apps + ": " + lstret[apps])                                        
                                 if ("DISPLAY" in lstret and "XAUTHORITY" in lstret):                                    
@@ -2072,7 +2072,7 @@ class ProcessInActiveConsole(Process):
                             if lcmd==swhatcmd:
                                 arenv = native.get_instance().get_process_environ(pid)
                                 for apps in arenv:                        
-                                    if apps=="XAUTHORITY" or apps=="DISPLAY" or apps.startswith("WAYLAND_") or apps.startswith("XDG_") or apps.startswith("LC_"):
+                                    if apps=="XAUTHORITY" or apps=="DISPLAY" or apps.startswith("WAYLAND_") or apps.startswith("XDG_") or apps.startswith("LC_") or apps.startswith("LANG"):
                                         lstret[apps]=arenv[apps]
                                         #print("DETECT BY WHAT OF w COMMAND - " + apps + ": " + lstret[apps])
                                 break
@@ -2229,6 +2229,30 @@ class ProcessInActiveConsole(Process):
                     libenv['USER'] = appconsole["user"]
                 appconsole["env"]=libenv
         
+        def _fix_linux_lang(self,libenv):
+            bok=False            
+            if "LANG" in libenv:
+                ar = libenv["LANG"].split(".")
+                if len(ar)>1 and (ar[1].upper()=="UTF8" or ar[1].upper()=="UTF-8"):
+                    bok=True
+            if not bok:
+                if "LC_ALL" in libenv:
+                    ar = libenv["LC_ALL"].split(".")
+                    if len(ar)>1 and (ar[1].upper()=="UTF8" or ar[1].upper()=="UTF-8"):
+                        libenv["LANG"]=libenv["LC_ALL"]
+                        bok=True
+            if not bok:
+                if "LC_NAME" in libenv:
+                    ar = libenv["LC_NAME"].split(".")
+                    if len(ar)>1 and (ar[1].upper()=="UTF8" or ar[1].upper()=="UTF-8"):
+                        libenv["LANG"]=libenv["LC_NAME"]
+                        bok=True
+            if not bok:
+                dlng = native.get_instance().get_utf8_lang()
+                if dlng is not None:
+                    libenv["LANG"]=dlng
+            #print("_fix_linux_lang: " + str(libenv))            
+        
         def _load_mac_console_info(self,appconsole):
             if appconsole is not None:
                 pwinfo=None            
@@ -2309,10 +2333,10 @@ class ProcessInActiveConsole(Process):
                                         arutmp = _struct_utmp.unpack_from(sbuf, offset)
                                         stype=arutmp[0]
                                         if stype==7: #USER_PROCESS
-                                            appstty=arutmp[2].rstrip(b'\0')
+                                            appstty=utils.bytes_to_str(arutmp[2].rstrip(b'\0'),"utf8")
                                             if appstty==stty:
                                                 ar["cktype"]="USER_NAME"
-                                                ar["ckvalue"]=arutmp[4].rstrip(b'\0')
+                                                ar["ckvalue"]=utils.bytes_to_str(arutmp[4].rstrip(b'\0'),"utf8")
                                                 break                                     
                                         offset += _struct_utmp.size
                         except:
@@ -2330,7 +2354,7 @@ class ProcessInActiveConsole(Process):
                     None 
                 
             return None
-        
+                        
         def _create_process(self, args):        
             if utils.is_windows():
                 if self._forcesubprocess:
@@ -2361,6 +2385,7 @@ class ProcessInActiveConsole(Process):
                             libenv["LD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
                         elif "LD_LIBRARY_PATH" in os.environ:
                             libenv["LD_LIBRARY_PATH"]=os.environ["LD_LIBRARY_PATH"]
+                        self._fix_linux_lang(libenv)
                         self._process=subprocess.Popen(args, env=libenv, preexec_fn=self._init_process_demote(self._currentconsole["uid"], self._currentconsole["gid"]))                        
                         self._ppid=self._process.pid
                         bfaultback=False
@@ -2375,6 +2400,7 @@ class ProcessInActiveConsole(Process):
                         libenv["LD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
                     elif "LD_LIBRARY_PATH" in os.environ:
                         libenv["LD_LIBRARY_PATH"]=os.environ["LD_LIBRARY_PATH"]
+                    self._fix_linux_lang(libenv)
                     self._process=subprocess.Popen(args, env=libenv)
                     self._ppid=self._process.pid
                     

@@ -18,8 +18,8 @@ data={
     'confirmUninstall': u'Vuoi eliminare DWAgent?',
     'mustAccept': u'Per poter continuare devi selezionare l\'opzione {0}',
     'or' : u'o',
-    'accept': u'Accetto',
-    'decline': u'Non accetto', 
+    'accept': u'Accetta',
+    'decline': u'Non accetta', 
     'next': u'Successivo', 
     'back': u'Indietro', 
     'yes': u'Sì', 
@@ -196,5 +196,10 @@ data={
     'desktopNotificationAutoHide': u'Nascondi automaticamente',
     'desktopNotificationNone': u'Nessuna',
     'warningSpyingTool': u'Sii consapevole che non puoi accedere a un computer remoto senza il consenso dell\'utente. Utilizzando DWService come strumento di spionaggio potresti violare le leggi del tuo paese di residenza.',
-    'warningLoginLogout': u'Affinché questa modifica abbia effetto, l\'utente deve disconnettersi e accedere nuovamente.'
+    'warningLoginLogout': u'Affinché questa modifica abbia effetto, l\'utente deve disconnettersi e accedere nuovamente.',
+    'reject': u'Rifiuta',
+    'ipAddress': u'Indirizzo IP: {0}',
+    'accessConfirm': u'Desidera accedere al tuo dispositivo.',
+    'unattendedAccess': u'Accesso\nnon presidiato',
+    'unknownUser': u'Utente sconosciuto'
 }

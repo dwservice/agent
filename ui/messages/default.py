@@ -40,7 +40,7 @@ data={
     'configureKeyInstalled':u'Key installed successfully.',
     'configureLater':u'Configure later',
     'configureMonitor':u'Configure monitor',
-    'configurePassword':u'Edit configuration password',
+    'configurePassword':u'Configure password',
     'configurePasswordErrNoMatch':u'The passwords do not match.',
     'configurePasswordUpdated':u'Password updated.',
     'configureProxy':u'Configure proxy',
@@ -196,5 +196,10 @@ data={
     'desktopNotificationAutoHide': u'Automatically hide',
     'desktopNotificationNone': u'None',
     'warningSpyingTool': u'Please be aware that you may not access a remote computer without the consent of its user. By using DWService as a spying tool you may be infringing laws in your country of residence.',
-    'warningLoginLogout': u'For this change to take effect, the user must logout and login again.'
+    'warningLoginLogout': u'For this change to take effect, the user must logout and login again.',
+    'reject': u'Reject',
+    'ipAddress': u'IP Address: {0}',
+    'accessConfirm': u'Would like to access to your device.',
+    'unattendedAccess': u'Unattended\naccess',
+    'unknownUser': u'Unknown user'
 }

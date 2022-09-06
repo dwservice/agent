@@ -316,7 +316,7 @@ class Linux():
             sactive=None
             fn = "/sys/class/tty/console/active"
             if os.path.exists(fn):
-                f = open(fn, "r")
+                f = open(fn, "rb")
                 try:
                     s = utils.bytes_to_str(f.read(),"utf8")    
                     if s is not None and len(s)>0:
@@ -332,7 +332,7 @@ class Linux():
             if sactive is not None:
                 fn = "/sys/class/tty/" + sactive+ "/active"
                 if os.path.exists(fn):
-                    f = open(fn , "r")
+                    f = open(fn , "rb")
                     try:
                         s = utils.bytes_to_str(f.read(),"utf8")
                         if s is not None and len(s)>0:
@@ -370,7 +370,7 @@ class Linux():
         try:
             fn = "/proc/" + str(pid) + "/" + "environ"
             if os.path.exists(fn):
-                f = open(fn , "r")
+                f = open(fn , "rb")
                 try:
                     s = utils.bytes_to_str(f.read(),"utf8")    
                     if s is not None and len(s)>0:
@@ -390,12 +390,12 @@ class Linux():
         try:
             fn = "/proc/" + str(pid) + "/" + "stat"
             if os.path.exists(fn):
-                f = open(fn , "r")
+                f = open(fn , "rb")
                 try:
                     s = utils.bytes_to_str(f.read(),"utf8")
                     if s is not None and len(s)>0:
-                        rpar = s.rfind(b')')
-                        name = s[s.find(b'(') + 1:rpar]
+                        rpar = s.rfind(r')')
+                        name = s[s.find(r'(') + 1:rpar]
                         fields = s[rpar + 2:].split()            
                         sret['name'] = name
                         sret['status'] = fields[0]
@@ -415,12 +415,12 @@ class Linux():
         try:
             fn = "/proc/" + str(pid) + "/" + "status"
             if os.path.exists(fn):
-                f = open(fn , "r")
+                f = open(fn , "rb")
                 try:
                     s = utils.bytes_to_str(f.read(),"utf8")
                     if s is not None and len(s)>0:
                         import re
-                        reuids=re.compile(br'Uid:\t(\d+)\t(\d+)\t(\d+)')
+                        reuids=re.compile(r'Uid:\t(\d+)\t(\d+)\t(\d+)')
                         ur, ue, us = reuids.findall(s)[0]
                         sret = int(ur)
                 finally:
@@ -434,12 +434,12 @@ class Linux():
         try:
             fn = "/proc/" + str(pid) + "/" + "status"
             if os.path.exists(fn):
-                f = open(fn , "r")
+                f = open(fn , "rb")
                 try:
                     s = utils.bytes_to_str(f.read(),"utf8")
                     if s is not None and len(s)>0:
                         import re
-                        reuids=re.compile(br'Gid:\t(\d+)\t(\d+)\t(\d+)')
+                        reuids=re.compile(r'Gid:\t(\d+)\t(\d+)\t(\d+)')
                         gr, ge, gs = reuids.findall(s)[0]
                         sret = gr
                 finally:
@@ -454,7 +454,7 @@ class Linux():
         try:
             fn = "/proc/" + str(pid) + "/" + "cmdline"
             if os.path.exists(fn):
-                f = open(fn , "r")
+                f = open(fn , "rb")
                 try:
                     s = utils.bytes_to_str(f.read(),"utf8")
                     if s is not None and len(s)>0:
@@ -464,6 +464,48 @@ class Linux():
         except:
             None
         return lret
+    
+    def get_utf8_lang(self):
+        altret=None
+        try:
+            p = subprocess.Popen("locale | grep LANG=", stdout=subprocess.PIPE, shell=True)
+            (po, pe) = p.communicate()
+            p.wait()
+            if len(po) > 0:                
+                po = utils.bytes_to_str(po, "utf8")                
+                ar = po.split("\n")[0].split("=")[1].split(".")
+                if ar[1].upper()=="UTF8" or ar[1].upper()=="UTF-8":
+                    if ar[0].upper()=="C":
+                        altret = ar[0] + "." + ar[1]
+                    else:
+                        return ar[0] + "." + ar[1]
+        except:
+            None        
+        try:                
+            p = subprocess.Popen("locale -a", stdout=subprocess.PIPE, shell=True)
+            (po, pe) = p.communicate()
+            p.wait()
+            if len(po) > 0:
+                po = utils.bytes_to_str(po, "utf8")
+                arlines = po.split("\n")
+                for r in arlines:
+                    ar = r.split(".")
+                    if len(ar)>1 and ar[0].upper()=="EN_US" and (ar[1].upper()=="UTF8" or ar[1].upper()=="UTF-8"):
+                        if ar[0].upper()=="C":
+                            altret = ar[0] + "." + ar[1]
+                        else:
+                            return ar[0] + "." + ar[1]
+                #If not found get the first utf8
+                for r in arlines:
+                    ar = r.split(".")
+                    if len(ar)>1 and (ar[1].upper()=="UTF8" or ar[1].upper()=="UTF-8"):
+                        if ar[0].upper()=="C":
+                            altret = ar[0] + "." + ar[1]
+                        else:
+                            return ar[0] + "." + ar[1]
+        except:
+            None
+        return altret
 
 class Mac():
         
