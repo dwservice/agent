@@ -93,18 +93,100 @@ void DWAScreenCaptureFreeMemory(void* pnt){
 	free(pnt);
 }
 
+void handleXEvents(){
+	XEvent event;
+	while (XPending(xdpy)){
+		XNextEvent(xdpy, &event);
+		/*if ((damageok) && (event.type == damageevent + XDamageNotify)){
+			XDamageNotifyEvent *damageevt = (XDamageNotifyEvent*) (&event);
+		}*/
+		if (event.type == xfixesevent + XFixesCursorNotify) {
+			xfixeschanged=true;
+		}
+		if (event.type == MappingNotify) {
+			XMappingEvent *e = (XMappingEvent *) &event;
+			if (e->request == MappingKeyboard) {
+				linuxInputs->keyboardChanged();
+			}
+		}
+		//GET CLIPBOARD
+		if (event.type == SelectionNotify) {
+			//printf("SelectionNotify\n");
+			if ((event.xselection.selection==atomClipboard) && (event.xselection.property)) {
+				int format;
+				unsigned long N, size;
+				char * data;
+				Atom target;
+				XGetWindowProperty(event.xselection.display, event.xselection.requestor,
+					event.xselection.property, 0L,(~0L), 0, AnyPropertyType, &target,
+					&format, &size, &N,(unsigned char**)&data);
+				if(target == atomStrTp) {
+					wchar_t* dest = (wchar_t*)malloc((size+1) * sizeof(wchar_t));
+					mbstowcs(dest, (char*)data, size+1);
+					copytxt.append(dest);
+					free(dest);
+					XFree(data);
+					copyok=true;
+				}
+				XDeleteProperty(event.xselection.display, event.xselection.requestor, event.xselection.property);
+			}
+		}
+		//SET CLIPBOARD
+		if (event.type == SelectionRequest) {
+			//printf("SelectionRequest\n");
+			if ((event.xselectionrequest.selection == atomClipboard) && (pastetxt.length()>0)){
+				XSelectionRequestEvent * xsr = &event.xselectionrequest;
+				XSelectionEvent ev = {0};
+				int ret = 0;
+				ev.type = SelectionNotify, ev.display = xsr->display, ev.requestor = xsr->requestor,
+				ev.selection = xsr->selection, ev.time = xsr->time, ev.target = xsr->target, ev.property = xsr->property;
+				if (ev.target == atomTargets){
+					ret = XChangeProperty (ev.display, ev.requestor, ev.property, 4, 32, PropModeReplace, (unsigned char*)&atomStrTp, 1);
+				}else if (ev.target == 31 || ev.target == atomText){ //XA_STRING=31;
+					wchar_t* chrs = (wchar_t*)pastetxt.c_str();
+					size_t requiredSize = wcstombs(NULL, chrs, 0);
+					char* dest = (char*)malloc((requiredSize+1) * sizeof(char));
+					wcstombs(dest, chrs, requiredSize+1);
+					ret = XChangeProperty(ev.display, ev.requestor, ev.property, 31, 8, PropModeReplace, (unsigned char*)dest, requiredSize);
+					free(dest);
+				}else if (ev.target == atomStrTp){
+					wchar_t* chrs = (wchar_t*)pastetxt.c_str();
+					size_t requiredSize = wcstombs(NULL, chrs, 0);
+					char* dest = (char*)malloc(((requiredSize)+1) * sizeof(char));
+					wcstombs(dest, chrs, requiredSize+1);
+					ret = XChangeProperty(ev.display, ev.requestor, ev.property, atomStrTp, 8, PropModeReplace, (unsigned char*)dest, requiredSize);
+					free(dest);
+				}else{
+					ev.property = None;
+				}
+				if ((ret & 2) == 0){
+					XSendEvent(xdpy, ev.requestor, 0, 0, (XEvent *)&ev);
+				}
+			}
+		}
+		if (event.type == SelectionClear) {
+			//printf("SelectionClear\n");
+			pastetxt.clear();
+		}
+	}
+}
+
 int DWAScreenCaptureIsChanged(){
-	damageareachanged=false;
 	if (xdpy!=NULL){
-		XEvent event;
-		while (XPending(xdpy)){
-			XNextEvent(xdpy, &event);
-			if ((damageok) && (event.type == damageevent + XDamageNotify)){
-				XDamageNotifyEvent *damageevt = (XDamageNotifyEvent*) (&event);
-				int appcx = damageevt->area.x;
-				int appcy = damageevt->area.y;
-				int appcw = damageevt->area.width;
-				int appch = damageevt->area.height;
+		handleXEvents();
+
+		//DETECT DAMAGE
+		if (damageok){
+			damageareachanged=false;
+			XDamageSubtract(xdpy, damage, None, damageregion);
+			int rects_num = 0;
+			XRectangle bounds;
+			XRectangle* rects = XFixesFetchRegionAndBounds(xdpy,damageregion,&rects_num, &bounds);
+			for (int i = 0; i < rects_num; ++i) {
+				int appcx = rects[i].x;
+				int appcy = rects[i].y;
+				int appcw = rects[i].width;
+				int appch = rects[i].height;
 				if (damageareachanged==false){
 					damageareax=appcx;
 					damageareay=appcy;
@@ -128,15 +210,7 @@ int DWAScreenCaptureIsChanged(){
 				}
 				damageareachanged=true;
 			}
-			if (event.type == xfixesevent + XFixesCursorNotify) {
-				xfixeschanged=true;
-			}
-			if (event.type == MappingNotify) {
-				XMappingEvent *e = (XMappingEvent *) &event;
-				if (e->request == MappingKeyboard) {
-					linuxInputs->keyboardChanged();
-				}
-			}
+			XFree(rects);
 		}
 	}
 	return 0;
@@ -229,6 +303,7 @@ int DWAScreenCaptureGetImage(void* capses){
 	int cy=0;
 	int cw=0;
 	int ch=0;
+
 	if ((!damageok) || (sci->status==1)){
 		cok=true;
 		cx=sci->x;
@@ -412,11 +487,50 @@ void DWAScreenCapturePaste(){
 }
 
 int DWAScreenCaptureGetClipboardText(wchar_t** wText){
-	return linuxInputs->getClipboardText(wText);
+	copytxt.clear();
+	if ((xdpy!=NULL) && (fakewindow)){
+		//microsleep
+		double milliseconds=200;
+		struct timespec sleepytime;
+		sleepytime.tv_sec = milliseconds / 1000;
+		sleepytime.tv_nsec = (milliseconds - (sleepytime.tv_sec * 1000)) * 1000000;
+		nanosleep(&sleepytime, NULL);
+
+		XConvertSelection(xdpy, atomClipboard, atomStrTp, atomXSelData, fakewindow, CurrentTime);
+		XSync(xdpy, 0);
+		copyok=false;
+		for (int i=1;i<=5;i++){
+			handleXEvents();
+			if (copyok){
+				break;
+			}
+			nanosleep(&sleepytime, NULL);
+		}
+	}
+	if (copytxt.length()>0){
+		*wText = (wchar_t*)malloc(copytxt.length() * sizeof(wchar_t));
+		copytxt.copy(*wText,copytxt.length());
+		return copytxt.length();
+	}else{
+		return 0;
+	}
 }
 
 void DWAScreenCaptureSetClipboardText(wchar_t* wText){
-	linuxInputs->setClipboardText(wText);
+	if ((xdpy!=NULL) && (fakewindow)){
+		XSetSelectionOwner(xdpy, atomClipboard, fakewindow, 0);
+		if (XGetSelectionOwner (xdpy, atomClipboard) == fakewindow){
+			pastetxt.clear();
+			pastetxt.append(wText);
+			handleXEvents();
+		}
+		//microsleep
+		double milliseconds=200;
+		struct timespec sleepytime;
+		sleepytime.tv_sec = milliseconds / 1000;
+		sleepytime.tv_nsec = (milliseconds - (sleepytime.tv_sec * 1000)) * 1000000;
+		nanosleep(&sleepytime, NULL);
+	}
 }
 
 bool DWAScreenCaptureLoad() {
@@ -428,7 +542,6 @@ bool DWAScreenCaptureLoad() {
 	xfixesok=false;
 	cpuUsage=new LinuxCPUUsage();
 	linuxInputs=new LinuxInputs();
-
 	loadXrandr("/usr/lib");
 	return true;
 }
@@ -439,9 +552,13 @@ void DWAScreenCaptureUnload() {
 	if (xdpy != NULL) {
 		if (damageok){
 			XDamageDestroy(xdpy, damage);
+			XFixesDestroyRegion(xdpy, damageregion);
 		}
 		damageok=false;
 		xfixesok=false;
+		if (fakewindow){
+			XDestroyWindow(xdpy,fakewindow);
+		}
 		XCloseDisplay(xdpy);
 		xdpy = NULL;
 	}
@@ -490,11 +607,22 @@ void addMonitorsInfo(MONITORS_INFO* moninfo, int x, int y, int w, int h){
 	}
 }
 
+bool stringEndsWith(string const &str, string const &suffix) {
+    if (str.length() < suffix.length()) {
+        return false;
+    }
+    return str.compare(str.length() - suffix.length(), suffix.length(), suffix) == 0;
+}
+
 int DWAScreenCaptureGetMonitorsInfo(MONITORS_INFO* moninfo){
 	//Detect monitor
 	int iret=0;
 	int oldmc=clearMonitorsInfo(moninfo);
 	if (xdpy == NULL){
+
+		//set locale
+		setlocale(LC_ALL, getenv("LANG"));
+
 		if ((xdpy = XOpenDisplay(NULL)) != NULL) {
 
 			//for XNextEvent ???
@@ -525,15 +653,36 @@ int DWAScreenCaptureGetMonitorsInfo(MONITORS_INFO* moninfo){
 			}
 			XFixesSelectCursorInput(xdpy, root, XFixesDisplayCursorNotifyMask);
 
+			//XDAMAGE
 			int damageerr;
 			if (!XDamageQueryExtension(xdpy, &damageevent, &damageerr)) {
 				damageok=false;
 			}else{
 				damageok=true;
-				damage = XDamageCreate(xdpy, root, XDamageReportRawRectangles);
-				XDamageSubtract(xdpy, damage, None, None);
+				damage = XDamageCreate(xdpy, root, XDamageReportNonEmpty);
+				if (!damage){
+					damageok=false;
+				}else{
+					damageregion = XFixesCreateRegion(xdpy, 0, 0);
+					if (!damageregion) {
+						damageok=false;
+						XDamageDestroy(xdpy, damage);
+					}
+				}
 			}
 			damageareachanged=false;
+
+			//CLIPBOARD
+			int defscr = DefaultScreen(xdpy);
+			fakewindow = XCreateSimpleWindow(xdpy, RootWindow(xdpy, defscr), 0, 0, 1, 1, 0, BlackPixel(xdpy, defscr), WhitePixel(xdpy, defscr));
+			atomStrTp = XInternAtom(xdpy, "UTF8_STRING", 1);
+			if(atomStrTp  == None){
+				atomStrTp = 31; //XA_STRING
+			}
+			atomClipboard = XInternAtom(xdpy, "CLIPBOARD", 0);
+			atomXSelData = XInternAtom(xdpy, "XSEL_DATA", 0);
+			atomTargets = XInternAtom(xdpy, "TARGETS", 0);
+			atomText = XInternAtom(xdpy, "TEXT", 0);
 		}else{
 			damageok=false;
 			xfixesok=false;

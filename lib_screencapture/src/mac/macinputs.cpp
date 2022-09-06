@@ -167,43 +167,6 @@ void MacInputs::paste(){
 	keyboard("KEY","V",false,false,false,true);
 }
 
-//TODO NOT SECURE
-/*wstring exec(const char* cmd){
-	FILE* pipe = popen(cmd, "r");
-	if (!pipe) return L"";
-	wchar_t buffer[128];
-	std::wstring result = L"";
-	while (!feof(pipe)){
-		if (fgetws(buffer, 128, pipe) != NULL){
-			result += buffer;
-		}
-	}
-	pclose(pipe);
-	return result;
-}*/
-
-int MacInputs::getClipboardText(wchar_t** wText){
-	//TODO NOT SECURE
-	/*wstring str=exec("pbpaste");
-	return (wchar_t*)str.c_str();*/
-	return 0;
-}
-
-void MacInputs::setClipboardText(wchar_t* wText){
-	//TODO NOT SECURE
-	/*
-	wstring wapp = L"";
-	wapp.append(L"echo \"");
-	if (wText!=NULL){
-		wapp.append(wText);
-	}
-	wapp.append(L"\" | pbcopy");
-	char app[4096];
-	wcstombs(app, wText, sizeof(app));
-	exec(app);
-	*/
-}
-
 CGKeyCode MacInputs::keyCodeForCharWithLayout(const char c, const UCKeyboardLayout *uchrHeader){
     uint8_t *uchrData = (uint8_t *)uchrHeader;
     const UCKeyboardTypeHeader *uchrKeyboardList = uchrHeader->keyboardTypeList;

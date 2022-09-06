@@ -197,21 +197,12 @@ void LinuxInputs::mouse(MONITORS_INFO_ITEM* moninfoitem, int x, int y, int butto
 	}
 }
 
-
 void LinuxInputs::copy(){
-
+	keyboard("KEY","C",true,false,false,false);
 }
 
 void LinuxInputs::paste(){
-
-}
-
-int LinuxInputs::getClipboardText(wchar_t** wText){
-	return 0;
-}
-
-void LinuxInputs::setClipboardText(wchar_t* wText){
-
+	keyboard("KEY","V",true,false,false,false);
 }
 
 void LinuxInputs::mouseMove(int x,int y){

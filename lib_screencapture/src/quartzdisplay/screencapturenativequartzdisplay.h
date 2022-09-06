@@ -17,9 +17,11 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #include "../common/util.h"
 #include "../mac/maccpuusage.h"
 #include "../mac/macinputs.h"
+#include "../mac/macobjc.h"
 #include <ApplicationServices/ApplicationServices.h>
 #include <Carbon/Carbon.h>
 #include <IOKit/IOKitLib.h>
+#include <IOKit/pwr_mgt/IOPMLib.h>
 #include <mach/mach_init.h>
 #include <mach/mach_error.h>
 
@@ -63,7 +65,14 @@ struct ScreenCaptureInfo{
 MacCPUUsage* cpuUsage;
 MacInputs* macInputs;
 
+int mainDisplayID;
 int factx;
 int facty;
+
+IOPMAssertionID assertionIDIOPM1;
+IOReturn successIOPM1;
+IOPMAssertionID assertionIDIOPM2;
+IOReturn successIOPM2;
+
 
 #endif

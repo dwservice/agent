@@ -14,15 +14,6 @@ import native
 import struct
 from . import common
 
-##### TO FIX 22/09/2021
-import zlib
-TMP_zlib_decompress=lambda b: zlib.decompress(b)
-try:
-    TMP_bytes_join=utils.bytes_join        
-except:
-    TMP_bytes_join=lambda ar: "".join(ar)
-##### TO FIX 22/09/2021
-
 class ProcessEncoderPalette():
     
     def __init__(self, scrmdl, ver):
@@ -247,7 +238,7 @@ class ProcessEncoder(ipc.ChildProcessThread):
                                     data1 = self._sound_memmap.read(szrem)
                                     self._sound_memmap.seek(17)
                                     data2 = self._sound_memmap.read(plim)
-                                    data = TMP_bytes_join([data1,data2])
+                                    data = utils.bytes_join([data1,data2])
                                 else:
                                     self._sound_memmap.seek(17)
                                     data = self._sound_memmap.read(plim)
@@ -447,7 +438,7 @@ class ProcessEncoder(ipc.ChildProcessThread):
             curid=self._struct_Q.unpack(self._memmap.read(8))[0]
             if self._curid!=curid:
                 self._curid=curid
-                btsd = TMP_zlib_decompress(self._memmap.read(curimage.sizedata))                
+                btsd = utils.zlib_decompress(self._memmap.read(curimage.sizedata))                
                 curimage.data=ctypes.cast(ctypes.c_char_p(btsd),ctypes.c_void_p)
                 bencode=True
             else:

@@ -17,490 +17,9 @@ import utils
 import ctypes
 import native
 import subprocess
+import ipc
 from . import common
 
-
-##### TO FIX 22/09/2021
-try:
-    TMP_bytes_to_str=utils.bytes_to_str
-    TMP_str_to_bytes=utils.str_to_bytes
-    TMP_str_new=utils.str_new
-    TMP_bytes_join=utils.bytes_join
-    TMP_bytes_get=utils.bytes_get
-except:
-    TMP_bytes_to_str=lambda b, enc="ascii": b.decode(enc, errors="replace")
-    TMP_str_to_bytes=lambda s, enc="ascii": s.encode(enc, errors="replace")
-    def TMP_py2_str_new(o):
-        if isinstance(o, unicode):
-            return o 
-        elif isinstance(o, str):
-            return o.decode("utf8", errors="replace")
-        else:
-            return str(o).decode("utf8", errors="replace")
-    TMP_str_new=TMP_py2_str_new
-    TMP_bytes_join=lambda ar: "".join(ar)
-    TMP_bytes_get=lambda b, i: ord(b[i])
-
-try:    
-    import sys
-    if sys.version_info[0]==2:        
-        if utils.path_exists(os.path.dirname(__file__) + os.sep + "__pycache__"):
-            utils.path_remove(os.path.dirname(__file__) + os.sep + "__pycache__")
-except: 
-    None
-##### TO FIX 22/09/2021
-
-########################################################################################################################
-##### OLD 27/07/2021 TO REMOVE      
-########################################################################################################################
-BIPCOK=False
-try:
-    import ipc
-    BIPCOK=True
-except:
-    None
-
-
-    
-####### TO REMOVE (IT IS INSIDE IPC)
-if BIPCOK==True:  
-    class ProcessInActiveConsole(ipc.Process):
-        def __init__(self, mdl, func, args=None, forcesubprocess=False):
-            ipc.Process.__init__(self, mdl, func, args, self._process_fix_perm, forcesubprocess)
-            self._forcesubprocess=forcesubprocess
-            self._currentconsole=None
-            self._currentconsolecounter=utils.Counter()
-            
-        
-        def _process_fix_perm(self):
-            jo={}
-            appconsole = self._currentconsole
-            if (utils.is_mac() or utils.is_linux()) and appconsole!=None and "uid" in appconsole and appconsole["uid"]!=os.getuid():
-                jo["mode"]=stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH
-            return jo
-        
-        def _get_linux_envirionment(self,uid,tty):
-            bwaylanderr=False
-            lstret={}
-            
-            #DETECT BY PROCESS
-            if uid!=-1:       
-                lst = native.get_instance().get_process_ids()
-                try:
-                    bok=False
-                    cnt = utils.Counter()
-                    while not bok and cnt.get_value()<=2:
-                        for pid in lst:
-                            if native.get_instance().get_process_uid(pid)==uid:
-                                lstret={}
-                                arenv = native.get_instance().get_process_environ(pid)
-                                for apps in arenv:                        
-                                    if apps=="XAUTHORITY" or apps=="DISPLAY" or apps.startswith("WAYLAND_") or apps.startswith("XDG_") or apps.startswith("LC_"):
-                                        lstret[apps]=arenv[apps]
-                                        #print("DETECT BY PROCESS- " + apps + ": " + lstret[apps])                                        
-                                if ("DISPLAY" in lstret and "XAUTHORITY" in lstret):                                    
-                                    bok=True
-                                    break
-                                lstret={}
-                        time.sleep(0.5)
-                except:
-                    lstret={}
-            
-            #DETECT BY WHAT OF w COMMAND
-            swhatcmd=None
-            if uid!=-1:            
-                try:
-                    import pwd
-                    pwinfo=pwd.getpwuid(uid)
-                    if pwinfo is not None and pwinfo.pw_name is not None:
-                        data = subprocess.Popen(["w"], stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-                        so, se = data.communicate()
-                        if so is not None and len(so)>0:
-                            so=TMP_bytes_to_str(so, "utf8")
-                            ar = so.split("\n")
-                            del ar[0]
-                            bhead=True
-                            pwhat=-1
-                            for s in ar:
-                                if bhead:
-                                    #DETECT WHAT position
-                                    bhead=False
-                                    pwhat = s.upper().index("WHAT")                                
-                                elif pwhat>=0 and s.split(" ")[0].rstrip(" ")==pwinfo.pw_name:
-                                    swhatcmd = s[pwhat:].lstrip(" ").rstrip(" ")
-                                    break
-                except:
-                    None
-            if swhatcmd is not None:
-                try:
-                    lst = native.get_instance().get_process_ids()
-                    for pid in lst:
-                        sst = native.get_instance().get_process_stat(pid)
-                        if native.get_instance().get_process_uid(pid)==uid:
-                            bok=False
-                            lret = native.get_instance().get_process_cmdline(pid)
-                            lcmd=" ".join(lret).lstrip(" ").rstrip(" ")
-                            if lcmd==swhatcmd:
-                                arenv = native.get_instance().get_process_environ(pid)
-                                for apps in arenv:                        
-                                    if apps=="XAUTHORITY" or apps=="DISPLAY" or apps.startswith("WAYLAND_") or apps.startswith("XDG_") or apps.startswith("LC_"):
-                                        lstret[apps]=arenv[apps]
-                                        #print("DETECT BY WHAT OF w COMMAND - " + apps + ": " + lstret[apps])
-                                break
-                                                
-                except:
-                    None
-            
-            #DETECT DISPLAY BY w COMMAND
-            if uid!=-1:
-                try:
-                    import pwd
-                    pwinfo=pwd.getpwuid(uid)
-                    if pwinfo is not None and pwinfo.pw_name is not None:
-                        data = subprocess.Popen(["w"], stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-                        so, se = data.communicate()
-                        if so is not None and len(so)>0:
-                            so=TMP_bytes_to_str(so, "utf8")
-                            ar = so.split("\n")
-                            del ar[0]
-                            bhead=True
-                            ptty=-1
-                            for s in ar:
-                                if bhead:
-                                    #DETECT WHAT position
-                                    bhead=False
-                                    ptty = s.upper().index("TTY")                                
-                                elif ptty>=0 and s.split(" ")[0].rstrip(" ")==pwinfo.pw_name:
-                                    sdisplay = s[ptty:]
-                                    sdisplay=sdisplay[0:sdisplay.index(" ")]
-                                    if len(sdisplay)==2:
-                                        if sdisplay[0]==":" and sdisplay[1].isdigit():
-                                            sdsp=sdisplay
-                                    elif len(sdisplay)==4:
-                                        if sdisplay[0]==":" and sdisplay[1].isdigit() and sdisplay[2]=="." and sdisplay[3].isdigit():
-                                            sdsp=sdisplay
-                                    if sdsp is not None:
-                                        lstret["DISPLAY"] = sdsp
-                                        #print("DETECT DISPLAY BY w COMMAND - DISPLAY: " + lstret["DISPLAY"])
-                                        break
-                except:
-                    None
-            
-            #DETECT BY CMDLINE
-            try:
-                if tty is not None:
-                    st = os.stat("/dev/" + tty)
-                lst = native.get_instance().get_process_ids()
-                for pid in lst:
-                    sst = native.get_instance().get_process_stat(pid)
-                    if (tty is None or sst["tty"]==st.st_rdev) and (uid==-1 or native.get_instance().get_process_uid(pid)==uid):
-                        lret = native.get_instance().get_process_cmdline(pid)
-                        bok=False
-                        sxauth=None
-                        sdsp=None
-                        for i in range(len(lret)):
-                            if i==0:
-                                scmd = lret[i]
-                                arcmd = scmd.split("/")
-                                if len(arcmd)>0:
-                                    scmd=arcmd[len(arcmd)-1]
-                                    if scmd.upper()=="X" or "XORG" in scmd.upper():
-                                        bok=True
-                                    elif scmd.upper()=="XWAYLAND":
-                                        bwaylanderr=True
-                            if bok:
-                                sitm = lret[i]
-                                if i>0 and lret[i-1]=="-auth":
-                                    sxauth=sitm
-                                elif len(sitm)==2:
-                                    if sitm[0]==":" and sitm[1].isdigit():
-                                        sdsp=sitm
-                                elif len(sitm)==4:
-                                    if sitm[0]==":" and sitm[1].isdigit() and sitm[2]=="." and sitm[3].isdigit():
-                                        sdsp=sitm
-                        if sxauth is not None:
-                            lstret["XAUTHORITY"] = sxauth                            
-                            #print("DETECT BY CMDLINE - XAUTHORITY: " + lstret["XAUTHORITY"])                            
-                        if sdsp is not None:
-                            lstret["DISPLAY"] = sdsp
-                            #print("DETECT BY CMDLINE - DISPLAY: " + lstret["DISPLAY"])
-                        if bok:
-                            bwaylanderr=False
-                            break
-                
-            except:
-                None
-            
-            if bwaylanderr or (("XDG_SESSION_TYPE" in lstret) and (lstret["XDG_SESSION_TYPE"].upper()=="WAYLAND")):
-                raise Exception("XWayland is not supported.")                
-            
-            if "DISPLAY" not in lstret:
-                lstret["DISPLAY"]=":0"
-                
-            if "XAUTHORITY" in lstret:
-                sxauth = lstret["XAUTHORITY"]
-                if not os.path.exists(sxauth):
-                    try:
-                        p = sxauth.rindex("/")
-                        if p>=0:
-                            sxauthdir = sxauth[0:p]
-                            os.makedirs(sxauthdir, 0o700)
-                            fd = os.open(sxauth,os.O_RDWR|os.O_CREAT, 0o600)
-                            os.close(fd)                                                        
-                    except:
-                        None
-            
-            if "XAUTHORITY" not in lstret and (uid!=-1 or tty is not None): 
-                return self._get_linux_envirionment(-1, None)
-            
-            '''
-            if "DISPLAY" in lstret:
-                print("DISPLAY: " + lstret["DISPLAY"])
-            if "XAUTHORITY" in lstret:
-                print("XAUTHORITY: " + lstret["XAUTHORITY"])
-            '''
-            
-            return lstret
-        
-        def _load_linux_console_info(self,appconsole):
-            if appconsole is not None:
-                stty=appconsole["tty"]
-                #print("\n\nTTY: " + stty)
-                pwinfo=None
-                try:
-                    import pwd
-                    if os.getuid()==0 and "cktype" in appconsole and appconsole["cktype"]!="":
-                        if appconsole["cktype"]=="USER_NAME":
-                            pwinfo=pwd.getpwnam(appconsole["ckvalue"])
-                        elif appconsole["cktype"]=="USER_ID":
-                            pwinfo=pwd.getpwuid(appconsole["ckvalue"])
-                    else:
-                        pwinfo=pwd.getpwuid(os.getuid())
-                except:
-                    None
-                
-                appuid=-1
-                libenv={}
-                if pwinfo is not None:
-                    #print("uid: " + str(pwinfo.pw_uid))                                    
-                    appconsole["user"] = pwinfo.pw_name
-                    appconsole["uid"] = pwinfo.pw_uid
-                    appconsole["gid"] = pwinfo.pw_gid
-                    appconsole["home"] = pwinfo.pw_dir
-                    appuid=pwinfo.pw_uid
-                else:
-                    libenv = os.environ
-                
-                lstret = self._get_linux_envirionment(appuid, stty)
-                for k in lstret:
-                    libenv[k]=lstret[k]
-                if pwinfo is not None:
-                    libenv['HOME'] = appconsole["home"]
-                    libenv['LOGNAME'] = appconsole["user"]
-                    libenv['USER'] = appconsole["user"]
-                appconsole["env"]=libenv
-        
-        def _load_mac_console_info(self,appconsole):
-            if appconsole is not None:
-                pwinfo=None            
-                try:
-                    import pwd
-                    if os.getuid()==0:
-                        pwinfo=pwd.getpwuid(appconsole["uid"])
-                    else:
-                        pwinfo=pwd.getpwuid(os.getuid())
-                except:
-                    None                
-                libenv = os.environ                
-                if pwinfo is not None:
-                    try:
-                        appconsole["user"] = pwinfo.pw_name
-                        appconsole["gid"] = pwinfo.pw_gid
-                        appconsole["home"] = pwinfo.pw_dir
-                        libenv['HOME'] = appconsole["home"]
-                        libenv['LOGNAME'] = appconsole["user"]
-                        libenv['USER'] = appconsole["user"]
-                    except:
-                        None
-                appconsole["env"]=libenv
-        
-        def _init_process_demote(self,user_uid, user_gid):
-            def set_ids():
-                os.setgid(user_gid)
-                os.setuid(user_uid)
-            return set_ids        
-
-        def _is_old_windows(self):
-            return (utils.is_windows() and (native.get_instance().is_win_xp()==1 or native.get_instance().is_win_2003_server()==1))
-        
-        def is_change_console(self):
-            if self._currentconsole is not None and self._currentconsolecounter.is_elapsed(1):
-                self._currentconsolecounter.reset()
-                appc=self._detect_console()
-                if appc is not None:
-                    if utils.is_windows():
-                        if self._is_old_windows() and appc["id"]>0:
-                            native.get_instance().win_station_connect()
-                            time.sleep(1)
-                            return True
-                        elif appc["id"]!=self._currentconsole["id"]:
-                            return True
-                    elif utils.is_mac():
-                        if appc["uid"]!=self._currentconsole["uid"]:
-                            return True
-                    elif utils.is_linux():
-                        if appc["tty"]!=self._currentconsole["tty"]:
-                            if appc["cktype"]=="" or appc["cktype"]!=self._currentconsole["cktype"]:
-                                return True
-                            else:
-                                return appc["ckvalue"]!=self._currentconsole["ckvalue"]
-            return False
-        
-        def _detect_console(self):
-            if utils.is_windows():
-                return {"id": native.get_instance().get_active_console_id()}            
-            elif utils.is_mac():
-                return {"uid": native.get_instance().get_console_user_id()}            
-            elif utils.is_linux():
-                try:
-                    ar={}
-                    stty=native.get_instance().get_tty_active()
-                    if stty is not None:
-                        ar["tty"] = stty
-                        ar["cktype"] = ""
-                        ar["ckvalue"] = ""
-                        try:
-                            if os.getuid()==0:
-                                sbuf = None
-                                offset = 0                        
-                                with open('/var/run/utmp', 'rb') as fd:
-                                    sbuf = fd.read()
-                                if sbuf is not None:
-                                    while offset < len(sbuf):
-                                        arutmp = ipc._struct_utmp.unpack_from(sbuf, offset)
-                                        stype=arutmp[0]
-                                        if stype==7: #USER_PROCESS
-                                            appstty=arutmp[2].rstrip(b'\0')
-                                            if appstty==stty:
-                                                ar["cktype"]="USER_NAME"
-                                                ar["ckvalue"]=arutmp[4].rstrip(b'\0')
-                                                break                                     
-                                        offset += ipc._struct_utmp.size
-                        except:
-                            None
-                        if ar["cktype"]=="":
-                            try:    
-                                st = os.stat("/dev/" + stty)
-                                ar["cktype"]="USER_ID"
-                                ar["ckvalue"]=st.st_uid
-                            except:
-                                None
-                        #print("_detect_console_:" + ar["cktype"] + " " + str(ar["ckvalue"]))
-                        return ar
-                except:
-                    None 
-                
-            return None
-        
-        def _create_process(self, args):        
-            if utils.is_windows():
-                if self._forcesubprocess:
-                    self._currentconsole=None
-                    self._process=subprocess.Popen(args)
-                    self._ppid=self._process.pid
-                else:
-                    '''
-                    runaselevatore=u"False"
-                    if self._get_screen_module().DWAScreenCaptureIsUserInAdminGroup()==1:
-                        if self._get_screen_module().DWAScreenCaptureIsRunAsAdmin()==1:
-                            if self._get_screen_module().DWAScreenCaptureIsProcessElevated()==1:
-                                runaselevatore=u"True"
-                    '''            
-                    appcmd=u"\"" + self._py_exe_path + u"\" -S -m agent " + TMP_str_new(args[2]) + u" " + TMP_str_new(args[3]) #+ u" " + TMP_str_new(str(self._agent_main._agent_debug_mode)) + u" windows " + runaselevatore            
-                    self._process=None
-                    self._ppid = native.get_instance().start_process_in_active_console(appcmd,self._py_home_path)
-                    if self._ppid==-1:
-                        self._ppid=None
-                        self._currentconsole=None
-                        raise Exception("Start process error")
-            elif utils.is_linux():
-                bfaultback=True
-                if self._currentconsole!=None and "env" in self._currentconsole:
-                    try:
-                        libenv=self._currentconsole["env"]
-                        if utils.path_exists("runtime"):
-                            libenv["LD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
-                        elif "LD_LIBRARY_PATH" in os.environ:
-                            libenv["LD_LIBRARY_PATH"]=os.environ["LD_LIBRARY_PATH"]
-                        self._process=subprocess.Popen(args, env=libenv, preexec_fn=self._init_process_demote(self._currentconsole["uid"], self._currentconsole["gid"]))                        
-                        self._ppid=self._process.pid
-                        bfaultback=False
-                    except:
-                        None
-                if bfaultback:
-                    libenv = os.environ
-                    lstret = self._get_linux_envirionment(-1, None)
-                    for k in lstret:
-                        libenv[k]=lstret[k]
-                    if utils.path_exists("runtime"):
-                        libenv["LD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
-                    elif "LD_LIBRARY_PATH" in os.environ:
-                        libenv["LD_LIBRARY_PATH"]=os.environ["LD_LIBRARY_PATH"]
-                    self._process=subprocess.Popen(args, env=libenv)
-                    self._ppid=self._process.pid
-                    
-            elif utils.is_mac():
-                bfaultback=True
-                self._ppid=None
-                if not self._forcesubprocess:
-                    if not hasattr(native.get_instance(), "is_old_guilnc") or native.get_instance().is_old_guilnc():                
-                        #GUI LAUNCHER OLD VERSION 03/11/2021 (DO NOT REMOVE)
-                        if self._currentconsole!=None and "uid" in self._currentconsole:
-                            self._ppid=native.get_instance().exec_guilnc(self._currentconsole["uid"],"ipc",[args[3]])
-                    else:
-                        if self._currentconsole!=None and "env" in self._currentconsole:
-                            try:
-                                libenv=self._currentconsole["env"]
-                                if utils.path_exists("runtime"):
-                                    libenv["DYLD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
-                                elif "DYLD_LIBRARY_PATH" in os.environ:
-                                    libenv["DYLD_LIBRARY_PATH"]=os.environ["DYLD_LIBRARY_PATH"]
-                                self._process=subprocess.Popen(args, env=libenv, preexec_fn=self._init_process_demote(self._currentconsole["uid"], self._currentconsole["gid"]))                        
-                                self._ppid=self._process.pid
-                                bfaultback=False
-                            except:
-                                None
-                                                
-                if self._ppid is not None:
-                    self._process = None
-                    bfaultback=False                                    
-                if bfaultback:
-                    libenv = os.environ
-                    if utils.path_exists("runtime"):
-                        libenv["DYLD_LIBRARY_PATH"]=utils.path_absname("runtime/lib")
-                    elif "DYLD_LIBRARY_PATH" in os.environ:
-                        libenv["DYLD_LIBRARY_PATH"]=os.environ["DYLD_LIBRARY_PATH"]
-                    self._process=subprocess.Popen(args, env=libenv)
-                    self._ppid=self._process.pid
-                    
-                
-        def _start_ipc(self):
-            try:            
-                self._currentconsole=self._detect_console()
-                if utils.is_linux():                
-                    self._load_linux_console_info(self._currentconsole)
-                elif utils.is_mac():
-                    self._load_mac_console_info(self._currentconsole)
-                ipc.Process._start_ipc(self)
-                self._currentconsolecounter.reset()
-            except:
-                ex = utils.get_exception()
-                self._currentconsole=None
-                raise ex    
-
-####### TO REMOVE (IT IS INSIDE IPC)
-    
-    
 class Desktop():
 
     def __init__(self, agent_main):
@@ -607,6 +126,15 @@ class Desktop():
         s = agent.get_prop(params,"text", "")
         dm=self._get_desktop_manager_check_permissions(cinfo,sid)
         dm.paste_text(s);
+        return sret
+    
+    def req_set_clipboard(self,cinfo,params):
+        sret=""
+        sid = agent.get_prop(params,"id", "")
+        t = agent.get_prop(params,"type", "")
+        d = agent.get_prop(params,"data", "")
+        dm=self._get_desktop_manager_check_permissions(cinfo,sid)
+        dm.set_clipboard(t, d);
         return sret
     
     def req_websocket(self, cinfo, wsock):
@@ -798,14 +326,7 @@ class DesktopProcessCapture(threading.Thread):
                             prcargs=[]         
                             if hasattr(self._agent_main, "_app_desktop_capture_fallback_lib") and self._agent_main._app_desktop_capture_fallback_lib is not None:
                                 prcargs.append("capture_fallback_lib=" + self._agent_main._app_desktop_capture_fallback_lib)
-                            
-                            ##### TO FIX 22/09/2021
-                            if hasattr(ipc, "ProcessInActiveConsole"):
-                                self._process=ipc.ProcessInActiveConsole("app_desktop.capture", "ProcessCapture", prcargs, forcesubprocess=self._debug_forcesubprocess)
-                            else:
-                                self._process=ProcessInActiveConsole("app_desktop.capture", "ProcessCapture", prcargs, forcesubprocess=self._debug_forcesubprocess)
-                            ##### TO FIX 22/09/2021
-                            
+                            self._process=ipc.ProcessInActiveConsole("app_desktop.capture", "ProcessCapture", prcargs, forcesubprocess=self._debug_forcesubprocess)                            
                             self._strm=self._process.start()
                             self._strm.set_read_timeout_function(self._strm_read_timeout)
                             self._process_last_error=None
@@ -926,7 +447,8 @@ class DesktopProcessCapture(threading.Thread):
     def paste_text(self, mon, stxt):
         self._write_obj({u"request":u"PASTE_TEXT",u"monitor":mon, u"text": stxt})
             
-        
+    def set_clipboard(self, mon, stp, sdt):
+        self._write_obj({u"request":u"SET_CLIPBOARD",u"monitor":mon, u"type": stp, u"data": sdt})
 
 
 class DesktopSession(threading.Thread):
@@ -1024,18 +546,6 @@ class DesktopSession(threading.Thread):
         except:
             None
             
-        ##### TO FIX 22/09/2021
-        try:
-            utils.Bytes()
-            self._send_list_bytes=self._send_list_bytes_OLD
-            self._send_bytes=self._send_bytes_OLD
-            self._decode_data=self._decode_data_OLD            
-        except:
-            self._send_list_bytes=self._send_list_bytes_NEW
-            self._send_bytes=self._send_bytes_NEW
-            self._decode_data=self._decode_data_NEW
-        ##### TO FIX 22/09/2021
-            
     def get_id(self):
         return self._id
     
@@ -1114,29 +624,16 @@ class DesktopSession(threading.Thread):
     def _on_websocket_close(self):
         self.destroy();
     
-    ##### TO FIX 22/09/2021
-    def _decode_data_OLD(self,data):
-        return data.to_str("utf8")
-    
-    def _decode_data_NEW(self,data):        
+    def _decode_data(self,data):        
         return data.decode("utf8")
     
-    def _send_bytes_NEW(self, bts):
+    def _send_bytes(self, bts):
         with self._websocket_send_lock:
             self._websocket.send_bytes(bts)
     
-    def _send_list_bytes_NEW(self, bts):
+    def _send_list_bytes(self, bts):
         with self._websocket_send_lock:
             self._websocket.send_list_bytes(bts)
-    
-    def _send_bytes_OLD(self, bts):
-        with self._websocket_send_lock:
-            self._websocket.send_bytes(utils.Bytes(bts))
-    
-    def _send_list_bytes_OLD(self, bts):
-        with self._websocket_send_lock:
-            self._websocket.send_list_bytes(map(lambda b: utils.Bytes(b), bts))
-    ##### TO FIX 22/09/2021
     
     def check_destroy(self):
         if self._init_counter is not None and self._init_counter.is_elapsed(15):
@@ -1191,7 +688,7 @@ class DesktopSession(threading.Thread):
             
     def send_init_session(self):
         #SEND ID        
-        sdataid=self._struct_h.pack(common.TOKEN_SESSION_ID)+TMP_str_to_bytes(self._id)
+        sdataid=self._struct_h.pack(common.TOKEN_SESSION_ID)+utils.str_to_bytes(self._id)
         self._send_bytes(sdataid)
     
         #START KEEP ALIVE MANAGER
@@ -1203,7 +700,7 @@ class DesktopSession(threading.Thread):
         spar.append(self._struct_hh.pack(common.TOKEN_SUPPORTED_FRAME,3))
         for sf in self._supported_frame:
             spar.append(self._struct_h.pack(sf))
-        self._send_bytes(TMP_bytes_join(spar))
+        self._send_bytes(utils.bytes_join(spar))
     
     
     def calc_stats(self):
@@ -1279,7 +776,7 @@ class DesktopSession(threading.Thread):
                 if self._quality_detect_wait<0:
                     self._quality_detect_wait=0                
                 perc = self._quality_detect_wait/self._quality_detect_counter.get_value()
-                #print(TMP_str_new(perc)
+                #print(utils.str_new(perc)
                 if perc>=0.7:
                     if self._quality_detect_value>0:
                         self._quality_detect_value-=1
@@ -1363,7 +860,7 @@ class DesktopSession(threading.Thread):
                         else:
                             self._ping_counter.reset()
                         self._ping_sent=True
-                        lst.append(self._struct_h.pack(common.TOKEN_FRAME_TIME)+TMP_str_to_bytes(TMP_str_new(time.time())))
+                        lst.append(self._struct_h.pack(common.TOKEN_FRAME_TIME)+utils.str_to_bytes(utils.str_new(time.time())))
                         lst.append(self._struct_hb.pack(2,1))
                         self._send_list_bytes(lst)
                         lst=[]
@@ -1377,7 +874,7 @@ class DesktopSession(threading.Thread):
                             self._stats_sent_size.append(int(len(sdata)))
                         else:
                             self._stats_sent_size[p]+=int(len(sdata))
-                        if TMP_bytes_get(sdata,2)==1:
+                        if utils.bytes_get(sdata,2)==1:
                             self._frame_distance+=1
                             if self._stats_sent_size[p]==3:
                                 self._stats_sent_size[p]=0
@@ -1388,10 +885,10 @@ class DesktopSession(threading.Thread):
                     finally:
                         self._semaphore_st.release()                    
                     if bsend:                    
-                        if TMP_bytes_get(sdata,2)==1:
-                            lst.append(self._struct_h.pack(common.TOKEN_FRAME_TIME)+TMP_str_to_bytes(TMP_str_new(time.time())))
+                        if utils.bytes_get(sdata,2)==1:
+                            lst.append(self._struct_h.pack(common.TOKEN_FRAME_TIME)+utils.str_to_bytes(utils.str_new(time.time())))
                         lst.append(sdata)
-                        #print("frame sent. Time: " + TMP_str_new(tm))
+                        #print("frame sent. Time: " + utils.str_new(tm))
                 elif tp==common.TOKEN_CURSOR:
                     if self._cursor_visible==True:
                         lst.append(sdata)
@@ -1428,7 +925,7 @@ class DesktopSession(threading.Thread):
                     self._process_encoder = ipc.Process("app_desktop.encoder", "ProcessEncoder", forcesubprocess=self._debug_forcesubprocess)
                     self._process_encoder_stream = self._process_encoder.start()
                     self._process_encoder_stream.set_read_timeout_function(self._strm_process_encoder_read_timeout)
-                    self._process_encoder_read_thread=threading.Thread(target=self._process_encoder_read, name="DesktopSessionProcessRead" + TMP_str_new(self._id))
+                    self._process_encoder_read_thread=threading.Thread(target=self._process_encoder_read, name="DesktopSessionProcessRead" + utils.str_new(self._id))
                     self._process_encoder_read_thread.start()
                                         
                 if self._process.get_status()=="started":                    
@@ -1566,6 +1063,12 @@ class DesktopSession(threading.Thread):
             raise Exception("Permission denied (inputs).")
         if s is not None:
             self._process.paste_text(self._monitor,s)
+            
+    def set_clipboard(self,t,d):
+        if not self._allow_inputs:
+            raise Exception("Permission denied (inputs).")
+        if t is not None and d is not None:
+            self._process.set_clipboard(self._monitor,t,d)
     
     def destroy(self):
         self._bdestroy=True             

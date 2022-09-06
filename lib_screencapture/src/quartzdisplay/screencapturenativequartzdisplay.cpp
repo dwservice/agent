@@ -69,8 +69,7 @@ int DWAScreenCaptureGetImage(void* capses){
 	rgbimage->sizechangearea=0;
 	rgbimage->sizemovearea=0;
 
-	int did = CGMainDisplayID();
-	CGImageRef image_ref = CGDisplayCreateImage(did);
+	CGImageRef image_ref = CGDisplayCreateImage(mainDisplayID);
 	if (image_ref==NULL){
 		return -4; //Identifica CGDisplayCreateImage failed
 	}
@@ -171,11 +170,13 @@ void DWAScreenCapturePaste(){
 }
 
 int DWAScreenCaptureGetClipboardText(wchar_t** wText){
-	return macInputs->getClipboardText(wText);
+	usleep(200000);
+	return macobjcGetClipboardText(wText);
 }
 
 void DWAScreenCaptureSetClipboardText(wchar_t* wText){
-	macInputs->setClipboardText(wText);
+	macobjcSetClipboardText(wText);
+	usleep(200000);
 }
 
 int DWAScreenCaptureGetCpuUsage(){
@@ -245,29 +246,32 @@ int DWAScreenCaptureGetMonitorsInfo(MONITORS_INFO* moninfo){
 		}
 	}*/
 
-
-
-	//wakeup
-	int did = CGMainDisplayID();
-	if (CGDisplayIsAsleep(did)){
-		io_registry_entry_t reg = IORegistryEntryFromPath(kIOMasterPortDefault, "IOService:/IOResources/IODisplayWrangler");
+	mainDisplayID = CGMainDisplayID();
+	//wakeup monitor
+	if (CGDisplayIsAsleep(mainDisplayID)){
+#if (MAC_OS_X_VERSION_MAX_ALLOWED < 120000)
+		#define kIOMainPortDefault kIOMasterPortDefault
+#endif
+		io_registry_entry_t reg = IORegistryEntryFromPath(kIOMainPortDefault, "IOService:/IOResources/IODisplayWrangler");
 		if (reg){
 			IORegistryEntrySetCFProperty(reg, CFSTR("IORequestIdle"), kCFBooleanFalse);
 		}
 		IOObjectRelease(reg);
 	}
 	moninfo->changed=0;
-	CGDisplayModeRef dmd = CGDisplayCopyDisplayMode(did);
+	CGDisplayModeRef dmd = CGDisplayCopyDisplayMode(mainDisplayID);
 	int wm = CGDisplayModeGetWidth(dmd);
 	int hm = CGDisplayModeGetHeight(dmd);
 	int w = wm;
 	int h = hm;
-	CGImageRef image_ref = CGDisplayCreateImage(did);
+	CGImageRef image_ref = CGDisplayCreateImage(mainDisplayID);
 	if (image_ref!=NULL){
 		CGDataProviderRef provider = CGImageGetDataProvider(image_ref);
 		CFDataRef dataref = CGDataProviderCopyData(provider);
 		w = CGImageGetWidth(image_ref);
 		h = CGImageGetHeight(image_ref);
+		CFRelease(dataref);
+		CGImageRelease(image_ref);
 	}
 	int p=0;
 	if (moninfo->count==0){
@@ -281,7 +285,7 @@ int DWAScreenCaptureGetMonitorsInfo(MONITORS_INFO* moninfo){
 		moninfo->monitor[p].changed=1;
 		moninfo->changed=1;
 		moninfo->count=1;
-		//addMonitorsInfo(moninfo,x,y,w,h,did);
+		//addMonitorsInfo(moninfo,x,y,w,h,mainDisplay);
 	}else if ((moninfo->monitor[p].width!=w) || (moninfo->monitor[p].height!=h)){
 			factx = (float)w/(float)wm;
 			facty = (float)h/(float)hm;
@@ -299,14 +303,28 @@ int DWAScreenCaptureGetMonitorsInfo(MONITORS_INFO* moninfo){
 bool DWAScreenCaptureLoad(){
 	cpuUsage=new MacCPUUsage();
 	macInputs=new MacInputs();
+	mainDisplayID=-1;
 	factx=-1;
 	facty=-1;
+	CFStringRef reasonForActivity=CFSTR("dwagent keep awake");
+	successIOPM1 = kIOReturnError;
+	successIOPM1 = IOPMAssertionCreateWithName(kIOPMAssertionTypeNoDisplaySleep, kIOPMAssertionLevelOn, reasonForActivity, &assertionIDIOPM1);
+	successIOPM2 = kIOReturnError;
+	successIOPM2 = IOPMAssertionCreateWithName(CFSTR("UserIsActive"), kIOPMAssertionLevelOn, reasonForActivity, &assertionIDIOPM2);
 	return true;
 }
 
 void DWAScreenCaptureUnload(){
 	delete cpuUsage;
 	delete macInputs;
+	if(successIOPM1 == kIOReturnSuccess) {
+		IOPMAssertionRelease(assertionIDIOPM1);
+		successIOPM1 = kIOReturnError;
+	}
+	if(successIOPM2 == kIOReturnSuccess) {
+		IOPMAssertionRelease(assertionIDIOPM2);
+		successIOPM2 = kIOReturnError;
+	}
 }
 
 

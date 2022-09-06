@@ -17,28 +17,7 @@ import subprocess
 import io
 import agent
 import json
-
-
-##### TO FIX 22/09/2021
-try:
-    TMP_bytes_to_str=utils.bytes_to_str
-    TMP_str_to_bytes=utils.str_to_bytes
-except:
-    TMP_bytes_to_str=lambda b, enc="ascii": b.decode(enc, errors="replace")
-    TMP_str_to_bytes=lambda s, enc="ascii": s.encode(enc, errors="replace")
-try:    
-    if sys.version_info[0]==2:        
-        if utils.path_exists(os.path.dirname(__file__) + os.sep + "__pycache__"):
-            utils.path_remove(os.path.dirname(__file__) + os.sep + "__pycache__")
-        if utils.path_exists(os.path.dirname(__file__) + os.sep + "os_win_pyconpty" + os.sep + "__pycache__"):
-            utils.path_remove(os.path.dirname(__file__) + os.sep + "os_win_pyconpty" + os.sep + "__pycache__")
-        if utils.path_exists(os.path.dirname(__file__) + os.sep + "os_win_pyconpty" + os.sep + "win32" + os.sep + "__pycache__"):
-            utils.path_remove(os.path.dirname(__file__) + os.sep + "os_win_pyconpty" + os.sep + "win32" + os.sep + "__pycache__")
-        
-except: 
-    None
-##### TO FIX 22/09/2021
-
+import native
 
 try:
     from .os_win_pyconpty import conpty
@@ -140,25 +119,10 @@ class ShellManager(threading.Thread):
         self._semaphore = threading.Condition()
         self._shell_list = {}
         self._websocket.accept(10,{"on_close": self._on_close,"on_data":self._on_data})
+                
+    def _decode_data(self,data):        
+        return utils.bytes_to_str(data,"utf8")
         
-        ##### TO FIX 22/09/2021
-        try:
-            import utils
-            utils.Bytes()
-            self._decode_data=self._decode_data_OLD
-        except:
-            self._decode_data=self._decode_data_NEW
-        ##### TO FIX 22/09/2021
-               
-    
-    ##### TO FIX 22/09/2021
-    def _decode_data_OLD(self,data):
-        return data.to_str("utf8")
-    
-    def _decode_data_NEW(self,data):        
-        return TMP_bytes_to_str(data,"utf8")
-    ##### TO FIX 22/09/2021
-    
     def get_id(self):
         return self._id
     
@@ -337,6 +301,7 @@ class LinuxMac():
     def get_id(self):
         return self._id
     
+    ##### TO REMOVE 20/08/2022 (moved into native)
     def _getutf8lang(self):
         altret=None
         try:
@@ -344,6 +309,7 @@ class LinuxMac():
             (po, pe) = p.communicate()
             p.wait()
             if len(po) > 0:
+                po = utils.bytes_to_str(po, "utf8")
                 ar = po.split("\n")[0].split("=")[1].split(".")
                 if ar[1].upper()=="UTF8" or ar[1].upper()=="UTF-8":
                     if ar[0].upper()=="C":
@@ -357,6 +323,7 @@ class LinuxMac():
             (po, pe) = p.communicate()
             p.wait()
             if len(po) > 0:
+                po = utils.bytes_to_str(po, "utf8")
                 arlines = po.split("\n")
                 for r in arlines:
                     ar = r.split(".")
@@ -376,6 +343,7 @@ class LinuxMac():
         except:
             None
         return altret
+    ##### TO REMOVE 20/08/2022 (moved into native)
     
     def initialize(self):        
         ppid, pio = pty.fork()
@@ -393,9 +361,14 @@ class LinuxMac():
             applng=os.environ.get('LANG')
             if applng is not None:
                 if not (applng.upper().endswith(".UTF8") or applng.upper().endswith(".UTF-8")):
-                    applng=None
+                    applng=None                    
             if applng is None:
-                applng = self._getutf8lang()
+                ##### TO FIX 20/08/2022                
+                if hasattr(native.get_instance(), "get_utf8_lang"):
+                    applng = native.get_instance().get_utf8_lang()
+                else:
+                    applng = self._getutf8lang()
+                ##### TO FIX 20/08/2022
             if applng is not None:                
                 env["LANG"] = applng
             env["PYTHONIOENCODING"] = "utf_8"
@@ -480,7 +453,7 @@ class LinuxMac():
             return
         if self._bterm == None:
             return
-        self._writer.write(TMP_str_to_bytes(c,self._rwenc))
+        self._writer.write(utils.str_to_bytes(c,self._rwenc))
         self._writer.flush()
 
     def read_update(self):
@@ -494,7 +467,7 @@ class LinuxMac():
         #output=self._reader.read(self._rows*self._cols)
         s = self._reader.read()
         if s is not None:
-            return TMP_bytes_to_str(s,self._rwenc)
+            return utils.bytes_to_str(s,self._rwenc)
         else:
             return s        
 
@@ -554,7 +527,7 @@ class Windows():
         #return self._pty.read()
         bt = self._pty.read()
         if bt is not None and len(bt)>0:
-            return TMP_bytes_to_str(bt, self._rwenc)            
+            return utils.bytes_to_str(bt, self._rwenc)            
         else:
             return bt
         

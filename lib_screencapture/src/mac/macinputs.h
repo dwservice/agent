@@ -22,9 +22,6 @@ public:
     void mouse(MONITORS_INFO_ITEM* moninfoitem, int x, int y, int factx, int facty, int button, int wheel, bool ctrl, bool alt, bool shift, bool command);
     void copy();
     void paste();
-    int getClipboardText(wchar_t** wText);
-    void setClipboardText(wchar_t* wText);
-
 
 private:
     CGKeyCode keyCodeForCharWithLayout(const char c, const UCKeyboardLayout *uchrHeader);
@@ -45,6 +42,6 @@ private:
 
 };
 
-#endif /* LINUXINPUTS_H_ */
+#endif /* MACINPUTS_H_ */
 #endif
 

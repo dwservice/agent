@@ -16,7 +16,7 @@ class Compile(compile_generic.Compile):
         if osn=="mac":
             conf={}
             conf["outname"]="dwagscreencapturequartzdisplay.dylib" 
-            conf["frameworks"]=["ApplicationServices","SystemConfiguration","IOKit","Carbon"]
+            conf["frameworks"]=["ApplicationServices","SystemConfiguration","IOKit","Carbon","AppKit"]
             conf["cpp_compiler_flags"]="-DOS_QUARZDISPLAY"
         return conf
     

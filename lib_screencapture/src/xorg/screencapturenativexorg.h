@@ -69,7 +69,8 @@ XRRScreenResources* (*callXRRGetScreenResourcesCurrent)(Display *dpy, Window win
 XRRCrtcInfo* (*callXRRGetCrtcInfo)(Display *dpy, XRRScreenResources *resources, RRCrtc crtc);
 void (*callXRRFreeScreenResources) (XRRScreenResources *resources);
 void (*callXRRFreeCrtcInfo) (XRRCrtcInfo *crtcInfo);
-
+void handleXEvents();
+bool stringEndsWith(string const &str, string const &suffix);
 
 Display *xdpy;
 Window root;
@@ -79,6 +80,7 @@ Screen *screen;
 void *handleXrandr;
 bool damageok;
 Damage damage;
+XserverRegion damageregion;
 int damageevent;
 bool damageareachanged;
 int damageareax;
@@ -88,6 +90,16 @@ int damageareah;
 bool xfixesok;
 bool xfixeschanged;
 int xfixesevent;
+
+Window fakewindow;
+Atom atomStrTp;
+Atom atomClipboard;
+Atom atomXSelData;
+Atom atomTargets;
+Atom atomText;
+wstring copytxt;
+bool copyok;
+wstring pastetxt;
 
 LinuxCPUUsage* cpuUsage;
 LinuxInputs* linuxInputs;

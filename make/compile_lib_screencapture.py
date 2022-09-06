@@ -37,7 +37,7 @@ class Compile(compile_generic.Compile):
             conf["cpp_library_paths"]=conf["cpp_include_paths"]
             conf["libraries"]=["z", "turbojpeg"]
             #conf["frameworks"]=["IOKit","Carbon"]
-            conf["frameworks"]=["SystemConfiguration","IOKit","Carbon"] #TO REMOVE 16/08/2021 (SystemConfiguration)
+            conf["frameworks"]=["SystemConfiguration","IOKit","Carbon","AppKit"] #TO REMOVE 16/08/2021 (SystemConfiguration)
             conf["cpp_compiler_flags"]="-DOS_MAIN"
         return conf
         

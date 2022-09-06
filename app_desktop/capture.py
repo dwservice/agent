@@ -19,30 +19,6 @@ import platform
 import struct
 from . import common
 
-
-##### TO FIX 22/09/2021
-import zlib
-TMP_zlib_compress=lambda b: zlib.compress(b)
-try:
-    TMP_bytes_to_str=utils.bytes_to_str
-    TMP_str_to_bytes=utils.str_to_bytes
-    TMP_str_new=utils.str_new
-    TMP_bytes_new=utils.bytes_new    
-except:
-    TMP_bytes_to_str=lambda b, enc="ascii": b.decode(enc, errors="replace")
-    TMP_str_to_bytes=lambda s, enc="ascii": s.encode(enc, errors="replace")
-    def TMP_py2_str_new(o):
-        if isinstance(o, unicode):
-            return o 
-        elif isinstance(o, str):
-            return o.decode("utf8", errors="replace")
-        else:
-            return str(o).decode("utf8", errors="replace")
-    TMP_str_new=TMP_py2_str_new
-    TMP_bytes_new=str
-##### TO FIX 22/09/2021
-
-
 class ProcessCaptureScreen(threading.Thread):
     def __init__(self, cprc, args):
         threading.Thread.__init__(self,  name="ProcessCaptureScreen")
@@ -206,7 +182,26 @@ class ProcessCaptureScreen(threading.Thread):
                     bcommand=False
                     if len(prms)==7:
                         bcommand=(prms[6]=="true")
-                    self._screen_module.DWAScreenCaptureInputKeyboard(TMP_str_to_bytes(prms[1]), TMP_str_to_bytes(prms[2]), prms[3]=="true", prms[4]=="true", prms[5]=="true", bcommand)
+                    self._screen_module.DWAScreenCaptureInputKeyboard(utils.str_to_bytes(prms[1]), utils.str_to_bytes(prms[2]), prms[3]=="true", prms[4]=="true", prms[5]=="true", bcommand)
+                elif prms[0]==u"COPY":
+                    apps = None
+                    self._screen_module.DWAScreenCaptureCopy()
+                    pi = ctypes.c_void_p()
+                    iret = self._screen_module.DWAScreenCaptureGetClipboardText(ctypes.byref(pi))
+                    if iret>0:
+                        apps = ctypes.wstring_at(pi,size=iret)
+                        self._screen_module.DWAScreenCaptureFreeMemory(pi)
+                    if apps is None:
+                        apps = u""
+                    self._process._stream.write_obj({u"request": u"COPY_TEXT", u"text":apps})
+                elif prms[0]==u"PASTE":
+                    stxt=ips[i][6:]
+                    self._screen_module.DWAScreenCaptureSetClipboardText(ctypes.c_wchar_p(utils.str_new(stxt)))
+                    self._screen_module.DWAScreenCapturePaste()
+                elif prms[0]==u"SET_CLIPBOARD":
+                    stxt=ips[i][14:]
+                    stxt=stxt[5:] #REMOVE type (text)
+                    self._screen_module.DWAScreenCaptureSetClipboardText(ctypes.c_wchar_p(utils.str_new(stxt)))
             except:
                 ex = utils.get_exception()
                 self._process._debug_print(utils.exception_to_string(ex))
@@ -217,21 +212,14 @@ class ProcessCaptureScreen(threading.Thread):
             self._inputs_list.append([mon,ips])
     
     def copy_text(self,imon):
-        apps = None
-        self._screen_module.DWAScreenCaptureCopy()
-        pi = ctypes.c_void_p()
-        iret = self._screen_module.DWAScreenCaptureGetClipboardText(ctypes.byref(pi))
-        if iret>0:
-            apps = ctypes.wstring_at(pi,size=iret)
-            self._screen_module.DWAScreenCaptureFreeMemory(pi)
-        if apps is None:
-            apps = u""
-        self._process._stream.write_obj({u"request": u"COPY_TEXT", u"text":apps})
+        self._inputs_list.append([imon,[u"COPY"]])        
         
     def paste_text(self,imon,stxt):
-        self._screen_module.DWAScreenCaptureSetClipboardText(ctypes.c_wchar_p(TMP_str_new(stxt)))
-        self._screen_module.DWAScreenCapturePaste()
-    
+        self._inputs_list.append([imon,[u"PASTE," + stxt]])
+        
+    def set_clipboard(self,imon,stp,sdt):
+        self._inputs_list.append([imon,[u"SET_CLIPBOARD," + stp + u"," + sdt]])
+            
     #TMP PRIVACY MODE
     def set_privacy_mode(self, b):
         try:
@@ -378,7 +366,7 @@ class ProcessCaptureScreen(threading.Thread):
                                 memmap.seek(curpos)
                                 memmap.write(self._curimage)
                                 if self._curimage.changed==1:
-                                    cdt = TMP_zlib_compress((ctypes.c_char*self._curimage.sizedata).from_address(self._curimage.data))
+                                    cdt = utils.zlib_compress((ctypes.c_char*self._curimage.sizedata).from_address(self._curimage.data))
                                     if len(cdt)<common.MAX_CURSOR_IMAGE_SIZE:
                                         self._curid+=1
                                         memmap.write(self._struct_Q.pack(self._curid))                                    
@@ -545,7 +533,7 @@ class ProcessCaptureSound(threading.Thread):
     def cb_sound_data(self, sz, pdata):
         if self._status=="O" and sz>0:
             try:
-                sdata = TMP_bytes_new(pdata[0:sz])
+                sdata = utils.bytes_new(pdata[0:sz])
                 self._cond.acquire()
                 try:
                     self._memmap.seek(0)
@@ -608,7 +596,7 @@ class ProcessCaptureSound(threading.Thread):
                                         bf = ctypes.create_string_buffer(2048)
                                         l = self._sound_module.DWASoundCaptureGetDetectOutputName(capses,bf,2048);
                                         if l>0:
-                                            sodn=bf.value[0:l]
+                                            sodn=utils.bytes_to_str(bf.value[0:l],"utf8")
                                         else:
                                             sodn=""
                                         if "SOUNDFLOWER" not in sodn.upper():
@@ -676,6 +664,9 @@ class ProcessCaptureStdRedirect(object):
     def write(self, data):
         for line in data.rstrip().splitlines():
             self._logger.log(self._level, line.rstrip())
+    
+    def flush(self):
+        None
 
 class ProcessCapture(ipc.ChildProcessThread):
     
@@ -683,8 +674,7 @@ class ProcessCapture(ipc.ChildProcessThread):
         common._libmap["captureprocess"]=self
         self._semaphore = threading.Condition()
         self._screen_thread= None
-        self._sound_thread= None
-        self._last_copy_text=""
+        self._sound_thread= None        
         self._write_lock=threading.RLock()
         self._debug_logprocess=False
         self._dbgenable=False 
@@ -697,7 +687,7 @@ class ProcessCapture(ipc.ChildProcessThread):
     
     def _debug_print(self,s):
         if self._dbgenable:
-            print(TMP_str_new(s))
+            print(utils.str_new(s))
                 
     def cb_screen_debug_print(self, s):
         self._debug_print("DESKTOPNATIVE@" + s)
@@ -776,6 +766,8 @@ class ProcessCapture(ipc.ChildProcessThread):
                         self._screen_thread.copy_text(joreq["monitor"])
                     elif sreq==u"PASTE_TEXT":
                         self._screen_thread.paste_text(joreq["monitor"],joreq["text"])
+                    elif sreq==u"SET_CLIPBOARD":
+                        self._screen_thread.set_clipboard(joreq["monitor"],joreq["type"],joreq["data"])
                     else:
                         raise Exception(u"Request '" + sreq + u"' is not valid.")
                 except:
