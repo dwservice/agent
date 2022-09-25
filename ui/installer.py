@@ -1922,6 +1922,8 @@ class Install:
                     return self.step_configure_proxy_type(curui)
         
         if self._silent:
+            if gdi.is_mac():
+                time.sleep(10) #silent install on Mac 
             if "key" in self._options:
                 self._inatall_agent_mode="installCode"
                 self._install_code.set(self._options["key"])

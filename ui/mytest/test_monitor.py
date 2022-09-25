@@ -18,6 +18,7 @@ if __name__ == "__main__":
         
     monitor.Main.set_instance(main)
     main.start("window")
+    #main.start("systray")
     sys.exit(0)
             
 

@@ -78,12 +78,8 @@ class IPCStatus(threading.Thread):
             try:
                 self._prop.set_property("counter", str(self._cnt))
                 self._prop.set_property("state", str(self._agent.get_status()))
-                sapp = self._agent.get_group()
-                if sapp is None:
-                    sapp=""
-                if utils.is_py2():
-                    sapp=sapp.encode("unicode-escape");
-                self._prop.set_property("group", sapp)
+                
+                self._prop.set_property("group", "") #TO REMOVE 2022-09-13
                 
                 sapp = self._agent.get_name()
                 if sapp is None:

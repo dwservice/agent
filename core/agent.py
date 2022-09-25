@@ -115,6 +115,7 @@ def write_config_file(jo):
 class Agent():
     _STATUS_OFFLINE = 0
     _STATUS_ONLINE = 1
+    _STATUS_ONLINE_DISABLE = 2
     _STATUS_DISABLE = 3
     _STATUS_UPDATING = 10
     _CONNECTION_TIMEOUT= 60
@@ -180,13 +181,13 @@ class Agent():
         self._agent_enabled = True
         self._agent_missauth = False
         self._agent_status = self._STATUS_OFFLINE
-        self._agent_group = None
         self._agent_name = None
         self._agent_debug_mode = False
         self._agent_url_primary = None
         self._agent_key = None
         self._agent_password = None
         self._agent_server = None
+        self._agent_server_state = ""
         self._agent_port= None
         self._agent_method_connect_port= None
         self._agent_instance= None
@@ -251,9 +252,6 @@ class Agent():
     
     def get_osmodule(self):
         return self._osmodule 
-    
-    def get_group(self):
-        return self._agent_group
     
     def get_name(self):
         return self._agent_name    
@@ -356,11 +354,8 @@ class Agent():
                 self.write_info("Error reading agentUrlPrimary: " + utils.exception_to_string(e))
                 return False
                 
-            appst = get_prop(prp_url, 'state', None)
-            if appst=="D":
-                self.write_info("Agent disabled.")
-                return False
-            elif appst=="S":
+            self._agent_server_state = get_prop(prp_url, 'state', None)
+            if self._agent_server_state=="S":
                 self.write_info("Agent suppressed.")
                 if not self._runonfly:
                     self.remove_key()
@@ -1385,9 +1380,12 @@ class Agent():
             m["supportedKeepAlive"]=True
             m["supportedPingStats"]=False
             m["supportedRecovery"]=self.get_config_str('recovery_session')
-            self._agent_conn.send_message(m)
-            self._agent_status = self._STATUS_ONLINE
-            self.write_info("Initialized agent (key: " + self._agent_key + ", node: " + self._agent_server + ")." )
+            self._agent_conn.send_message(m)            
+            self.write_info("Initialized agent (key: " + self._agent_key + ", node: " + self._agent_server + ").")
+            if self._agent_server_state=="D":
+                self._agent_status = self._STATUS_ONLINE_DISABLE
+            else:
+                self._agent_status = self._STATUS_ONLINE
             if self._runonfly:
                 self._update_onfly_status("CONNECTED")
                 self._runonfly_conn_retry=0
@@ -2353,8 +2351,12 @@ class AgentConn(Message):
                 if conn_rcr is not None:
                     self._conn.set_recovery_conf(conn_rcr)
             elif msg_name=="updateInfo":
-                if "agentGroup" in msg:
-                    self._agent._agent_group=msg["agentGroup"]
+                if "state" in msg:
+                    self._agent._agent_server_state=msg["state"]
+                    if self._agent._agent_server_state=="D":
+                        self._agent._agent_status = self._agent._STATUS_ONLINE_DISABLE
+                    else:
+                        self._agent._agent_status = self._agent._STATUS_ONLINE
                 if "agentName" in msg:
                     self._agent._agent_name=msg["agentName"]
             elif msg_name=="keepAlive":

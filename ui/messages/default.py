@@ -54,7 +54,7 @@ data={
     'configureUninstallKeyQuestion':u'Uninstall the current installation code?',
     'configureUninstallationKey':u'Uninstallation...',
     'confirmExit':u'Are you sure you want to exit?',
-    'confirmInstall':u'Would you want install DWAgent to \'{0}\'?',
+    'confirmInstall':u'Do you want to install DWAgent to \'{0}\'?',
     'confirmUninstall':u'Do you want remove DWAgent?',
     'copyFiles':u'Copying files...',
     'createNewAgent':u'Agent creation in progress...',

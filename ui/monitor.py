@@ -42,6 +42,7 @@ MENU_CONFIGURE = 21
 
 COLOR_NOSERVICE="949494"
 COLOR_ONLINE="259126"
+COLOR_ONLINE_DISABLE="e08803"
 COLOR_OFFLINE="949494"
 COLOR_UPDATING="bfba34"
 COLOR_DISABLE="c21b1a"
@@ -496,12 +497,6 @@ class Main():
                     self._status_cnt=cnt                
                     ret["state"] = self._ipc_client.get_property("state")
                     try:
-                        ret["group"] = self._ipc_client.get_property("group")
-                        if utils.is_py2():
-                            ret["group"]=ret["group"].decode("unicode-escape")
-                    except:
-                        None
-                    try:
                         ret["name"] = self._ipc_client.get_property("name")
                         if utils.is_py2():
                             ret["name"]=ret["name"].decode("unicode-escape")
@@ -585,6 +580,9 @@ class Main():
         appar = self.get_info()
         s=appar["state"]
         newst=""
+        newnm=""
+        if "name" in appar:
+            newnm=appar["name"]
         if s=='0': #STATUS_OFFLINE 
             newst="OFFLINE"
             self.msgst=self._get_message('monitorStatusOffline')
@@ -595,6 +593,11 @@ class Main():
             self.msgst=self._get_message('monitorStatusOnline')
             bground=COLOR_ONLINE
             self.icofile="monitor_green"
+        elif s=='2': #STATUS_ONLINE_DISABLE
+            newst="ONLINE_DISABLE"
+            self.msgst=self._get_message('monitorStatusOnline') + " (" + self._get_message('monitorStatusDisabled') + ")"
+            bground=COLOR_ONLINE_DISABLE
+            self.icofile="monitor_orange"
         elif s=='3': #STATUS_DISABLE 
             newst="DISABLE"
             self.msgst=self._get_message('monitorStatusDisabled')
@@ -626,7 +629,7 @@ class Main():
                 if curact[k]!=self._cur_activities[k]:
                     bchgact=True
                     break;
-        if newst != self._cur_status or bchgact is True:
+        if newst != self._cur_status or newnm != self._cur_agent_name or bchgact is True:
             self._cur_status=newst 
             self._cur_activities=curact
             self._reload_activities=False
@@ -636,14 +639,13 @@ class Main():
                 self._img_status_bottom.set_background_gradient(bground,"ffffff",gdi.GRADIENT_DIRECTION_BOTTONTOP)
             apptx=[]
             bexline=False
-            if "group" in appar and appar["group"]!="":
-                apptx.append(appar["group"])
-                apptx.append(u"\n")
-                bexline=True
             if "name" in appar and appar["name"]!="":
+                self._cur_agent_name=appar["name"]
                 apptx.append(appar["name"])
                 apptx.append(u"\n")
-                bexline=True            
+                bexline=True
+            else:
+                self._cur_agent_name=""
             if bexline is True:
                 apptx.append(u"\n")
             apptx.append(self.msgst)
@@ -1279,6 +1281,7 @@ class Main():
         self._update=False
         self._cur_status="NOSERVICE"
         self._cur_activities=None
+        self._cur_agent_name=""
         self._bstop=False
         
         if mode=="info":
