@@ -1,0 +1,20 @@
+#!/sbin/openrc-run
+
+name="@NAME@"
+
+depend() {
+        use net
+        use dns
+}
+
+start(){
+        "@PATH_DWA@/native/dwagsvc" start
+}
+
+stop(){
+        "@PATH_DWA@/native/dwagsvc" stop
+}
+
+status(){
+        "@PATH_DWA@/native/dwagsvc" status
+}

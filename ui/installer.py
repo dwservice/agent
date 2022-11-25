@@ -160,7 +160,14 @@ class NativeLinux:
             utils.path_rename(fdwagent,pth + utils.path_sep  + self._name.lower() + u".service")
             fdwagent=pth + utils.path_sep  + self._name.lower() + u".service"
         self.replace_key_file(fdwagent, lstrepl)
-        utils.path_change_permissions(fdwagent,  stat.S_IRUSR + stat.S_IWUSR + stat.S_IRGRP + stat.S_IROTH)
+        utils.path_change_permissions(fdwagent,  stat.S_IRUSR + stat.S_IWUSR + stat.S_IRGRP + stat.S_IROTH)        
+        fdwagent=pth + utils.path_sep + u"dwagent.openrc"
+        if self._name.lower()!=u"dwagent":
+            utils.path_rename(fdwagent,pth + utils.path_sep  + self._name.lower() + u".openrc")
+            fdwagent=pth + utils.path_sep  + self._name.lower() + u".openrc"
+        self.replace_key_file(fdwagent, lstrepl)
+        utils.path_change_permissions(fdwagent,  stat.S_IRWXU + stat.S_IRGRP + stat.S_IROTH)
+        
     
     def prepare_file_sh(self, pth):
         lstrepl = self.get_replace_list()        

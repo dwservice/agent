@@ -99,7 +99,7 @@ install_updatercd(){
 
 install_openrc(){
 	if [ ! -f /etc/init.d/@EXE_NAME@ ]; then
-		ln -s "${PATH_DWA_NATIVE}/dwagsvc" /etc/init.d/@EXE_NAME@
+		cp "${PATH_DWA_NATIVE}/dwagent.openrc" /etc/init.d/@EXE_NAME@
 		if [ $? -eq 0 ]; then
 			rc-update add @EXE_NAME@
 			if [ $? -eq 0 ]; then
