@@ -24,6 +24,7 @@ HINSTANCE WindowsLoadLib::user32dll=NULL;
 ISetProcessDPIAware WindowsLoadLib::setProcessDPIAwareFunc=NULL;
 IGetWindowDisplayAffinity WindowsLoadLib::getWindowDisplayAffinityFunc=NULL;
 ISetWindowDisplayAffinity WindowsLoadLib::setWindowDisplayAffinityFunc=NULL;
+IAddClipboardFormatListener WindowsLoadLib::addClipboardFormatListenerFunc=NULL;
 
 //SAS LIB
 HINSTANCE WindowsLoadLib::sasdll;
@@ -64,6 +65,7 @@ WindowsLoadLib::WindowsLoadLib(){
 			WindowsLoadLib::setProcessDPIAwareFunc = (ISetProcessDPIAware)GetProcAddress(user32dll, "SetProcessDPIAware");
 			WindowsLoadLib::getWindowDisplayAffinityFunc = (IGetWindowDisplayAffinity)GetProcAddress(user32dll, "GetWindowDisplayAffinity");
 			WindowsLoadLib::setWindowDisplayAffinityFunc = (ISetWindowDisplayAffinity)GetProcAddress(user32dll, "SetWindowDisplayAffinity");
+			WindowsLoadLib::addClipboardFormatListenerFunc = (IAddClipboardFormatListener)GetProcAddress(user32dll, "AddClipboardFormatListener");
 		}
 
 		//SAS LIB
@@ -185,6 +187,10 @@ IGetWindowDisplayAffinity WindowsLoadLib::GetWindowDisplayAffinityFunc(){
 
 ISetWindowDisplayAffinity WindowsLoadLib::SetWindowDisplayAffinityFunc(){
 	return WindowsLoadLib::setWindowDisplayAffinityFunc;
+}
+
+IAddClipboardFormatListener WindowsLoadLib::AddClipboardFormatListenerFunc(){
+	return WindowsLoadLib::addClipboardFormatListenerFunc;
 }
 
 //SAS LIB

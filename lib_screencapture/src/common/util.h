@@ -98,6 +98,12 @@ typedef struct{
 	char* data;
 } CURSOR_TYPE;
 
+typedef struct {
+	int type;
+	long sizedata;
+	unsigned char* data;
+} CLIPBOARD_DATA;
+
 int intToArray(unsigned char* buffer,int p,int i);
 int byteArrayToInt(unsigned char* buffer,int p);
 int shortToArray(unsigned char* buffer,int p,short s);

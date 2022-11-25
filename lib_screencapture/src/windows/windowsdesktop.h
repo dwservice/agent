@@ -7,8 +7,11 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 using namespace std;
 #include "windowsloadlib.h"
 #include <windows.h>
-#include "../common/dwdebugger.h"
 #include <string>
+#include "../common/util.h"
+#include "../common/logger.h"
+#include "../common/timecounter.h"
+
 
 #ifndef WINDOWSDESKTOP_H_
 #define WINDOWSDESKTOP_H_
@@ -25,6 +28,9 @@ public:
     void destroy();
     void ctrlaltcanc();
     void monitorON();
+    void getClipboardChanges(CLIPBOARD_DATA* clipboardData);
+    void setClipboard(CLIPBOARD_DATA* clipboardData);
+    void clearClipboardXP();
 
 private:
     WindowsLoadLib* loadLibWin;
@@ -32,11 +38,15 @@ private:
     OSVERSIONINFOEX m_osVerInfo;
     bool runAsElevated;
     HWND hwndwts;
-
     BOOL CALLBACK checkLayered(HWND hWnd, LPARAM lParam);
     HDESK getInputDesktop();
     HDESK getDesktop(char* name);
+    bool isWinNTFamily();
+	bool isWinXP();
     bool selectDesktop(char* name);
+    bool bclipboardchanged;
+    TimeCounter tcclipboardxp;
+    wchar_t* oldclipboardxp;
 };
 
 #endif /* WINDOWSDESKTOP_H_ */

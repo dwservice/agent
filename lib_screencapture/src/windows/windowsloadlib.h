@@ -29,6 +29,7 @@ typedef VOID (WINAPI *ISetProcessDpiAwareness )(int v);
 typedef VOID (WINAPI *ISetProcessDPIAware)();
 typedef BOOL (WINAPI *IGetWindowDisplayAffinity)(HWND, DWORD*);
 typedef BOOL (WINAPI *ISetWindowDisplayAffinity)(HWND, DWORD);
+typedef BOOL (WINAPI *IAddClipboardFormatListener)(HWND);
 
 //USER32 LIB
 typedef VOID (WINAPI *ISendSas)(BOOL asUser); 
@@ -72,6 +73,7 @@ public:
 	ISetProcessDPIAware SetProcessDPIAwareFunc();
 	IGetWindowDisplayAffinity GetWindowDisplayAffinityFunc();
 	ISetWindowDisplayAffinity SetWindowDisplayAffinityFunc();
+	IAddClipboardFormatListener AddClipboardFormatListenerFunc();
 
 	//SAS LIB
 	bool isAvailableSas();
@@ -106,6 +108,7 @@ private:
 	static ISetProcessDPIAware setProcessDPIAwareFunc;
 	static IGetWindowDisplayAffinity getWindowDisplayAffinityFunc;
 	static ISetWindowDisplayAffinity setWindowDisplayAffinityFunc;
+	static IAddClipboardFormatListener addClipboardFormatListenerFunc;
 
 	//SAS LIB
 	static HINSTANCE sasdll;	

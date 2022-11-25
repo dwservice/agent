@@ -56,7 +56,12 @@ WindowsDesktop::WindowsDesktop(){
 	if (!GetVersionEx((OSVERSIONINFO*)&m_osVerInfo)){
 		m_osVerInfo.dwOSVersionInfoSize = 0;
 	}
+	if (isWinXP()){
+		tcclipboardxp = TimeCounter();
+		oldclipboardxp = NULL;
+	}
 	runAsElevated=false;
+	bclipboardchanged=false;
 	wcsncpy(prevDesktopName,L"",0);
 	hwndwts=NULL;
 	loadLibWin = new WindowsLoadLib();
@@ -73,6 +78,7 @@ WindowsDesktop::WindowsDesktop(){
 }
 
 WindowsDesktop::~WindowsDesktop(){
+	clearClipboardXP();
 	if (hwndwts){
 		SendMessage(hwndwts, WM_DESTROY, 0, 0);
 		hwndwts=NULL;
@@ -80,18 +86,35 @@ WindowsDesktop::~WindowsDesktop(){
 	delete loadLibWin;
 }
 
+bool WindowsDesktop::isWinNTFamily() {
+	return m_osVerInfo.dwPlatformId == VER_PLATFORM_WIN32_NT;
+}
+
+bool WindowsDesktop::isWinXP() {
+	return ((m_osVerInfo.dwMajorVersion == 5) && (m_osVerInfo.dwMinorVersion == 1) && isWinNTFamily());
+}
+
+void WindowsDesktop::clearClipboardXP(){
+	if (isWinXP()){
+		if (oldclipboardxp!=NULL){
+			free(oldclipboardxp);
+			oldclipboardxp=NULL;
+		}
+	}
+}
+
 LRESULT CALLBACK WindowsDesktop::windowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
 	switch(msg){
 		case  WM_CREATE:
-			//debugger.print((char *)"WM_CREATE");
+			//DWALoggerWriteDebug(L"WM_CREATE");
 			//disableVisualEffect
 		break;
 		case  WM_QUERYENDSESSION:
-			//debugger.print((char *)"WM_QUERYENDSESSION");
+			//DWALoggerWriteDebug(L"WM_QUERYENDSESSION");
 			//restoreVisualEffect
 		break;
 		case  WM_ENDSESSION:
-			//debugger.print((char *)"WM_ENDSESSION");
+			//DWALoggerWriteDebug(L"WM_ENDSESSION");
 			//restoreVisualEffect
 		break;
 		case  WM_WTSSESSION_CHANGE:
@@ -108,39 +131,43 @@ LRESULT CALLBACK WindowsDesktop::windowProc(HWND hwnd, UINT msg, WPARAM wParam, 
 			*/
 			switch(wParam){
 				case 0x1:	//#define WTS_CONSOLE_CONNECT
-					//debugger.print((char *)"WTS_CONSOLE_CONNECT");
+					//DWALoggerWriteDebug(L"WTS_CONSOLE_CONNECT");
 				break;
 				case 0x2:	//#define WTS_CONSOLE_DISCONNECT
-					//debugger.print((char *)"WTS_CONSOLE_DISCONNECT");
+					//DWALoggerWriteDebug(L"WTS_CONSOLE_DISCONNECT");
 				break;
 				case 0x3:	//#define WTS_REMOTE_CONNECT
-					//debugger.print((char *)"WTS_REMOTE_CONNECT");
+					//DWALoggerWriteDebug(L"WTS_REMOTE_CONNECT");
 				break;
 				case 0x4:	//#define WTS_REMOTE_DISCONNECT
-					//debugger.print((char *)"WTS_REMOTE_DISCONNECT");
+					//DWALoggerWriteDebug(L"WTS_REMOTE_DISCONNECT");
 					/////restoreVisualEffect
 				break;
 				case 0x5:	//#define WTS_SESSION_LOGON
-					//debugger.print((char *)"WTS_SESSION_LOGON");
+					//DWALoggerWriteDebug(L"WTS_SESSION_LOGON");
 					//disableVisualEffect
 				break;
 				case 0x6:	//#define WTS_SESSION_LOGOFF
-					//debugger.print((char *)"WTS_SESSION_LOGOFF");
+					//DWALoggerWriteDebug(L"WTS_SESSION_LOGOFF");
 					//restoreVisualEffect
 				break;
 				case 0x7:	//#define WTS_SESSION_LOCK
-					//debugger.print((char *)"WTS_SESSION_LOCK");
+					//DWALoggerWriteDebug(L"WTS_SESSION_LOCK");
 				break;
 				case 0x8:	//#define WTS_SESSION_UNLOCK
-					//debugger.print((char *)"WTS_SESSION_UNLOCK");
+					//DWALoggerWriteDebug(L"WTS_SESSION_UNLOCK");
 				break;
 				case 0x9:	//#define WTS_SESSION_REMOTE_CONTROL
-					//debugger.print((char *)"WTS_SESSION_REMOTE_CONTROL");
+					//DWALoggerWriteDebug(L"WTS_SESSION_REMOTE_CONTROL");
 				break;
 			}
 		break;
+		case WM_CLIPBOARDUPDATE:
+			//DWALoggerWriteDebug(L"WM_CLIPBOARDUPDATE");
+			bclipboardchanged=true;
+		break;
 		case WM_DESTROY:
-			//debugger.print((char *)"WM_DESTROY");
+			//DWALoggerWriteDebug(L"WM_DESTROY");
 			//restoreVisualEffect
 			if (loadLibWin->WTSUnRegisterSessionNotificationFunc()) {
 				loadLibWin->WTSUnRegisterSessionNotificationFunc()(hwnd);
@@ -152,7 +179,7 @@ LRESULT CALLBACK WindowsDesktop::windowProc(HWND hwnd, UINT msg, WPARAM wParam, 
 }
 
 DWORD WINAPI WindowsDesktop::createWindow(){
-	//CREA FINESTRA
+	//CREATE WINDOWS
 	WNDCLASSEX wc;
 	HINSTANCE hInstance = GetModuleHandle(NULL);
 	wc.cbSize        = sizeof(WNDCLASSEX);
@@ -168,20 +195,25 @@ DWORD WINAPI WindowsDesktop::createWindow(){
 	wc.lpszClassName = "dwascreencapture";
 	wc.hIconSm       = NULL;
 
-	if(RegisterClassEx(&wc)){
-		hwndwts=CreateWindowEx(0, "dwascreencapture",  "dwascreencapture", WS_EX_PALETTEWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 100, 100, NULL, NULL, hInstance, NULL);
-		if (hwndwts!=NULL){
-			SetWindowLongPtr(hwndwts, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
-			if (loadLibWin->WTSRegisterSessionNotificationFunc()) {
-				loadLibWin->WTSRegisterSessionNotificationFunc()(hwndwts,0);
-			}
-			UpdateWindow(hwndwts);
-			//ShowWindow(hwndwts, SW_SHOW);
-		}else{
-			//debugger.print((char *)"CreateWindowEx Failed");
+	RegisterClassEx(&wc);
+
+	hwndwts=CreateWindowEx(0, "dwascreencapture",  "dwascreencapture", WS_EX_PALETTEWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 100, 100, NULL, NULL, hInstance, NULL);
+	if (hwndwts!=NULL){
+		SetWindowLongPtr(hwndwts, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+		if (loadLibWin->WTSRegisterSessionNotificationFunc()) {
+			loadLibWin->WTSRegisterSessionNotificationFunc()(hwndwts,0);
 		}
+
+		if (!isWinXP()){
+			if (loadLibWin->AddClipboardFormatListenerFunc()) {
+				loadLibWin->AddClipboardFormatListenerFunc()(hwndwts);
+			}
+		}
+
+		UpdateWindow(hwndwts);
+		//ShowWindow(hwndwts, SW_SHOW);
 	}else{
-		//debugger.print((char *)"RegisterClassEx Failed");
+		//DWALoggerWriteDebug(L"CreateWindowEx Failed");
 	}
 	if (hwndwts!=NULL){
 		MSG messages;
@@ -207,7 +239,7 @@ void WindowsDesktop::monitorON(){
 
 int WindowsDesktop::setCurrentThread(){ //0 NOT CHANGED //1 CHANGED //2 UAC
 	int iret=0;
-	if (m_osVerInfo.dwPlatformId == VER_PLATFORM_WIN32_NT){ //isWinNTFamily
+	if (isWinNTFamily()){
 		HDESK desktop = getInputDesktop();
 		bool checkuac=true;
 		if (desktop){
@@ -277,7 +309,7 @@ bool WindowsDesktop::selectDesktop(char* name){
 }
 
 void WindowsDesktop::ctrlaltcanc(){
-	//debugger.print((char *)"DWAScreenCaptureInputKeyboard CTRLALTCANC");
+	//DWALoggerWriteDebug(L"DWAScreenCaptureInputKeyboard CTRLALTCANC");
 	if (selectDesktop((char *)"Winlogon")){
 		HWND hwndCtrlAltDel = FindWindow("SAS window class", "SAS window");
 		if (hwndCtrlAltDel == NULL) {
@@ -285,6 +317,91 @@ void WindowsDesktop::ctrlaltcanc(){
 		}
 		PostMessage(hwndCtrlAltDel, WM_HOTKEY, 0, MAKELONG(MOD_ALT | MOD_CONTROL, VK_DELETE));
 		wcsncpy(prevDesktopName,L"",0); //Alla prossima cattura si posizione sul desktop corretto
+	}
+}
+
+void WindowsDesktop::getClipboardChanges(CLIPBOARD_DATA* clipboardData){
+	clipboardData->type=0;
+	if (!isWinXP()){
+		bool b = bclipboardchanged;
+		bclipboardchanged=false;
+		if (b){
+			int iret=0;
+			if (OpenClipboard(NULL)){
+				HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+				if (hData != NULL){
+					  size_t sz=GlobalSize(hData);
+					  if (sz>0){
+							wchar_t* wGlobal = (wchar_t*)GlobalLock(hData);
+							iret=wcslen(wGlobal);
+							if (iret>0){
+								wchar_t* tret = (wchar_t*)malloc(iret*sizeof(wchar_t)+1);
+								wcscpy(tret,wGlobal);
+								clipboardData->type=1; //TEXT
+								clipboardData->data=(unsigned char*)tret;
+								clipboardData->sizedata=(iret*sizeof(wchar_t));
+							}
+					  }
+					  GlobalUnlock(hData);
+				}
+				CloseClipboard();
+			}
+		}
+	}else{ //XP DO NOT SUPPORT WM_CLIPBOARDUPDATE
+		if (tcclipboardxp.getCounter()>2000){
+			tcclipboardxp.reset();
+			if (OpenClipboard(NULL)){
+				HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+				if (hData != NULL){
+					  size_t sz=GlobalSize(hData);
+					  if (sz>0){
+							wchar_t* wGlobal = (wchar_t*)GlobalLock(hData);
+							int iret=wcslen(wGlobal);
+							if (iret>0){
+								bool bchange=((oldclipboardxp==NULL) || (wcscmp(wGlobal,oldclipboardxp)!=0));
+								if (bchange){
+									if (oldclipboardxp!=NULL){
+										free(oldclipboardxp);
+									}
+									oldclipboardxp = (wchar_t*)malloc(iret*sizeof(wchar_t)+1);
+									wchar_t* tret = (wchar_t*)malloc(iret*sizeof(wchar_t)+1);
+									wcscpy(oldclipboardxp,wGlobal);
+									wcscpy(tret,wGlobal);
+									clipboardData->type=1; //TEXT
+									clipboardData->data=(unsigned char*)tret;
+									clipboardData->sizedata=(iret*sizeof(wchar_t));
+								}
+							}
+					  }
+					  GlobalUnlock(hData);
+				}
+				CloseClipboard();
+			}
+
+		}
+	}
+}
+
+void WindowsDesktop::setClipboard(CLIPBOARD_DATA* clipboardData){
+	if (clipboardData->type==1){ //TEXT
+		HGLOBAL hdst;
+		if (clipboardData->sizedata>0){
+			LPWSTR dst;
+			size_t len = clipboardData->sizedata / sizeof(wchar_t);
+			hdst = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, (len + 1) * sizeof(wchar_t));
+			dst = (LPWSTR)GlobalLock(hdst);
+			memcpy(dst, clipboardData->data, len * sizeof(wchar_t));
+			dst[len] = 0;
+			GlobalUnlock(hdst);
+			if (OpenClipboard(NULL)){
+				EmptyClipboard();
+				SetClipboardData(CF_UNICODETEXT, hdst);
+				CloseClipboard();
+			}
+		}else if (OpenClipboard(NULL)){
+			EmptyClipboard();
+			CloseClipboard();
+		}
 	}
 }
 

@@ -13,7 +13,7 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #include <map>
 #include <vector>
 #include "../common/timecounter.h"
-#include "../common/dwdebugger.h"
+#include "../common/logger.h"
 #include "../common/util.h"
 #include "../mac/maccpuusage.h"
 #include "../mac/macinputs.h"
@@ -38,8 +38,15 @@ extern "C" {
 	void DWAScreenCaptureInputKeyboard(const char* type, const char* key, bool ctrl, bool alt, bool shift, bool command);
 	void DWAScreenCaptureInputMouse(MONITORS_INFO_ITEM* moninfoitem, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command);
 	int DWAScreenCaptureCursor(CURSOR_IMAGE* curimage);
+
 	int DWAScreenCaptureGetClipboardText(wchar_t** wText);
 	void DWAScreenCaptureSetClipboardText(wchar_t* wText);
+
+	//// TO DO 30/09/22 REMOVE ClipboardText
+	void DWAScreenCaptureGetClipboardChanges(CLIPBOARD_DATA* clipboardData);
+	void DWAScreenCaptureSetClipboard(CLIPBOARD_DATA* clipboardData);
+	//////////////////////////////////////////
+
 	void DWAScreenCaptureCopy();
 	void DWAScreenCapturePaste();
 	int DWAScreenCaptureGetCpuUsage();

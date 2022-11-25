@@ -476,46 +476,4 @@ void WindowsInputs::paste(){
 	keyboard("KEY","V",true,false,false,false);
 }
 
-int WindowsInputs::getClipboardText(wchar_t** wText){
-	Sleep(100);
-	int iret=0;
-	if (OpenClipboard(NULL)){
-		HANDLE hData = GetClipboardData(CF_UNICODETEXT);
-		if (hData != NULL){
-			  size_t sz=GlobalSize(hData);
-			  if (sz>0){
-				  wchar_t* wGlobal = (wchar_t*)GlobalLock(hData);
-				  iret=wcslen(wGlobal);
-				  wchar_t* tret = (wchar_t*)malloc(iret*sizeof(wchar_t));
-				  wcscpy(tret,wGlobal);
-				  *wText=tret;
-			  }
-			  GlobalUnlock(hData);
-		}
-		CloseClipboard();
-	}
-	return iret;
-}
-
-void WindowsInputs::setClipboardText(wchar_t* wText){
-	HGLOBAL hdst;
-    LPWSTR dst;
-	if (wText!=NULL){
-		size_t len = wcslen(wText);
-		hdst = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, (len + 1) * sizeof(wchar_t));
-		dst = (LPWSTR)GlobalLock(hdst);
-		memcpy(dst, wText, len * sizeof(wchar_t));
-		dst[len] = 0;
-		GlobalUnlock(hdst);
-	}
-	if (OpenClipboard(NULL)){
-		EmptyClipboard();
-		if (wText!=NULL){
-			SetClipboardData(CF_UNICODETEXT, hdst);
-		}
-		CloseClipboard();
-	}
-	Sleep(100);
-}
-
 #endif

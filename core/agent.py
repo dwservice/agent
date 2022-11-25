@@ -1059,18 +1059,19 @@ class Agent():
                             if bfirstreadconfig:
                                 bfirstreadconfig=False                                
                                 #CARICA DEBUG MODE
-                                prfcfg={}
                                 self._agent_debug_mode = self.get_config('debug_mode',False)                                
                                 if self._agent_debug_mode:
                                     self._logger.set_level(utils.LOGGER_DEBUG)
-                                    prfcfg["debug_path"]=utils.os_getcwd()                                    
-                                    if not prfcfg["debug_path"].endswith(utils.path_sep):
-                                        prfcfg["debug_path"]+=utils.path_sep                                    
-                                    prfcfg["debug_indentation_max"] = self.get_config('debug_indentation_max',-1)
-                                    prfcfg["debug_thread_filter"] = self.get_config('debug_thread_filter',None)
-                                    prfcfg["debug_class_filter"] = self.get_config('debug_class_filter',None)
-                                    self._debug_profile=utils.DebugProfile(self,prfcfg)
-                                    threading.setprofile(self._debug_profile.get_function)
+                                    if self._agent_profiler is not None:
+                                        prfcfg={}
+                                        prfcfg["debug_path"]=utils.os_getcwd()                                    
+                                        if not prfcfg["debug_path"].endswith(utils.path_sep):
+                                            prfcfg["debug_path"]+=utils.path_sep                                    
+                                        prfcfg["debug_indentation_max"] = self.get_config('debug_indentation_max',-1)
+                                        prfcfg["debug_thread_filter"] = self.get_config('debug_thread_filter',None)
+                                        prfcfg["debug_class_filter"] = self.get_config('debug_class_filter',None)                                    
+                                        self._debug_profile=utils.DebugProfile(self,prfcfg)
+                                        threading.setprofile(self._debug_profile.get_function)
                             #ssl_cert_required
                             if self.get_config('ssl_cert_required', True)==False:
                                 communication.set_cacerts_path("")

@@ -110,12 +110,6 @@ int DWAScreenCaptureVersion(){
 	return 4;
 }
 
-/*
-void DWAScreenCaptureSetCallbackDebug(CallbackType callback){
-	debugger.setCallback(callback);
-}
-*/
-
 int DWAScreenCapturePaletteEncoderVersion(){
 	z_stream strm;
 	strm.zalloc = Z_NULL;

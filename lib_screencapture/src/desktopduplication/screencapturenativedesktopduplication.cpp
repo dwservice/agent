@@ -8,7 +8,7 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #include "screencapturenativedesktopduplication.h"
 
 int DWAScreenCaptureVersion(){
-	return 1;
+	return 2;
 }
 
 void DWAScreenCaptureFreeMemory(void* pnt){
@@ -865,6 +865,7 @@ void DWAScreenCaptureInputMouse(MONITORS_INFO_ITEM* moninfoitem, int x, int y, i
 }
 
 void DWAScreenCaptureCopy(){
+	winDesktop->clearClipboardXP();
 	winInputs->copy();
 }
 
@@ -872,12 +873,12 @@ void DWAScreenCapturePaste(){
 	winInputs->paste();
 }
 
-int DWAScreenCaptureGetClipboardText(wchar_t** wText){
-	return winInputs->getClipboardText(wText);
+void DWAScreenCaptureGetClipboardChanges(CLIPBOARD_DATA* clipboardData){
+	winDesktop->getClipboardChanges(clipboardData);
 }
 
-void DWAScreenCaptureSetClipboardText(wchar_t* wText){
-	winInputs->setClipboardText(wText);
+void DWAScreenCaptureSetClipboard(CLIPBOARD_DATA* clipboardData){
+	winDesktop->setClipboard(clipboardData);
 }
 
 //TMP PRIVACY MODE

@@ -16,9 +16,9 @@ using namespace std;
 #include "../windows/windowsinputs.h"
 #include "../windows/windowsdesktop.h"
 #include "../windows/windowsloadlib.h"
-#include "../common/dwdebugger.h"
 #include "../common/timecounter.h"
 #include "../common/util.h"
+#include "../common/logger.h"
 
 #include <shlobj.h>
 #include <shellapi.h>
@@ -41,8 +41,8 @@ extern "C" {
 	void DWAScreenCaptureInputKeyboard(const char* type, const char* key, bool ctrl, bool alt, bool shift, bool command);
 	void DWAScreenCaptureInputMouse(MONITORS_INFO_ITEM* moninfoitem, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command);
 	int DWAScreenCaptureCursor(CURSOR_IMAGE* curimage);
-	int DWAScreenCaptureGetClipboardText(wchar_t** wText);
-	void DWAScreenCaptureSetClipboardText(wchar_t* wText);
+	void DWAScreenCaptureGetClipboardChanges(CLIPBOARD_DATA* clipboardData);
+	void DWAScreenCaptureSetClipboard(CLIPBOARD_DATA* clipboardData);
 	void DWAScreenCaptureCopy();
 	void DWAScreenCapturePaste();
 	int DWAScreenCaptureGetCpuUsage();

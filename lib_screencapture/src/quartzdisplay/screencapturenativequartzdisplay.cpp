@@ -179,6 +179,16 @@ void DWAScreenCaptureSetClipboardText(wchar_t* wText){
 	usleep(200000);
 }
 
+//// TO DO 30/09/22 REMOVE ClipboardText
+void DWAScreenCaptureGetClipboardChanges(CLIPBOARD_DATA* clipboardData){
+
+}
+
+void DWAScreenCaptureSetClipboard(CLIPBOARD_DATA* clipboardData){
+
+}
+////////////////////////////////////////////////
+
 int DWAScreenCaptureGetCpuUsage(){
 	return (int)cpuUsage->getValue();
 }

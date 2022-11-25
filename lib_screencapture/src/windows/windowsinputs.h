@@ -21,9 +21,6 @@ public:
     void mouse(MONITORS_INFO_ITEM* moninfoitem, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command);
     void copy();
     void paste();
-    int getClipboardText(wchar_t** wText);
-    void setClipboardText(wchar_t* wText);
-
 
 private:
     bool mousebtn1Down;

@@ -12,16 +12,17 @@ _libmap["lastID"]=0
 _libmap["capscrID"]=0
 
 #CALLBACKS
-SCRDBGFUNC = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_wchar_p)
+SCRLOGWRTFUNC = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p)
 SCRENCRESFUNC = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_int, ctypes.POINTER(ctypes.c_char))
 SNDDATAFUNC = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_uint, ctypes.POINTER(ctypes.c_char))
 SNDENCRESFUNC = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_int, ctypes.POINTER(ctypes.c_char))
 
-@SCRDBGFUNC  
-def cb_debug_print(s):
-    f = _libmap["cb_debug_print"]
+@SCRLOGWRTFUNC
+def cb_write_log(i,s):
+    f = _libmap["cb_write_log"]
     if f is not None:
-        f(s)
+        f(i,s)
+
 
 func_screen_encode_result=None
 @SCRENCRESFUNC
@@ -45,6 +46,7 @@ TOKEN_FRAME=2 #DATA=L-X-Y-W-H-IMG - L=End frame (1:YES 0:NO)
 TOKEN_CURSOR=3 #DATA=V-X-Y-W-H-OFFX-OFFY-IMG - V=Visible (1:YES 0:NO)
 TOKEN_MONITOR=10 #DATA=SZ
 TOKEN_SUPPORTED_FRAME=11 #DATA=CNT-S1-S2-...
+TOKEN_CLIPBOARD=500 #DATA=TP-SZ-ID-DATA
 TOKEN_FPS=600
 TOKEN_FRAME_TIME=800 
 TOKEN_FRAME_TYPE=801
@@ -71,6 +73,7 @@ TYPE_FRAME_TJPEG_V2 = 101
 MAX_CURSOR_IMAGE_SIZE=512*1024
 RGB_IMAGE_DIFFSIZE = 1000
 MONITORS_INFO_ITEM_MAX=1000;
+MAX_CLIPBOARD_TOKEN_SIZE=32*1024
 
 class MONITORS_INFO_ITEM(ctypes.Structure):
     _fields_ = [("index",ctypes.c_int),
@@ -128,6 +131,8 @@ class AUDIO_CONFIG(ctypes.Structure):
     _fields_ = [("sampleRate",ctypes.c_uint),
                 ("numChannels",ctypes.c_uint),
                 ("bufferFrames",ctypes.c_uint)]
-    
 
-
+class CLIPBOARD_DATA(ctypes.Structure):
+    _fields_ = [("type",ctypes.c_uint),
+                ("sizedata",ctypes.c_long),
+                ("data", ctypes.c_void_p)]

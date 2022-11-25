@@ -86,7 +86,7 @@ int DWAScreenCaptureGetCpuUsage(){
 }
 
 int DWAScreenCaptureVersion(){
-	return 1;
+	return 2;
 }
 
 void DWAScreenCaptureFreeMemory(void* pnt){
@@ -109,6 +109,12 @@ void handleXEvents(){
 				linuxInputs->keyboardChanged();
 			}
 		}
+
+		//EVENT CLIPBOARD CHANGE
+		if (event.type == xfixesevent + XFixesSelectionNotify && ((XFixesSelectionNotifyEvent*)&event)->selection == atomClipboard){
+			XConvertSelection(xdpy, atomClipboard, atomStrTp, atomXSelData, fakewindow, CurrentTime);
+		}
+
 		//GET CLIPBOARD
 		if (event.type == SelectionNotify) {
 			//printf("SelectionNotify\n");
@@ -120,13 +126,16 @@ void handleXEvents(){
 				XGetWindowProperty(event.xselection.display, event.xselection.requestor,
 					event.xselection.property, 0L,(~0L), 0, AnyPropertyType, &target,
 					&format, &size, &N,(unsigned char**)&data);
-				if(target == atomStrTp) {
+				if (target == atomStrTp) {
 					wchar_t* dest = (wchar_t*)malloc((size+1) * sizeof(wchar_t));
 					mbstowcs(dest, (char*)data, size+1);
 					copytxt.append(dest);
 					free(dest);
 					XFree(data);
 					copyok=true;
+
+					clipboardChanges=true;
+
 				}
 				XDeleteProperty(event.xselection.display, event.xselection.requestor, event.xselection.property);
 			}
@@ -486,50 +495,26 @@ void DWAScreenCapturePaste(){
 	linuxInputs->paste();
 }
 
-int DWAScreenCaptureGetClipboardText(wchar_t** wText){
-	copytxt.clear();
-	if ((xdpy!=NULL) && (fakewindow)){
-		//microsleep
-		double milliseconds=200;
-		struct timespec sleepytime;
-		sleepytime.tv_sec = milliseconds / 1000;
-		sleepytime.tv_nsec = (milliseconds - (sleepytime.tv_sec * 1000)) * 1000000;
-		nanosleep(&sleepytime, NULL);
-
-		XConvertSelection(xdpy, atomClipboard, atomStrTp, atomXSelData, fakewindow, CurrentTime);
-		XSync(xdpy, 0);
-		copyok=false;
-		for (int i=1;i<=5;i++){
-			handleXEvents();
-			if (copyok){
-				break;
-			}
-			nanosleep(&sleepytime, NULL);
-		}
-	}
-	if (copytxt.length()>0){
-		*wText = (wchar_t*)malloc(copytxt.length() * sizeof(wchar_t));
-		copytxt.copy(*wText,copytxt.length());
-		return copytxt.length();
-	}else{
-		return 0;
+void DWAScreenCaptureGetClipboardChanges(CLIPBOARD_DATA* clipboardData){
+	clipboardData->type=0;
+	if (clipboardChanges){
+		clipboardChanges=false;
+		clipboardData->type=1; //TEXT
+		clipboardData->data=(unsigned char*)malloc(copytxt.length() * sizeof(wchar_t));
+		copytxt.copy((wchar_t*)clipboardData->data,copytxt.length());
+		clipboardData->sizedata=(copytxt.length() * sizeof(wchar_t));
+		copytxt.clear();
 	}
 }
 
-void DWAScreenCaptureSetClipboardText(wchar_t* wText){
+void DWAScreenCaptureSetClipboard(CLIPBOARD_DATA* clipboardData){
 	if ((xdpy!=NULL) && (fakewindow)){
 		XSetSelectionOwner(xdpy, atomClipboard, fakewindow, 0);
 		if (XGetSelectionOwner (xdpy, atomClipboard) == fakewindow){
 			pastetxt.clear();
-			pastetxt.append(wText);
+			pastetxt.append((wchar_t*)clipboardData->data,(clipboardData->sizedata / sizeof(wchar_t)));
 			handleXEvents();
 		}
-		//microsleep
-		double milliseconds=200;
-		struct timespec sleepytime;
-		sleepytime.tv_sec = milliseconds / 1000;
-		sleepytime.tv_nsec = (milliseconds - (sleepytime.tv_sec * 1000)) * 1000000;
-		nanosleep(&sleepytime, NULL);
 	}
 }
 
@@ -619,6 +604,7 @@ int DWAScreenCaptureGetMonitorsInfo(MONITORS_INFO* moninfo){
 	int iret=0;
 	int oldmc=clearMonitorsInfo(moninfo);
 	if (xdpy == NULL){
+		clipboardChanges=false;
 
 		//set locale
 		setlocale(LC_ALL, getenv("LANG"));
@@ -683,6 +669,9 @@ int DWAScreenCaptureGetMonitorsInfo(MONITORS_INFO* moninfo){
 			atomXSelData = XInternAtom(xdpy, "XSEL_DATA", 0);
 			atomTargets = XInternAtom(xdpy, "TARGETS", 0);
 			atomText = XInternAtom(xdpy, "TEXT", 0);
+
+			 XFixesSelectSelectionInput(xdpy, DefaultRootWindow(xdpy), atomClipboard, XFixesSetSelectionOwnerNotifyMask);
+
 		}else{
 			damageok=false;
 			xfixesok=false;

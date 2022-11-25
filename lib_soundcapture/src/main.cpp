@@ -41,12 +41,19 @@ int record(void *outputBuffer, void *inputBuffer, unsigned int nBufferFrames,
 int getCurOutput(rtaudio* adc){
 	int dvout=-1;
 	#if defined OS_LINUX
-		for (unsigned int i=0;i<=deviceCount-1;i++){
-			rtaudio_device_info_t di = rtaudio_get_device_info(adc,i);
-			if (strcasestr(di.name,"monitor")!=NULL){
-				dvout=i;
-				break;
+		if (rtaudio_version()[0]=='5'){ // 28/09/2022 TO REMOVE
+			for (unsigned int i=0;i<=deviceCount-1;i++){
+				int did = i;
+				//int did = rtaudio_get_device_id(adc,i);
+				rtaudio_device_info_t di = rtaudio_get_device_info(adc,did);
+				if (strcasestr(di.name,"monitor")!=NULL){
+					dvout=did;
+					break;
+				}
+				//printf("DEV: %s\n", di.name);
 			}
+		}else{
+			dvout=rtaudio_get_default_output_device(adc);
 		}
 	#else
 		dvout=rtaudio_get_default_output_device(adc);
@@ -58,7 +65,6 @@ int DWASoundCaptureStart(AUDIO_CONFIG* audioconf,CallbackRecord cbrec,void** cap
 	AudioCaptureSessionInfo* cs = new AudioCaptureSessionInfo();
 	cs->bStreamAlive=false;
 	cs->callbackRecord=NULL;
-
 #if defined OS_WINDOWS
 	cs->adc = rtaudio_create(RTAUDIO_API_WINDOWS_WASAPI);
 #elif defined OS_LINUX
@@ -67,14 +73,21 @@ int DWASoundCaptureStart(AUDIO_CONFIG* audioconf,CallbackRecord cbrec,void** cap
 	cs->adc = rtaudio_create(RTAUDIO_API_MACOSX_CORE);
 #endif
 	if (cs->adc==NULL){
-		return -91;
+		return 91;
 	}
 	deviceCount = rtaudio_device_count(cs->adc);
-	deviceOut = getCurOutput(cs->adc);
-	if (deviceCount==0 || deviceOut>deviceCount-1){
-		rtaudio_destroy(cs->adc);
-		return -92;
+
+	bool bok=false;
+	if (rtaudio_version()[0]=='5'){ // 28/09/2022 TO REMOVE (ONLY WIN SUPPORT VER 6)
+		bok=(deviceCount==0 || deviceOut>deviceCount-1);
 	}else{
+		bok=(deviceCount==0);
+	}
+	if (bok){
+		rtaudio_destroy(cs->adc);
+		return 92;
+	}else{
+		deviceOut = getCurOutput(cs->adc);
 		rtaudio_stream_parameters parameters;
 		parameters.device_id = deviceOut;
 		parameters.num_channels = audioconf->numChannels;
@@ -82,23 +95,39 @@ int DWASoundCaptureStart(AUDIO_CONFIG* audioconf,CallbackRecord cbrec,void** cap
 		cs->conf=audioconf;
 		cs->callbackRecord=cbrec;
 		int iret=rtaudio_open_stream(cs->adc, NULL, &parameters, RTAUDIO_FORMAT_FLOAT32, audioconf->sampleRate, &audioconf->bufferFrames, &record, cs, NULL, NULL);
-		if (iret==0){
-			iret=rtaudio_start_stream(cs->adc);
+		if (rtaudio_version()[0]=='5'){ // 28/09/2022 TO REMOVE (ONLY WIN SUPPORT VER 6)
+			bok=(iret==0);
+		}else{
+			bok=(iret<2);
 		}
-		if (iret==0){
+		if (bok){
+			iret=rtaudio_start_stream(cs->adc);
+			if (rtaudio_version()[0]=='5'){ // 28/09/2022 TO REMOVE (ONLY WIN SUPPORT VER 6)
+				bok=(iret==0);
+			}else{
+				bok=(iret<2);
+			}
+		}
+		if (bok){
 			*capses = cs;
 			return 0;
 		}
 		return iret;
 	}
-	return -90;
+	return 90;
 }
 
 int DWASoundCaptureGetDetectOutputName(void* capses,char* bf, int sz){
 	AudioCaptureSessionInfo* cs = (AudioCaptureSessionInfo*)capses;
-	int dvcnt = rtaudio_device_count(cs->adc);
 	int dvout = getCurOutput(cs->adc);
-	if (dvcnt==0 || dvout>dvcnt-1){
+	bool bok=false;
+	if (rtaudio_version()[0]=='5'){ // 28/09/2022 TO REMOVE (ONLY WIN SUPPORT VER 6)
+		int dvcnt = rtaudio_device_count(cs->adc);
+		bok=(dvcnt==0 || dvout>dvcnt-1);
+	}else{
+		bok=(dvout==0);
+	}
+	if (bok){
 		return 0;
 	}
 	rtaudio_device_info_t di = rtaudio_get_device_info(cs->adc,dvout);

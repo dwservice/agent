@@ -13,6 +13,7 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #include <map>
 #include "rtaudio_c.h"
 #include "opus.h"
+#include "common/logger.h"
 
 #define RESULT_DIFF_SIZE 56*1024
 

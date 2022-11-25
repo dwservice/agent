@@ -23,7 +23,6 @@ typedef void (*CallbackEncodeResult)(unsigned int, unsigned char*);
 #include <string>
 #include "common/timecounter.h"
 #include "common/util.h"
-#include "common/dwdebugger.h"
 #include "zutil.h"
 #include "turbojpeg.h"
 
