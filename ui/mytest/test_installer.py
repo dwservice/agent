@@ -12,7 +12,7 @@ if __name__ == "__main__":
     arotps={}
     arotps["gui"]=True
     arotps["mock"]=True #shows only steps it is do nothing
-    #arotps["lang"]="fr"
+    #arotps["lang"]="en"
     
     #TEST install.json
     arij={}
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     arij["runtoptext"]="runtoptext"
     arij["runbottomtext"]="runbottomtext"
     arij["leftcolor"]="ff4400"
-    #arij["installputcode"]=True    
+    #arij["installputcode"]=True
     #arotps["install.json"]=arij
     
     '''

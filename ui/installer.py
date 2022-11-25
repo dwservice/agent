@@ -1096,6 +1096,8 @@ class Install:
         #debug purpose
         if 'mock' in self._options:
             self._bmock = self._options['mock']
+            if "lang" in self._options:
+                messages.set_locale(self._options["lang"])
         
         #Load install.json
         appjs=None
@@ -1219,13 +1221,13 @@ class Install:
                 
                 mpp = self._get_message('privacyPolicy')
                 ppp = m.index("#PRIVACYPOLICY")                
-                chs.add_message_hyperlink(ppp, len(mpp), "https://www.dwservice.net/gdpr.html")
+                chs.add_message_hyperlink(ppp, len(mpp), "https://www.dwservice.net/privacy-policy.html")
                 m=m.replace("#PRIVACYPOLICY", mpp)
                 
                 
                 
             chs.set_message(m)            
-            chs.set_message_height(300)
+            chs.set_message_height(320)
             if "mode" in self._options and self._options["mode"]=="install":
                 chs.add("install", self._get_message('install'))
             elif "mode" in self._options and self._options["mode"]=="run":
@@ -1776,10 +1778,10 @@ class Install:
             ipt.set_message(self._get_message('enterInstallNewAgent'))
             if self._install_newag_user.get() is None:
                 self._install_newag_user.set("")
-            ipt.add('user', self._get_message('dwsUser'), self._install_newag_user, True)
+            ipt.add('user', self._get_message('configureInstallUser'), self._install_newag_user, True)
             if self._install_newag_password.get() is None:
                 self._install_newag_password.set("")
-            ipt.add('password', self._get_message('dwsPassword'), self._install_newag_password, True)
+            ipt.add('password', self._get_message('configureInstallPassword'), self._install_newag_password, True)
             if self._install_newag_name.get() is None:
                 self._install_newag_name.set("")
             ipt.add('name', self._get_message('agentName'), self._install_newag_name, True)

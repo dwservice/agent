@@ -20,8 +20,8 @@ import threading
 import traceback
 import utils
 
-_WIDTH=760
-_HEIGHT=500
+_WIDTH=780
+_HEIGHT=510
 _HEIGHT_BOTTOM=55
 _WIDTH_LEFT=90
 _CONTENT_WIDTH=_WIDTH-_WIDTH_LEFT
@@ -754,9 +754,9 @@ class UI():
             self._pnlmain.add_component(lbl)
             pbar = gdi.ProgressBar()
             pbar.set_position(_GAP_TEXT,_CONTENT_HEIGHT/2)
-            pbar.set_size(_CONTENT_WIDTH-(2*_GAP_TEXT),24)
+            pbar.set_size(_CONTENT_WIDTH-(4*_GAP_TEXT),24)
             self._pnlmain.add_component(pbar)
-            self._wait_ui={'label':lbl,  'progress':pbar}
+            self._wait_ui={'label':lbl, 'progress':pbar}
         else:
             self._btclose.set_enable(allowclose)
             lbl=self._wait_ui['label']
@@ -826,7 +826,7 @@ class UI():
             l.set_text(inps.get_message())
             self._pnlmain.add_component(l)
 
-            lblw=170
+            lblw=210
             ar = inps.get_inputs()
             p=120
             for i in range(len(ar)):

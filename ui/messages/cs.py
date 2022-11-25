@@ -197,7 +197,7 @@ data={
     'warningRemovePath':u'Varování: cílová složka už existuje – stávající obsah bude smazán.',
     'warningSpyingTool':u'Upozorňujeme, že ke vzdálenému počítači nelze přistupovat bez souhlasu jeho uživatele. Používáním služby DWService jako špionážního nástroje můžete porušovat zákony země, ve které žijete.',
     'welcomeLicense':u'Licence\nTento software je svobodný a opensource.\nSkládá se z jedné hlavní komponenty, vydané pod licencí MPLv2, a několika pomocných komponent, vydaných pod různými licencemi. Více informací naleznete na: https://www.dwservice.net/cs/licenses-sources.html',
-    'welcomePrivacyTerms':u'Pokračováním v instalaci nebo spuštění tohoto software vyjadřujete souhlas s #TERMSANDCONDITIONS a #PRIVACYPOLICY',
+    'welcomePrivacyTerms':u'Pokračováním v instalaci nebo spuštění tohoto software vyjadřujete souhlas se #TERMSANDCONDITIONS a #PRIVACYPOLICY',
     'welcomeSecurity':u'Zabezpečení\nAby bylo ochráněno Vaše soukromí, garantujeme že na našich serverech nejsou ukládány žádné údaje a komunikace je zašifrována tak, že je pro všechny ostatní nečitelná.',
     'welcomeSoftwareUpdates':u'Aktualizace software\nAktualizace tohoto software se děje automaticky.',
     'windowsAdminPrivileges':u'Pro instalaci DWAgenta jsou zapotřebí práva pro správu systému.\nKlikněte na instalační soubor pravým tlačítkem a z kontextové nabídky zvolte „Spustit jako správce“.',
