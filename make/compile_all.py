@@ -158,7 +158,7 @@ class CompileAll():
                 utils.info("download headers and library ...")
                 nurl = utils.get_node_url()
                 
-                if snm is not "lib_gcc" and snm is not "lib_stdcpp":
+                if snm!="lib_gcc" and snm!="lib_stdcpp":
                     appnm="headers_" + snm + ".zip"
                     utils.download_file(nurl + "getAgentFile.dw?name=" + appnm , spth + os.sep + appnm)
                     utils.unzip_file(spth + os.sep + appnm, spth + os.sep)

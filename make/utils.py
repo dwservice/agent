@@ -62,6 +62,7 @@ else:
     import urllib.request
     url_open=urllib.request.urlopen
 bytes_to_str=lambda b, enc="ascii": b.decode(enc, errors="replace")
+str_to_bytes=lambda s, enc="ascii": s.encode(enc, errors="replace")
 
 def info(msg):
     print(msg)
@@ -340,16 +341,15 @@ def get_node_url():
     contents = url_open(MAIN_URL + "getAgentFile.dw?name=files.xml").read();
     prp = xml_to_prop(contents)
     return prp["nodeUrl"]
-    
-    
+   
 
 def read_json_file(fn):
     appjs=None
     if os.path.exists(fn):
         f=None
         try:
-            f = codecs.open(fn, 'rb', None, 'strict', 1)
-            appjs = json.loads(f.read())
+            f = codecs.open(fn, 'rb')
+            appjs = json.loads(bytes_to_str(f.read(),"utf8"))
         except:
             None
         finally:
@@ -359,17 +359,17 @@ def read_json_file(fn):
     return appjs
 
 def write_json_file(conf,fn):
-    s = json.dumps(conf,fn, sort_keys=True, indent=1)
-    f = codecs.open(fn, 'wb', None, 'strict', 1)
-    f.write(s)
+    s = json.dumps(conf, sort_keys=True, indent=1)
+    f = codecs.open(fn, 'wb')
+    f.write(str_to_bytes(s,"utf8"))
     f.close()
     
-# UTILIZZATI DA DETECTINFO
+#USED BY DETECTINFO
 def path_exists(pth):
     return os.path.exists(pth)
 
-def file_open(filename, mode='rb', encoding=None, errors='strict', buffering=1):
-    return codecs.open(filename, mode, encoding, errors, buffering)
-# UTILIZZATI DA DETECTINFO
+def file_open(filename, mode='rb', encoding=None, errors='strict'):
+    return codecs.open(filename, mode, encoding, errors)
+#USED BY DETECTINFO
 
     
