@@ -201,5 +201,6 @@ data={
     'ipAddress': u'Indirizzo IP: {0}',
     'accessConfirm': u'Desidera accedere al tuo dispositivo.',
     'unattendedAccess': u'Accesso\nnon presidiato',
-    'unknownUser': u'Utente sconosciuto'
+    'unknownUser': u'Utente sconosciuto',
+    'skipCertValidation':u'Attenzione: Il certificato di sicurezza non può essere convalidato, se si procede la connessione potrebbe non essere sicura.\nSi prega di verificare la configurazione del router/firewall/antivirus di rete o locale.\nProcedere comunque?'
 }
