@@ -44,7 +44,7 @@ private:
 	KeySym getKeySym(const char* key);
 	void clearCustomKeyUnicode();
 	KeyCode createCustomKeyUnicode(int uc);
-	void ctrlaltshift(bool ctrl, bool alt, bool shift);
+	void ctrlaltshift(bool ctrl, bool alt, bool shift, bool command);
 	void mouseMove(int x,int y);
 	void mouseButton(int button,bool press);
 
@@ -63,6 +63,7 @@ private:
     bool ctrlDown;
     bool altDown;
     bool shiftDown;
+    bool commandDown;
     int max_grp;
     KeyCode kccustom;
     bool kccustominit;

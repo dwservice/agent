@@ -129,14 +129,19 @@ class ShellManager(threading.Thread):
     def get_idses(self):
         return self._idses
     
-    def _on_data(self,websocket,tpdata,data):        
+    def _on_data(self,websocket,tpdata,data):
         self._semaphore.acquire()
         try:
             if not self._bclose:
                 try:
                     self._timeout_cnt=0;
                     self._last_timeout=int(time.time() * 1000)
-                    prprequest = json.loads(self._decode_data(data))
+                    
+                    if tpdata == ord('s'):
+                        prprequest = json.loads(data)
+                    else:  #OLD TO REMOVE 19/12/2022
+                        prprequest = json.loads(self._decode_data(data))
+                    
                     if prprequest["type"]==ShellManager.REQ_TYPE_INITIALIZE:
                         sid=prprequest["id"]
                         if agent.is_windows():
@@ -190,11 +195,11 @@ class ShellManager(threading.Thread):
                     bwait=True
                     elapsed=int(time.time() * 1000)-self._last_timeout
                     if elapsed<0:
-                        self._last_timeout=int(time.time() * 1000) #Modificato orario pc
+                        self._last_timeout=int(time.time() * 1000)
                     elif elapsed>1000:
                         self._timeout_cnt+=1;
-                        self._last_timeout=int(time.time() * 1000)                    
-                    if self._timeout_cnt>=SHELL_INTERVALL_TIMEOUT:                        
+                        self._last_timeout=int(time.time() * 1000)
+                    if self._timeout_cnt>=SHELL_INTERVALL_TIMEOUT:
                         self.terminate()
                     else:                        
                         arrem=[]

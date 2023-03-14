@@ -77,9 +77,14 @@ class Desktop():
                         self._process = DesktopProcessCapture(self._agent_main)
                         self._process.start()
                     itm = DesktopSession(self, cinfo, key, wsock)
-                    self._list[key]=itm
-                    
+                    self._list[key]=itm                    
                     break
+        except Exception as e:
+            if self._process is not None:
+                if len(self._list)==0 and not self._process is None:
+                    self._process.destroy()
+                    self._process=None
+            raise e
         finally:
             self._list_semaphore.release()        
         itm.start()
@@ -150,7 +155,7 @@ class DesktopProcessCapture(threading.Thread):
         self._agent_main=agent_main
         self._screen_module=None
         self._sound_module=None
-        self._sound_status=None                
+        self._sound_status=None
         self._supported_frame=None
         self._semaphore = threading.Condition()
         self._strm=None
@@ -468,14 +473,69 @@ class DesktopProcessCapture(threading.Thread):
         self._write_obj({u"request":u"SET_CLIPBOARD",u"monitor":mon, u"type": stp, u"data": sdt})
 
 
+class DesktopSessionStatsCalculator():
+    
+    def __init__(self, chk, rsl):
+        self._check_time=chk
+        self._resolution_time=rsl
+        self._counter=utils.Counter()
+        self._ttime=0
+        self._times=[]
+        self._keys={}
+    
+    def reset(self):
+        self._ttime=0
+        self._times=[]
+        appkeys=self._keys
+        self._keys={}
+        for k in appkeys:
+            self.add_key(k)
+    
+    def add_key(self,k):
+        itm={"increment":0,"value":0,"values":[]}
+        self._keys[k]=itm
+    
+    def inc(self,k,v):
+        self._keys[k]["increment"]+=v                
+    
+    def check(self,rsl=None):
+        if rsl is not None:
+            self._resolution_time=rsl
+        if self._counter.is_elapsed(self._check_time):
+            if len(self._keys)>0:
+                elp=self._counter.get_value()
+                self._ttime+=elp
+                self._times.append(elp)
+                for k in self._keys:
+                    itm=self._keys[k]
+                    itm["values"].append(itm["increment"])
+                    itm["increment"]=0
+                
+                while self._ttime>self._resolution_time and len(self._times)>1:
+                    elp=self._times.pop(0)
+                    self._ttime-=elp
+                    for k in self._keys:
+                        itm=self._keys[k]
+                        itm["values"].pop(0)
+                
+                oret={}
+                for k in self._keys:
+                    itm=self._keys[k]
+                    v=sum(itm["values"])/sum(self._times)
+                    itm["value"]=v
+                    oret[k]=v                
+                self._counter.reset()                
+                return oret            
+        return None
+    
 class DesktopSession(threading.Thread):
-        
+    
     def __init__(self, dskmain, cinfo, sid,  wsock):
         threading.Thread.__init__(self,  name="DesktopSession" + sid)
         self._struct_h=struct.Struct("!h")
         self._struct_hh=struct.Struct("!hh")
         self._struct_hb=struct.Struct("!hb")
-        self._struct_B=struct.Struct("!B")
+        self._struct_Q=struct.Struct("!Q")
         self._struct_cpltkc=struct.Struct("!hhqi")
         self._dskmain=dskmain
         self._process=self._dskmain._process
@@ -513,49 +573,52 @@ class DesktopSession(threading.Thread):
         self._process_id=-1        
         self._monitor=-1
         self._monitor_count=-1
+        self._monitor_encoder=-1
         self._frame_type=-1 # 0=DATA_PALETTE_COMPRESS_V1; 100=DATA_TJPEG_v1"; 101=DATA_TJPEG_v2"
-        self._frame_type_to_send=False
-        self._frame_in_progress=False        
-        self._frame_intervall_fps_min=5.0
-        self._frame_intervall_fps=self._frame_intervall_fps_min
-        self._frame_intervall_wait=1.0/self._frame_intervall_fps        
-        self._frame_intervall_time_counter=utils.Counter()                
+        self._frame_type_to_send=False        
+        self._send_stats_thread = None            
         self._frame_distance=0
         self._audio_type=-1
         self._audio_type_to_send=False
         self._audio_enable=True
         self._clipboard_auto=False
         self._slow_mode=False
-        self._slow_mode_counter=None
-        self._ping=-1
-        self._ping_sent=False
-        self._ping_counter=None        
-        self._send_stats = False
-        self._stats_counter=None
+        self._slow_mode_counter=utils.Counter()
+        self._ping=0
+        self._ping_check=False
+        self._ping_counter=None
+        self._stats_calc=DesktopSessionStatsCalculator(0.25,1.0)
+        self._stats_calc.add_key("fps")
+        self._stats_calc.add_key("capfps")
+        self._stats_calc.add_key("bps")        
         self._stats_capture_fps=0
-        self._stats_sent_size=[]
-        self._stats_sent_frame=0
-        self._stats_sent_bytes=0
-        self._stats_ffps=0
+        self._stats_cur_frame_size=0
+        self._stats_fps=0        
         self._stats_bps=0
-        self._stats_frame_value=[]
-        self._stats_bytes_value=[]        
-        self._stats_time=[]
-        self._stat_ffps_itf=1.0
-        self._stat_max_distance_tm=0                
-        self._semaphore_st=threading.Condition()
+        self._stats_frame_sent_time=0
+        self._stats_frame_received_time=0
+        self._stats_frame_pending=0
+        self._semaphore_st=threading.Condition()        
         self._quality=9
-        self._quality_detect_value=9        
-        self._quality_detect_counter=None
-        self._quality_detect_wait=0.0                
         self._quality_request=-1
+        self._quality_detect_value=9        
+        self._quality_detect_fps_min=8
+        self._quality_detect_down_count=0
+        self._quality_detect_up_check=utils.Counter()        
+        self._frame_intervall_fps=0
+        self._frame_intervall_stats_calc=DesktopSessionStatsCalculator(0.2,1.0)
+        self._frame_intervall_stats_calc.add_key("fps")
+        self._frame_intervall_fps_min=1
+        self._frame_intervall_fps_inc=4
+        self._frame_intervall_event=threading.Event()
+        self._frame_intervall_time_counter=utils.Counter()
         self._process_encoder=None
         self._process_encoder_stream=None
         self._process_encoder_alive=False
         self._process_encoder_event=None
         self._process_encoder_read_thread=None
         self._process_encoder_monitorsid=-1
-        self._process_encoder_init=False                        
+        self._process_encoder_init=False
         self._init_session_to_send=True
         self._init_counter=utils.Counter()
         self._init_err_msg=None
@@ -577,12 +640,18 @@ class DesktopSession(threading.Thread):
         if not self._bdestroy:
             try:
                 if self._keepalive_counter is not None:
-                    self._keepalive_counter.reset()                
-                prprequest = json.loads(self._decode_data(data))
+                    self._keepalive_counter.reset()
+                if tpdata == ord('s'):
+                    prprequest = json.loads(data)
+                else: #OLD TO REMOVE 19/12/2022
+                    prprequest = json.loads(self._decode_data(data))
                 if prprequest is not None and "frametime" in prprequest:
-                    #print("frame received. Time: " + prprequest["frametime"])                    
                     tm = float(prprequest["frametime"])
-                    self.received_frame(tm)
+                    if "framepending" in prprequest:
+                        pf = int(prprequest["framepending"])
+                    else:
+                        pf = 0
+                    self._received_frame(tm,pf)
                 if prprequest is not None and "inputs" in prprequest:
                     if not self._allow_inputs:
                         raise Exception("Permission denied (inputs).")                    
@@ -593,7 +662,7 @@ class DesktopSession(threading.Thread):
                     elif prprequest["cursor"]=="false":
                         self._cursor_visible=False
                 if prprequest is not None and "monitor" in prprequest:                    
-                    self._monitor = int(prprequest["monitor"])                    
+                    self._monitor = int(prprequest["monitor"])                        
                     if prprequest is not None and "acceptFrameType" in prprequest:
                         arft = prprequest["acceptFrameType"].split(";")
                         if self._supported_frame is not None:
@@ -634,8 +703,12 @@ class DesktopSession(threading.Thread):
                 if prprequest is not None and "audioEnable" in prprequest:
                     self._audio_enable=prprequest["audioEnable"]=="true"
                 if prprequest is not None and "sendStats" in prprequest:
-                    b=prprequest["sendStats"]=="true"                    
-                    self._send_stats=b
+                    b=prprequest["sendStats"]=="true"
+                    if b and self._send_stats_thread is None:
+                        self._send_stats_thread=threading.Thread(target=self._send_stats_run, name="DesktopSessionSendStats" + utils.str_new(self._id))
+                        self._send_stats_thread.start()                    
+                    elif not b and self._send_stats_thread is not None:
+                        self._send_stats_thread=None
                 if prprequest is not None and "clipboardAuto" in prprequest:
                     self._clipboard_auto=prprequest["clipboardAuto"]=="true"
             except:
@@ -647,16 +720,12 @@ class DesktopSession(threading.Thread):
     def _on_websocket_close(self):
         self.destroy();
     
-    def _decode_data(self,data):        
-        return data.decode("utf8")
+    def _decode_data(self,data):
+        return data.decode("utf8")        
     
     def _send_bytes(self, bts):
         with self._websocket_send_lock:
             self._websocket.send_bytes(bts)
-    
-    def _send_list_bytes(self, bts):
-        with self._websocket_send_lock:
-            self._websocket.send_list_bytes(bts)
     
     def check_destroy(self):
         if self._init_counter is not None and self._init_counter.is_elapsed(15):
@@ -684,30 +753,30 @@ class DesktopSession(threading.Thread):
     def _strm_read_timeout(self, strm):
         return not self.check_destroy()
         
-    def received_frame(self,tm): 
-        #CALCULATE PING
-        if self._ping_sent:
-            self._ping=self._ping_counter.get_value()
-            self._ping_counter.reset()
-            self._ping_sent=False
-            return
+    def _received_frame(self,tm,fp): 
         self._semaphore_st.acquire()
         try:
+            #CALCULATE PING
+            if self._ping_check:
+                self._ping=self._ping_counter.get_value()
+                self._ping_counter.reset()
+                self._ping_check=False
+                return            
+            if tm>=self._stats_frame_sent_time:
+                self._stats_frame_sent_time=0
+                self._stats_frame_received_time=0
+            else:
+                self._stats_frame_received_time=tm
+            self._stats_frame_pending=fp            
             self._received_frame_nosync()
             self._semaphore_st.notify_all()
         finally:
             self._semaphore_st.release()
     
-    def _received_frame_nosync(self):        
+    def _received_frame_nosync(self):
         self._frame_distance-=1
-        self._stats_sent_frame+=1
-        self._stats_sent_bytes+=self._stats_sent_size.pop(0)
-        
-        if self._stats_counter is None: #FIRST FRAME
-            self._stats_counter=utils.Counter()
-            self._slow_mode_counter=utils.Counter()
-        
-        #self.calc_stats()    
+        self._stats_calc.inc("fps", 1)
+        self._frame_intervall_stats_calc.inc("fps", 1)                    
             
     def send_init_session(self):
         #SEND ID        
@@ -724,121 +793,32 @@ class DesktopSession(threading.Thread):
         for sf in self._supported_frame:
             spar.append(self._struct_h.pack(sf))
         self._send_bytes(utils.bytes_join(spar))
-    
-    
-    def calc_stats(self):
-        if self._stats_counter is not None and self._stats_counter.is_elapsed(1):
-            apptm = self._stats_counter.get_value()
-            self._stats_counter.reset()                    
-            self._stats_frame_value.append(self._stats_sent_frame)
-            self._stats_bytes_value.append(self._stats_sent_bytes)            
-            self._stats_time.append(apptm)            
-            if len(self._stats_frame_value)>1:
-                self._stats_frame_value.pop(0)
-                self._stats_bytes_value.pop(0)
-                self._stats_time.pop(0)                          
-                        
-            stm = sum(self._stats_time)
-            self._stats_ffps=float(sum(self._stats_frame_value))/stm
-            self._stats_sent_frame=0
-            self._stats_bps=int(float(sum(self._stats_bytes_value))/stm)
-            self._stats_sent_bytes=0            
-            if self._stats_ffps>0:
-                self._stat_ffps_itf=1.0/self._stats_ffps
-                self._stat_max_distance_tm=1.0
-                if self._ping>=0:
-                    self._stat_max_distance_tm+=self._ping
-            else:
-                self._stat_ffps_itf=1.0
-                self._stat_max_distance_tm=0            
-            appcheck = self._frame_intervall_fps/3.0
-            
-            bchange=False
-            if self._stats_ffps<appcheck:
-                self._frame_intervall_fps=self._frame_intervall_fps/1.5
-                bchange=True
-            elif self._stats_ffps>appcheck*2.0:
-                self._frame_intervall_fps=self._frame_intervall_fps*1.5
-                bchange=True
-            if bchange==True:
-                if self._frame_intervall_fps<self._frame_intervall_fps_min:
-                    self._frame_intervall_fps=self._frame_intervall_fps_min
-                self._frame_intervall_wait=1.0/self._frame_intervall_fps
-                
-            if self._send_stats is True:
-                try:
-                    jostats = {}
-                    jostats["fps"]=int(self._stats_ffps) 
-                    jostats["fpsmax"]=int(self._frame_intervall_fps)
-                    jostats["fpscap"]=int(self._stats_capture_fps)
-                    jostats["bps"]=self._stats_bps
-                    if self._stats_ffps>0:
-                        jostats["tdiff"]=int(self._frame_distance*(1000.0/self._stats_ffps))
-                    else:
-                        jostats["tdiff"]=0
-                    jostats["fdiff"]=self._frame_distance
-                    if self._ping==-1:
-                        jostats["ping"]=0
-                    else:
-                        jostats["ping"]=int(self._ping*1000)                        
-                    jostats["qa"]=self._quality
-                    apps=json.dumps(jostats)                    
-                    ba=bytearray(apps,"utf8")
-                    ba[0:0]=self._struct_h.pack(common.TOKEN_SESSION_STATS)
-                    self._send_bytes(ba)
-                except:
-                    print(utils.get_exception())
         
+    def _send_stats_run(self):
+        while self._send_stats_thread is not None:
+            try:
+                jostats = {}
+                jostats["fps"]=int(self._stats_fps) 
+                jostats["fpscap"]=int(self._stats_capture_fps)
+                jostats["bps"]=self._stats_bps
+                if self._stats_fps>0:
+                    jostats["tdiff"]=int(self._frame_distance*(1000.0/self._stats_fps))
+                else:
+                    jostats["tdiff"]=0
+                jostats["fdiff"]=self._frame_distance
+                jostats["ping"]=int(self._ping*1000)                        
+                jostats["qa"]=self._quality
+                apps=json.dumps(jostats)                    
+                ba=bytearray(apps,"utf8")
+                ba[0:0]=self._struct_h.pack(common.TOKEN_SESSION_STATS)
+                self._send_bytes(ba)
+            except:
+                print(utils.get_exception()) 
+                self._send_stats_thread=None
+            time.sleep(1.0)
     
-    def detect_qa(self):
-        if self._quality_request==-1 and self._slow_mode is False: #DA SISTEMARE
-            if self._quality_detect_counter is None:
-                self._quality_detect_counter=utils.Counter()
-            if self._quality_detect_counter.is_elapsed(1):                
-                self._quality_detect_wait-=(self._ping/2.0)
-                if self._quality_detect_wait<0:
-                    self._quality_detect_wait=0                
-                perc = self._quality_detect_wait/self._quality_detect_counter.get_value()
-                #print(utils.str_new(perc)
-                if perc>=0.7:
-                    if self._quality_detect_value>0:
-                        self._quality_detect_value-=1
-                if perc<=0.3 and self._stats_ffps>self._frame_intervall_fps_min:
-                    if self._quality_detect_value<9:
-                        self._quality_detect_value+=1
-                
-                self._quality_detect_counter.reset()
-                self._quality_detect_wait=0.0
-        else:
-            self._quality_detect_counter=None
-            self._quality_detect_wait=0.0
-    
-    def wait_screen_distance(self):
-        w = self._frame_intervall_wait-self._frame_intervall_time_counter.get_value()
-        if w>0:
-            time.sleep(w)
-        self._frame_intervall_time_counter.reset()
-        self._semaphore_st.acquire()
-        try:
-            if self._slow_mode_counter is not None:
-                self._slow_mode_counter.reset()
-            while self.check_destroy() and self._process.get_status()=="started" and self._process.get_id()==self._process_id:
-                bwait=False
-                if self._frame_type!=-1 and self._monitor!=-1:
-                    self.calc_stats()
-                    self.detect_qa()
-                    bwait=self._frame_distance*self._stat_ffps_itf>self._stat_max_distance_tm
-                    if (not bwait and (self._slow_mode is False or self._slow_mode_counter is None or self._slow_mode_counter.is_elapsed(4)) and
-                        self._frame_in_progress==False):
-                        return True
-                apptm = time.time()
-                self._semaphore_st.wait(0.25)
-                elp = time.time()-apptm
-                if self._quality_detect_counter is not None and bwait==True and elp>0.0:
-                    self._quality_detect_wait+=elp
-        finally:
-            self._semaphore_st.release()
-        return False
+    def _strm_process_encoder_read_timeout(self, strm):
+        return self.is_destroy()
     
     def _destroy_process_encoder(self, bforce=False):
         if self._process_encoder_init==True or bforce==True:
@@ -854,86 +834,145 @@ class DesktopSession(threading.Thread):
                 self._process_encoder.close()
                 self._process_encoder.join(1)
                 self._process_encoder=None
-            self._process_encoder_init=False
-        
-        self._process_encoder_monitorsid=-1
-        self._frame_in_progress=False
+            self._process_encoder_init=False        
+        self._process_encoder_monitorsid=-1        
     
-    def _strm_process_encoder_read_timeout(self, strm):
-        return self.is_destroy()
-    
-    def _process_encoder_read(self):
+    def _process_encoder_read(self,cpid):
         while True:
             sdata = None
             try: 
-                sdata = self._process_encoder_stream.read_bytes()
+                sdata = self._process_encoder_stream.read_bytes()                
             except:
                 None
             if sdata==None:
                 break
             self._init_counter=None
             if len(sdata)>0:
-                lst=[]
                 tp = self._struct_h.unpack(sdata[0:2])[0]                
                 if tp==common.TOKEN_FRAME:
-                    #CALCULATE PING
-                    if self._ping_counter is None or (self._ping_counter.is_elapsed(5) and sum(self._stats_sent_size)==0 and self._frame_distance==0):
+                    #SEND PING
+                    if self._ping_counter is None or (self._ping_counter.is_elapsed(5) and self._stats_frame_sent_time==self._stats_frame_received_time):
                         if self._ping_counter is None:
                             self._ping_counter = utils.Counter()
                         else:
                             self._ping_counter.reset()
-                        self._ping_sent=True
-                        lst.append(self._struct_h.pack(common.TOKEN_FRAME_TIME)+utils.str_to_bytes(utils.str_new(time.time())))
-                        lst.append(self._struct_hb.pack(2,1))
-                        self._send_list_bytes(lst)
-                        lst=[]
-                    
+                        self._ping_check=True
+                        self._send_bytes(self._struct_h.pack(common.TOKEN_FRAME_TIME)+utils.str_to_bytes(utils.str_new(time.time())))
+                        self._send_bytes(self._struct_hb.pack(2,1))
+                        
                     bsend=True
                     self._semaphore_st.acquire()
                     try:
-                        p = len(self._stats_sent_size)-1
-                        if p==-1:
-                            p=0
-                            self._stats_sent_size.append(int(len(sdata)))
-                        else:
-                            self._stats_sent_size[p]+=int(len(sdata))
+                        self._stats_cur_frame_size+=int(len(sdata))
                         if utils.bytes_get(sdata,2)==1:
                             self._frame_distance+=1
-                            if self._stats_sent_size[p]==3:
-                                self._stats_sent_size[p]=0
+                            self._stats_calc.inc("bps",self._stats_cur_frame_size)
+                            if self._stats_cur_frame_size==3:                           
                                 self._received_frame_nosync()
                                 bsend=False
-                            self._stats_sent_size.append(0)                        
-                        self._semaphore_st.notify_all()
+                            else:
+                                tm=time.time() 
+                                if tm>self._stats_frame_sent_time:
+                                    self._stats_frame_sent_time=tm
+                                else: 
+                                    self._stats_frame_received_time=0
+                            self._stats_cur_frame_size=0
                     finally:
-                        self._semaphore_st.release()                    
-                    if bsend:                    
-                        if utils.bytes_get(sdata,2)==1:
-                            lst.append(self._struct_h.pack(common.TOKEN_FRAME_TIME)+utils.str_to_bytes(utils.str_new(time.time())))
-                        lst.append(sdata)
-                        #print("frame sent. Time: " + utils.str_new(tm))
+                        self._semaphore_st.release()
+                        
+                    if bsend:
+                        if utils.bytes_get(sdata,2)==1:                            
+                            self._send_bytes(self._struct_h.pack(common.TOKEN_FRAME_TIME)+utils.str_to_bytes(utils.str_new(self._stats_frame_sent_time)))
+                        self._send_bytes(sdata)                        
+                        
                 elif tp==common.TOKEN_CURSOR:
                     if self._cursor_visible==True:
-                        lst.append(sdata)
+                        self._send_bytes(sdata)
                 elif tp==common.TOKEN_AUDIO_DATA: #TOKEN AUDIO
                     if self._audio_type_to_send==False:
-                        lst.append(sdata)
-                elif tp==common.TOKEN_FPS:
-                    self._stats_capture_fps=self._struct_B.unpack(sdata[2:3])[0]
+                        self._send_bytes(sdata)
+                elif tp==common.TOKEN_FRAME_NEXT:
+                    #NEXT FRAME
+                    fiw=0
+                    self._semaphore_st.acquire()                
+                    try:
+                        arToken = self._struct_Q.unpack(sdata[2:2+self._struct_Q.size])
+                        self._stats_calc.inc("capfps", arToken[0])
+                        
+                        if self._slow_mode:
+                            self._slow_mode_counter.reset()
+                            while self._slow_mode and not self._slow_mode_counter.is_elapsed(4):
+                                self._semaphore_st.wait(0.2)
+                            self._quality_detect_down_count=0
+                            self._quality_detect_up_check.reset()                                                
+                        else:
+                            bdwait=False
+                            while self._process_id==cpid and not (self._stats_frame_pending==0 and ((self._stats_frame_received_time==0) or self._stats_frame_sent_time-self._stats_frame_received_time<1+self._ping)):
+                                bdwait=True
+                                self._semaphore_st.wait(0.5)
+                            if self._calc_stats():
+                                self._qa_detect()
+                            if self._quality_request!=-1:
+                                self._quality=self._quality_request
+                            else:
+                                self._quality=self._quality_detect_value
+                            if self._stats_frame_sent_time==0 and self._stats_frame_received_time==0:
+                                fiw=0
+                            else:
+                                arstats=self._frame_intervall_stats_calc.check(1.0+self._ping)
+                                if arstats is not None:
+                                    self._frame_intervall_fps = int(arstats["fps"])
+                                    #print(str(self._frame_intervall_fps))
+                                if bdwait:
+                                    ifps=self._frame_intervall_fps
+                                    if ifps==0:
+                                        ifps=self._frame_intervall_fps_min
+                                else:
+                                    ifps=self._frame_intervall_fps+self._frame_intervall_fps_inc
+                                fiw=1.0/ifps                            
+                    finally:
+                        self._semaphore_st.release()
+                    w = fiw-self._frame_intervall_time_counter.get_value()
+                    if w>0:
+                        self._frame_intervall_event.wait(w)
+                    self._frame_intervall_time_counter.reset()
+                    self._frame_intervall_event.set()                                        
                 else:
-                    lst.append(sdata)
-                                                    
-                if len(lst)>0 and self._websocket is not None:
-                    self._send_list_bytes(lst)            
+                    self._send_bytes(sdata)
+
+                    
+    def _calc_stats(self):
+        arstats=self._stats_calc.check(1.0+self._ping)
+        if arstats is not None:
+            self._stats_fps=int(arstats["fps"])
+            self._stats_bps=int(arstats["bps"])
+            self._stats_capture_fps=int(arstats["capfps"])
+            return True
+        return False
+    
+    def _qa_detect(self):
+        if self._quality_request==-1:
+            #DETECT DOWN
+            if self._quality_detect_value>0 and self._stats_capture_fps>0 and self._stats_capture_fps>self._stats_fps and self._stats_fps<=self._quality_detect_fps_min:
+                self._quality_detect_down_count+=1
+                if self._quality_detect_down_count>=8: #2 SEC
+                    self._quality_detect_value-=1
+                    #print("DOWN quality_detect_value: " + str(self._quality_detect_value) + " capture_fps:" + str(self._stats_capture_fps) + " stats_fps:" + str(self._stats_fps))
+                    self._quality_detect_down_count=0
+                    self._quality_detect_up_check.reset()
             else:
-                self._semaphore_st.acquire()
-                try:
-                    self._frame_in_progress=False
-                    if self._quality_detect_counter is not None:
-                        self._quality_detect_counter.start()
-                    self._semaphore_st.notify_all()
-                finally:
-                    self._semaphore_st.release()
+                self._quality_detect_down_count=0
+            #DETECT UP
+            if self._quality_detect_value<9:
+                if self._stats_fps>=self._quality_detect_fps_min:
+                    if self._quality_detect_up_check.is_elapsed(4):
+                        self._quality_detect_value+=1
+                        self._quality_detect_up_check.reset()
+                        #print("UP quality_detect_value: " + str(self._quality_detect_value) + " capture_fps:" + str(self._stats_capture_fps) + " stats_fps:" + str(self._stats_fps))
+                else:
+                    self._quality_detect_up_check.reset()
+            else:
+                self._quality_detect_up_check.reset()        
     
     def _process_clipboard_handler(self):
         while self._last_clipboard_id>=0:
@@ -963,21 +1002,6 @@ class DesktopSession(threading.Thread):
         try:
             while self.check_destroy():
                 
-                if self._clipboard_auto==True:
-                    if self._process_clipboard_thread==None:
-                        self._last_clipboard_id=self._process.get_last_clipboard()["id"]
-                        self._process_clipboard_thread=threading.Thread(target=self._process_clipboard_handler, name="DesktopSessionClipboardHandler" + utils.str_new(self._id))
-                        self._process_clipboard_thread.start() 
-                else:
-                    self._destroy_clipboard_handler()
-                
-                if self._process_encoder==None:
-                    self._process_encoder = ipc.Process("app_desktop.encoder", "ProcessEncoder", forcesubprocess=self._debug_forcesubprocess)
-                    self._process_encoder_stream = self._process_encoder.start()
-                    self._process_encoder_stream.set_read_timeout_function(self._strm_process_encoder_read_timeout)
-                    self._process_encoder_read_thread=threading.Thread(target=self._process_encoder_read, name="DesktopSessionProcessRead" + utils.str_new(self._id))
-                    self._process_encoder_read_thread.start()
-                                        
                 if self._process.get_status()=="started":                    
                     if self._process.get_id()!=self._process_id:
                         self._destroy_process_encoder()
@@ -985,7 +1009,23 @@ class DesktopSession(threading.Thread):
                 else:
                     self._destroy_process_encoder()
                 
-                if self._process.get_status()=="started" and self._process_encoder is not None:
+                if self._process.get_status()=="started":
+                    
+                    if self._process_encoder==None:
+                        self._process_encoder = ipc.Process("app_desktop.encoder", "ProcessEncoder", forcesubprocess=self._debug_forcesubprocess)
+                        self._process_encoder_stream = self._process_encoder.start()
+                        self._process_encoder_stream.set_read_timeout_function(self._strm_process_encoder_read_timeout)
+                        self._process_encoder_read_thread=threading.Thread(target=self._process_encoder_read, args=(self._process_id,), name="DesktopSessionProcessRead" + utils.str_new(self._id))
+                        self._process_encoder_read_thread.start()
+                    
+                    if self._clipboard_auto==True:
+                        if self._process_clipboard_thread==None:
+                            self._last_clipboard_id=self._process.get_last_clipboard()["id"]
+                            self._process_clipboard_thread=threading.Thread(target=self._process_clipboard_handler, name="DesktopSessionClipboardHandler" + utils.str_new(self._id))
+                            self._process_clipboard_thread.start() 
+                    else:
+                        self._destroy_clipboard_handler()
+                    
                     monitors=self._process.get_monitors()
                     if monitors is None:
                         time.sleep(0.25)
@@ -1012,11 +1052,12 @@ class DesktopSession(threading.Thread):
                                     self._process_encoder_event = ipc.Event()
                                     self._process_encoder_stream.write_obj({u"request":u"INIT",u"event":self._process_encoder_event,u"image_type":self._frame_type})
                                     self._process_encoder_init=True
+                                    self._frame_intervall_event.set()
                                                                                 
                                 if self._process_encoder_monitorsid!=monitors["id"]:
                                     self._process_encoder_stream.write_obj({u"request":u"SET_MONITORS",u"monitors":monitors})
-                                    self._process_encoder_monitorsid=monitors["id"]                                
-                                
+                                    self._process_encoder_monitorsid=monitors["id"]
+                                    
                                 soundstatus=self._process.get_sound_status()
                                 if soundstatus is not None:
                                     if self._audio_type_to_send==True:
@@ -1041,20 +1082,14 @@ class DesktopSession(threading.Thread):
                                     self._frame_type_to_send=False
                                     self._send_bytes(self._struct_hh.pack(common.TOKEN_FRAME_TYPE,self._frame_type))                                                    
                                 
-                                if self.wait_screen_distance():
-                                    if self._quality_request!=-1:
-                                        self._quality=self._quality_request
-                                    else:
-                                        self._quality=self._quality_detect_value
-                                        #if self._quality_detect_value!=-1:
-                                        #    self._quality=self._quality_detect_value
-                                        #    self._quality_detect_value=-1
-                                    self._frame_in_progress=True
-                                    if self._quality_detect_counter is not None:
-                                        self._quality_detect_counter.stop()
-                                    self._process_encoder_stream.write_obj({u"request":u"ENCODE", u"monitor":self._monitor, u"quality":self._quality,u"send_buffer_size":self._websocket.get_send_buffer_size()})
-                                            
-                            except:
+                                if self._frame_type!=-1 and self._monitor!=-1:
+                                    self._frame_intervall_event.wait(0.25)
+                                    if self._frame_intervall_event.is_set():
+                                        self._frame_intervall_event.clear()                                        
+                                        self._process_encoder_stream.write_obj({u"request":u"ENCODE", u"monitor":self._monitor, u"quality":self._quality,u"send_buffer_size":self._websocket.get_send_buffer_size()})
+                                else:
+                                    time.sleep(0.25)
+                            except Exception:
                                 self._destroy_process_encoder()
                         else:        
                             time.sleep(0.25)
@@ -1133,6 +1168,7 @@ class DesktopSession(threading.Thread):
             self._process.set_clipboard(self._monitor,t,d)
     
     def destroy(self):
+        self._send_stats_thread=None
         self._bdestroy=True             
     
     def is_destroy(self):

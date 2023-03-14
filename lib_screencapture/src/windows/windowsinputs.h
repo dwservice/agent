@@ -26,11 +26,12 @@ private:
     bool mousebtn1Down;
     bool mousebtn2Down;
     bool mousebtn3Down;
+    bool commandDown;
     bool ctrlDown;
     bool altDown;
     bool shiftDown;
 
-    void addCtrlAltShift(INPUT (&inputs)[20],int &p,bool ctrl, bool alt, bool shift);
+    void addCtrlAltShift(INPUT (&inputs)[20],int &p,bool ctrl, bool alt, bool shift, bool command);
     void sendInputs(INPUT (&inputs)[20],int max);
     bool isExtendedKey(int key);
     int getKeyCode(const char* key);

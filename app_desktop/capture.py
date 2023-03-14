@@ -63,7 +63,7 @@ class ProcessCaptureScreen(threading.Thread):
             loadseq=[]
             if agent.is_windows():
                 if self._process._force_capturescreenlib is None:
-                    if platform.release() == '10':
+                    if platform.release() == '10' or platform.release() == '11':
                         loadseq.append("dwagscreencapturedesktopduplication.dll")
                     loadseq.append("dwagscreencapturebitblt.dll")
                 else:
@@ -366,7 +366,7 @@ class ProcessCaptureScreen(threading.Thread):
                         cond.release()
         
         if self._frame_wait_cnt.is_elapsed(0.5):
-            ucpu = self._screen_module.DWAScreenCaptureGetCpuUsage()        
+            ucpu = self._screen_module.DWAScreenCaptureGetCpuUsage()
             if ucpu<=self._max_cpu_usage:
                 self._frame_wait-=self._frame_wait_step
                 if self._frame_wait<self._frame_wait_min:
@@ -755,7 +755,7 @@ class ProcessCaptureStdOut(object):
     def write(self, data):
         if data=="\n":
             self._process._write_debug("".join(self._arapp))
-            self._arapp.clear()
+            self._arapp=[]
         else:
             self._arapp.append(data)
 
@@ -768,7 +768,7 @@ class ProcessCaptureStdErr(object):
     def write(self, data):
         if data=="\n":
             self._process._write_err("".join(self._arapp))
-            self._arapp.clear()
+            self._arapp=[]
         else:
             self._arapp.append(data)
         

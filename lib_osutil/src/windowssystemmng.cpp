@@ -97,6 +97,7 @@ int SystemMng::getInfo(wchar_t** sret) {
 
 	LONG iMajorVersion=osvi.dwMajorVersion;
 	LONG iMinorVersion=osvi.dwMinorVersion;
+	LONG iBuildNumber=0;
 	if ( VER_PLATFORM_WIN32_NT==osvi.dwPlatformId && iMajorVersion > 4 ) {
 
 		//FIX WIN 10 DETECTION
@@ -111,19 +112,28 @@ int SystemMng::getInfo(wchar_t** sret) {
 			if (Status == 0) {
 				iMajorVersion=pk_OsVer.dwMajorVersion;
 				iMinorVersion=pk_OsVer.dwMinorVersion;
+				iBuildNumber=pk_OsVer.dwBuildNumber;
 			}
 		}
 
 		wstring sret;
 		sret.append(L"Microsoft ");
-
-		//WINDOWS SERVER 2016 - 10
 		if ( iMajorVersion == 10 ) {
 			if ( iMinorVersion == 0 ) {
 				if( osvi.wProductType == VER_NT_WORKSTATION ) {
-					sret.append(L"Windows 10 ");
+					if (iBuildNumber>=22000){
+						sret.append(L"Windows 11 ");
+					}else{
+						sret.append(L"Windows 10 ");
+					}
 				} else {
-					sret.append(L"Windows Server 2016 ");
+					if (iBuildNumber>=20348){
+						sret.append(L"Windows Server 2016 ");
+					}else if (iBuildNumber>=17763){
+						sret.append(L"Windows Server 2019 ");
+					}else{
+						sret.append(L"Windows Server 2022 ");
+					}
 				}
 			}
 		} else if ( iMajorVersion == 6 ) { //WINDOWS SERVER 2008 - SERVER 2012 - 7 - 8

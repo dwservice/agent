@@ -135,7 +135,7 @@ class ProcessEncoder(ipc.ChildProcessThread):
         self._struct_h=struct.Struct("!h")
         self._struct_hh=struct.Struct("!hh")
         self._struct_hhh=struct.Struct("!hhh")
-        self._struct_hB=struct.Struct("!hB")
+        self._struct_hQ=struct.Struct("!hQ")
         self._struct_Q=struct.Struct("!Q")
         self._listlibscr = None
         self._scrmdl = None
@@ -162,8 +162,7 @@ class ProcessEncoder(ipc.ChildProcessThread):
         self._sound_memmap_limit=-1
         self._sound_cid=0
         self._sound_thread=None
-        self._write_lock = threading.RLock()
-        self._fps_cnt=utils.Counter()
+        self._write_lock = threading.RLock()        
     
     def _init(self,joreq):
         self._skipevent=joreq["event"]
@@ -183,7 +182,7 @@ class ProcessEncoder(ipc.ChildProcessThread):
         self._curpos=joreq["monitors"]["curpos"]
         for mon in self._monitors:
             mon["curcapid"]=0
-            mon["fpscurcapid"]=0
+            mon["prevcurcapid"]=0
             mon["curcapst"]=b"K"
             mon["encses"]=None                        
         self._curmon=-2
@@ -297,7 +296,7 @@ class ProcessEncoder(ipc.ChildProcessThread):
             mon["encses"]=ctypes.c_void_p()
             self._encinst.initialize(mon["encses"])
             mon["curcapid"]=0
-            mon["fpscurcapid"]=0
+            mon["prevcurcapid"]=0
             mon["curcapst"]=b"K"
             if self._multiview["gx"]+mon["x"]+mon["width"]>w:
                 w=self._multiview["gx"]+mon["x"]+mon["width"]
@@ -313,7 +312,7 @@ class ProcessEncoder(ipc.ChildProcessThread):
         mon["encses"]=ctypes.c_void_p()
         self._encinst.initialize(mon["encses"])
         mon["curcapid"]=0
-        mon["fpscurcapid"]=0
+        mon["prevcurcapid"]=0
         mon["curcapst"]=b"K"
         self._stream.write_bytes(self._struct_hhh.pack(common.TOKEN_RESOLUTION,mon["width"],mon["height"]))
         
@@ -377,7 +376,7 @@ class ProcessEncoder(ipc.ChildProcessThread):
                     self._multiview["ox"]=self._multiview["gx"]+mon["x"]
                     self._multiview["oy"]=self._multiview["gy"]+mon["y"]
                     self._multiview["type2"]=True
-                    self._encinst.encode(mon["encses"],joreq,rgbimage,common.cb_screen_encode_result)
+                    self._encinst.encode(mon["encses"],joreq,rgbimage,common.cb_screen_encode_result)                    
             
             
     def _singlemon_encode(self,joreq):
@@ -417,10 +416,11 @@ class ProcessEncoder(ipc.ChildProcessThread):
                 self._cond.wait(0.25)
         finally:
             self._cond.release()
-        if rgbimage is not None:                            
-            self._encinst.encode(mon["encses"],joreq,rgbimage,common.cb_screen_encode_result)
+            
+        if rgbimage is not None:
+            self._encinst.encode(mon["encses"],joreq,rgbimage,common.cb_screen_encode_result)            
             #print("ltot:" + str(ltot))
-        
+            
         
     def _cursor_encode(self):
         if self._curcounter.is_elapsed(0.02):
@@ -449,27 +449,6 @@ class ProcessEncoder(ipc.ChildProcessThread):
                 #print("cursor encode: " + str(self._curx) + " : " + str(self._cury) + " sz=" + str(curimage.sizedata)) 
             
             self._curcounter.reset()
-    
-    def _calc_fps(self):
-        if self._fps_cnt.is_elapsed(1):
-            cptfps=0
-            elp = 1.0/self._fps_cnt.get_value()
-            for i in range(len(self._monitors)):
-                mon = self._monitors[i]
-                if i==0:
-                    cptfps=int((mon["curcapid"]-mon["fpscurcapid"])*elp)
-                else:
-                    c=int((mon["curcapid"]-mon["fpscurcapid"])*elp)
-                    if c>cptfps:
-                        cptfps=c
-                mon["fpscurcapid"]=mon["curcapid"]
-                
-            if cptfps<0:
-                cptfps=0 
-            elif cptfps>255:
-                cptfps=255
-            self._fps_cnt.reset()
-            self._stream.write_bytes(self._struct_hB.pack(common.TOKEN_FPS,cptfps))
     
     def _strm_read_timeout(self,strm):
         return self.is_destroy()
@@ -509,10 +488,20 @@ class ProcessEncoder(ipc.ChildProcessThread):
                         self._multimon_encode(joreq)
                     elif m>=0 and m<=len(self._monitors)-1: #SINGLEMONITOR
                         self._singlemon_encode(joreq)
-                    self._calc_fps()
                     if not self.is_destroy():
                         self._skipevent.clear()
-                        self._stream.write_bytes(b"")                            
+                        #NEXT FRAME
+                        incfrm=0
+                        for i in range(len(self._monitors)):
+                            mon = self._monitors[i]
+                            curcapid=mon["curcapid"]
+                            prevcurcapid=mon["prevcurcapid"]
+                            if prevcurcapid>0:
+                                c=curcapid-prevcurcapid
+                                if c>incfrm:
+                                    incfrm=c
+                            mon["prevcurcapid"]=mon["curcapid"]
+                        self._stream.write_bytes(self._struct_hQ.pack(common.TOKEN_FRAME_NEXT,incfrm))                                      
         except:
             ex = utils.get_exception()
             if not self.is_destroy():

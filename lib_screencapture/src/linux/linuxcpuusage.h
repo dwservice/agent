@@ -6,8 +6,10 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #if defined OS_LINUX
 
 #include "../common/timecounter.h"
-#include <sys/times.h>
 #include <string.h>
+#include <iostream>
+#include <time.h>
+#include <unistd.h>
 
 #ifndef LINUXCPUUSAGE_H_
 #define LINUXCPUUSAGE_H_
@@ -21,10 +23,8 @@ public:
 
 private:
     bool firstGetCpu;
-    clock_t lastCPU;
-    clock_t lastSysCPU;
-    clock_t lastUserCPU;
-    int numProcessors;
+    timespec prevTime;
+    long numCores;
     double percentCpu;
     TimeCounter cpuCounter;
 };

@@ -432,6 +432,7 @@ int DWAScreenCaptureCursor(CURSOR_IMAGE* curimage){
 					curimage->width=xcurimg->width;
 					curimage->height=xcurimg->height;
 					curimage->sizedata=xcurimg->width*xcurimg->height*4;
+					bool visible=false;
 					unsigned char* cursorData = (unsigned char*)malloc(curimage->sizedata);
 					long unsigned int* dt = xcurimg->pixels;
 					int offsrc=0;
@@ -441,6 +442,9 @@ int DWAScreenCaptureCursor(CURSOR_IMAGE* curimage){
 					for (int row = 0; row < xcurimg->height; ++row){
 						for (int col = 0; col < xcurimg->width; ++col){
 							argb = dt[offsrc] & 0xffffffff;
+							if (argb!=0x00000000){
+								visible=true;
+							}
 							rgba = (argb << 8) | (argb >> 24);
 							cursorData[offdest] = (rgba >> 24)  & 0xff;
 							cursorData[offdest+1] = (rgba >> 16) & 0xff;
@@ -450,11 +454,15 @@ int DWAScreenCaptureCursor(CURSOR_IMAGE* curimage){
 							offdest+=4;
 						}
 					}
-					if (curimage->data!=NULL){
-						free(curimage->data);
+					if (visible){
+						if (curimage->data!=NULL){
+							free(curimage->data);
+						}
+						curimage->changed=1;
+						curimage->data = cursorData;
+					}else{
+						free(cursorData);
 					}
-					curimage->changed=1;
-					curimage->data = cursorData;
 					XFree(xcurimg);
 				}else if (curimage->data==NULL){
 					curimage->changed=1;

@@ -48,7 +48,7 @@ int clearMonitorsInfo(MONITORS_INFO* moninfo){
 	return oldmc;
 }
 
-void addMonitorsInfo(MONITORS_INFO* moninfo, int x, int y, int w, int h,HMONITOR hMonitor){
+void addMonitorsInfo(MONITORS_INFO* moninfo, int x, int y, int w, int h, int rotatedDegrees, HMONITOR hMonitor){
 	int p=moninfo->count;
 	moninfo->count+=1;
 	MonitorInternalInfo* mi = NULL;
@@ -64,6 +64,7 @@ void addMonitorsInfo(MONITORS_INFO* moninfo, int x, int y, int w, int h,HMONITOR
 		moninfo->monitor[p].y=y;
 		moninfo->monitor[p].width=w;
 		moninfo->monitor[p].height=h;
+		mi->rotatedDegrees=rotatedDegrees;
 		mi->hMonitor=hMonitor;
 		moninfo->monitor[p].changed=1;
 		moninfo->changed=1;
@@ -74,6 +75,7 @@ void addMonitorsInfo(MONITORS_INFO* moninfo, int x, int y, int w, int h,HMONITOR
 			moninfo->monitor[p].y=y;
 			moninfo->monitor[p].width=w;
 			moninfo->monitor[p].height=h;
+			mi->rotatedDegrees=rotatedDegrees;
 			mi->hMonitor=hMonitor;
 			moninfo->monitor[p].changed=1;
 			moninfo->changed=1;
@@ -111,26 +113,27 @@ int DWAScreenCaptureGetMonitorsInfo(MONITORS_INFO* moninfo){
 					bok=false;
 				}
 				if ((bok) && (DesktopDesc.AttachedToDesktop==TRUE)){
-					//switch (DesktopDesc.Rotation){
-					//	case DXGI_MODE_ROTATION_UNSPECIFIED:
-					//	case DXGI_MODE_ROTATION_IDENTITY:
-					//		pInfo->RotationDegrees = 0;
-					//		break;
-					//	case DXGI_MODE_ROTATION_ROTATE90:
-					//		pInfo->RotationDegrees = 90;
-					//		break;
-					//	case DXGI_MODE_ROTATION_ROTATE180:
-					//		pInfo->RotationDegrees = 180;
-					//		break;
-					//	case DXGI_MODE_ROTATION_ROTATE270:
-					//		pInfo->RotationDegrees = 270;
-					//		break;
-					//}
+					int rotatedDegrees=0;
+					switch (DesktopDesc.Rotation){
+						case DXGI_MODE_ROTATION_UNSPECIFIED:
+						case DXGI_MODE_ROTATION_IDENTITY:
+							rotatedDegrees = 0;
+							break;
+						case DXGI_MODE_ROTATION_ROTATE90:
+							rotatedDegrees = 90;
+							break;
+						case DXGI_MODE_ROTATION_ROTATE180:
+							rotatedDegrees = 180;
+							break;
+						case DXGI_MODE_ROTATION_ROTATE270:
+							rotatedDegrees = 270;
+							break;
+					}
 					int x=DesktopDesc.DesktopCoordinates.left;
 					int y=DesktopDesc.DesktopCoordinates.top;
 					int w=DesktopDesc.DesktopCoordinates.right - DesktopDesc.DesktopCoordinates.left;
 					int h=DesktopDesc.DesktopCoordinates.bottom - DesktopDesc.DesktopCoordinates.top;
-					addMonitorsInfo(moninfo,x,y,w,h,DesktopDesc.Monitor);
+					addMonitorsInfo(moninfo,x,y,w,h,rotatedDegrees,DesktopDesc.Monitor);
 				}
 				ipDxgiOutput->Release();
 			}
@@ -405,9 +408,14 @@ int DWAScreenCaptureCursor(CURSOR_IMAGE* curimage) {
 										cursorData[id + 3] = a;
 										id += 4;
 										is += 4;
+										if ((r!=0) || (g!=0) || (b!=0) || (a!=0)){
+											bok = true;
+										}
 									}
 								}
-								bok = true;
+								if (!bok){
+									free(cursorData);
+								}
 							}
 						}
 						if (bok){
@@ -842,7 +850,17 @@ void DWAScreenCaptureInputKeyboard(const char* type,const char* key, bool ctrl, 
 }
 
 void DWAScreenCaptureInputMouse(MONITORS_INFO_ITEM* moninfoitem, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command){
-	winInputs->mouse(moninfoitem, x, y, button, wheel, ctrl, alt, shift, command);
+	if (moninfoitem==NULL){
+		winInputs->mouse(moninfoitem, x, y, button, wheel, ctrl, alt, shift, command);
+	}else{
+		MonitorInternalInfo* mi = (MonitorInternalInfo*)moninfoitem->internal;
+		if ((mi->rotatedDegrees==0) || (mi->rotatedDegrees==90)){
+			winInputs->mouse(moninfoitem, x, y, button, wheel, ctrl, alt, shift, command);
+		}else{
+			winInputs->mouse(moninfoitem, y, x, button, wheel, ctrl, alt, shift, command);
+		}
+	}
+
 	/*if ((p==1) && (button==-1) && (mouseData==0) && (mx!=-1) && (my!=1)){ //INPUT BLOCKED BY FOREGROUND WINDOWS
 		HWND h = GetForegroundWindow();
 		if (h!=checkBlockInputsWin){

@@ -541,7 +541,7 @@ unsigned long DWAScreenCaptureTJPEGEncode(int ver, void* encses, int jpegQuality
 				es->jpegBuf = tjAlloc(es->jpegBufSize);
 			}
 			unsigned long jpegSize = 0;
-			int tjcret = tjCompress2(es->tjInstance, rgbimage->data+((rgbimage->width*(drcur.y1*3))+(drcur.x1*3)), cw, rgbimage->width*3, ch, TJPF_RGB,&es->jpegBuf, &jpegSize, TJSAMP_444, jpegQuality, TJFLAG_FASTDCT | TJFLAG_NOREALLOC);
+			int tjcret = tjCompress2(es->tjInstance, rgbimage->data+((rgbimage->width*(drcur.y1*3))+(drcur.x1*3)), cw, rgbimage->width*3, ch, TJPF_RGB,&es->jpegBuf, &jpegSize, TJSAMP_420, jpegQuality, TJFLAG_FASTDCT | TJFLAG_NOREALLOC);
 			if (tjcret==0){
 				if (ver==1){
 					int tot=2+1+2+2+jpegSize;

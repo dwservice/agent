@@ -246,9 +246,14 @@ int DWAScreenCaptureCursor(CURSOR_IMAGE* curimage) {
 										cursorData[id + 3] = a;
 										id += 4;
 										is += 4;
+										if ((r!=0) || (g!=0) || (b!=0) || (a!=0)){
+											bok = true;
+										}
 									}
 								}
-								bok = true;
+								if (!bok){
+									free(cursorData);
+								}
 							}
 						}
 						if (bok){

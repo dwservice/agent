@@ -8,39 +8,37 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #include "maccpuusage.h"
 
+
 MacCPUUsage::MacCPUUsage(){
-	percentCpu=-1.0f;
-	previousTotalTicks=0;
-	previousIdleTicks=0;
+	percentCpu = 0;
+	firstGetCpu=true;
+	cpuCounter.reset(); 	
+    size_t size = sizeof(cpuFrequency);
+    sysctlbyname("hw.cpufrequency", &cpuFrequency, &size, nullptr, 0);
 }
 
 MacCPUUsage::~MacCPUUsage(){
 
 }
 
-float MacCPUUsage::calculateCPULoad(unsigned long long idleTicks, unsigned long long totalTicks){
-	unsigned long long totalTicksSinceLastTime = totalTicks-previousTotalTicks;
-	unsigned long long idleTicksSinceLastTime  = idleTicks-previousIdleTicks;
-	float ret = 1.0f-((totalTicksSinceLastTime > 0) ? ((float)idleTicksSinceLastTime)/totalTicksSinceLastTime : 0);
-	previousTotalTicks = totalTicks;
-	previousIdleTicks  = idleTicks;
-	return ret*100.0;
-}
-
 float MacCPUUsage::getValue(){
 	if ((percentCpu>=0) && (cpuCounter.getCounter()<1000)){
 		return percentCpu;
 	}
-	host_cpu_load_info_data_t cpuinfo;
-	mach_msg_type_number_t count = HOST_CPU_LOAD_INFO_COUNT;
-	if (host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, (host_info_t)&cpuinfo, &count) == KERN_SUCCESS){
-		unsigned long long totalTicks = 0;
-		for(int i=0; i<CPU_STATE_MAX; i++) totalTicks += cpuinfo.cpu_ticks[i];
-		percentCpu=calculateCPULoad(cpuinfo.cpu_ticks[CPU_STATE_IDLE], totalTicks);
-	}else{
-		percentCpu=-1.0f;
-	}
-	cpuCounter.reset();
+  	if (firstGetCpu){
+  		prevTime=mach_absolute_time();
+      	percentCpu=0;
+    }else{
+      	uint64_t curTime = mach_absolute_time();
+        uint64_t elapsedTime = curTime - prevTime;
+        mach_timebase_info_data_t timebase;
+        mach_timebase_info(&timebase);
+        uint64_t elapsedTimeNs = elapsedTime * timebase.numer / timebase.denom;
+        percentCpu = 100.0 * elapsedTimeNs / cpuFrequency;
+        prevTime = curTime;
+    }
+  	firstGetCpu=false;
+ 	cpuCounter.reset();
 	return percentCpu;
 }
 

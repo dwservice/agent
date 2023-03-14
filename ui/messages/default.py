@@ -201,5 +201,6 @@ data={
     'ipAddress': u'IP Address: {0}',
     'accessConfirm': u'Would like to access to your device.',
     'unattendedAccess': u'Unattended\naccess',
-    'unknownUser': u'Unknown user'
+    'unknownUser': u'Unknown user',
+    'skipCertValidation':u'Warning: The security certificate cannot be validated, if you proceed the connection may not be secure.\nPlease check the router/firewall/antivirus configuration of the network or local.\nProceed anyway?'
 }

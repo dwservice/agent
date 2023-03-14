@@ -12,6 +12,7 @@ WindowsInputs::WindowsInputs(){
 	mousebtn1Down=false;
 	mousebtn2Down=false;
 	mousebtn3Down=false;
+	commandDown=false;
 	ctrlDown=false;
 	altDown=false;
 	shiftDown=false;
@@ -21,7 +22,26 @@ WindowsInputs::~WindowsInputs(){
 
 }
 
-void WindowsInputs::addCtrlAltShift(INPUT (&inputs)[20],int &p,bool ctrl, bool alt, bool shift){
+void WindowsInputs::addCtrlAltShift(INPUT (&inputs)[20],int &p,bool ctrl, bool alt, bool shift, bool command){
+	if ((command) && (!commandDown)){
+		commandDown=true;
+		inputs[p].type= INPUT_KEYBOARD;
+		inputs[p].ki.wVk = VK_LWIN;
+		inputs[p].ki.wScan = MapVirtualKey(VK_LWIN & 0xFF, MAPVK_VK_TO_VSC);
+		inputs[p].ki.time = 5;
+		inputs[p].ki.dwExtraInfo = 0;
+		inputs[p].ki.dwFlags = 0;
+		p++;
+	}else if ((!command) && (commandDown)){
+		commandDown=false;
+		inputs[p].type= INPUT_KEYBOARD;
+		inputs[p].ki.wVk = VK_LWIN;
+		inputs[p].ki.wScan = MapVirtualKey(VK_LWIN & 0xFF, MAPVK_VK_TO_VSC);
+		inputs[p].ki.time = 0;
+		inputs[p].ki.dwExtraInfo = 0;
+		inputs[p].ki.dwFlags = KEYEVENTF_KEYUP;
+		p++;
+	}
 	if ((ctrl) && (!ctrlDown)){
 		ctrlDown=true;
 		inputs[p].type= INPUT_KEYBOARD;
@@ -151,9 +171,9 @@ int WindowsInputs::getKeyCode(const char* key){
 		return VK_INSERT;
 	}else if (strcmp(key,"HELP")==0){
 		return VK_HELP;
-	}else if (strcmp(key,"LEFT_WINDOW")==0){
+	}else if (strcmp(key,"LWINDOW")==0){
 		return VK_LWIN;
-	}else if (strcmp(key,"RIGHT_WINDOW")==0){
+	}else if (strcmp(key,"RWINDOW")==0){
 		return VK_RWIN;
 	}else if (strcmp(key,"SELECT")==0){
 		return VK_SELECT;
@@ -334,7 +354,7 @@ void WindowsInputs::keyboard(const char* type,const char* key, bool ctrl, bool a
 				p++;
 			}
 
-			addCtrlAltShift(inputs,p,wCtrl,wAlt,wShift);
+			addCtrlAltShift(inputs,p,wCtrl,wAlt,wShift,false);
 
 			inputs[p].type= INPUT_KEYBOARD;
 			inputs[p].ki.wVk = btlo;
@@ -352,11 +372,11 @@ void WindowsInputs::keyboard(const char* type,const char* key, bool ctrl, bool a
 			inputs[p].ki.dwFlags = KEYEVENTF_KEYUP;
 			p++;
 
-			addCtrlAltShift(inputs,p,false,false,false);
+			addCtrlAltShift(inputs,p,false,false,false,false);
 
 		}
 	}else if (strcmp(type,"KEY")==0){
-		addCtrlAltShift(inputs,p,ctrl,alt,shift);
+		addCtrlAltShift(inputs,p,ctrl,alt,shift,command);
 
 		int kc = getKeyCode(key);
 		short btlo = kc & 0xff;
@@ -385,7 +405,7 @@ void WindowsInputs::keyboard(const char* type,const char* key, bool ctrl, bool a
 		}
 		p++;
 
-		addCtrlAltShift(inputs,p,false,false,false);
+		addCtrlAltShift(inputs,p,false,false,false,false);
 
 	}
 	sendInputs(inputs,p);
@@ -394,7 +414,7 @@ void WindowsInputs::keyboard(const char* type,const char* key, bool ctrl, bool a
 void WindowsInputs::mouse(MONITORS_INFO_ITEM* moninfoitem, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command){
 	INPUT inputs[20];
 	int p=0;
-	addCtrlAltShift(inputs,p,ctrl,alt,shift);
+	addCtrlAltShift(inputs,p,ctrl,alt,shift,command);
 
 	int mx=-1;
 	int my=-1;

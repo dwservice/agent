@@ -15,6 +15,7 @@ LinuxInputs::LinuxInputs(){
 	mousebtn1Down=false;
 	mousebtn2Down=false;
 	mousebtn3Down=false;
+	commandDown=false;
 	ctrlDown=false;
 	altDown=false;
 	shiftDown=false;
@@ -80,14 +81,13 @@ void LinuxInputs::keyboard(const char* type,const char* key, bool ctrl, bool alt
 				md=0;
 				curg=0;
 			}
-			//Simula il tasto
 			if (kc!=0){
-				//Cambia gruppo
+				//change group
 				if (curg!=kbstate.group){
 					XkbLockGroup(xdpy, XkbUseCoreKbd, curg);
 				}
 
-				//Imposta modifiers
+				//Set modifiers
 				if (md!=kbstate.locked_mods){
 					XkbLockModifiers(xdpy,XkbUseCoreKbd,255,md);
 				}
@@ -95,12 +95,12 @@ void LinuxInputs::keyboard(const char* type,const char* key, bool ctrl, bool alt
 				XTestFakeKeyEvent(xdpy, kc, True, CurrentTime);
 				XTestFakeKeyEvent(xdpy, kc, False, CurrentTime);
 
-				//Ripristina gruppo
+				//Restore group
 				if (curg!=kbstate.group){
 					XkbLockGroup(xdpy, XkbUseCoreKbd, kbstate.group);
 				}
 
-				//Ripristina modifiers
+				//Restore modifiers
 				if (md!=kbstate.locked_mods){
 					XkbLockModifiers(xdpy,XkbUseCoreKbd,255,kbstate.locked_mods);
 				}
@@ -111,10 +111,10 @@ void LinuxInputs::keyboard(const char* type,const char* key, bool ctrl, bool alt
 			if (ks!=0){
 				KeyCode kc = XKeysymToKeycode(xdpy, ks);
 				if (kc!=0){
-					ctrlaltshift(ctrl,alt,shift);
+					ctrlaltshift(ctrl,alt,shift,command);
 					XTestFakeKeyEvent(xdpy, kc, True, CurrentTime);
 					XTestFakeKeyEvent(xdpy, kc, False, CurrentTime);
-					ctrlaltshift(false,false,false);
+					ctrlaltshift(false,false,false,false);
 					XFlush(xdpy);
 				}
 			}
@@ -126,7 +126,7 @@ void LinuxInputs::keyboard(const char* type,const char* key, bool ctrl, bool alt
 
 void LinuxInputs::mouse(MONITORS_INFO_ITEM* moninfoitem, int x, int y, int button, int wheel, bool ctrl, bool alt, bool shift, bool command){
 	if (xdpy != NULL) {
-		ctrlaltshift(ctrl,alt,shift);
+		ctrlaltshift(ctrl,alt,shift,command);
 		if ((x!=-1) && (y!=-1)){
 			int mx=x;
 			int my=y;
@@ -355,10 +355,10 @@ KeySym LinuxInputs::getKeySym(const char* key){
 		return XK_Insert;
 	}else if (strcmp(key,"HELP")==0){
 		return XK_Help;
-	}else if (strcmp(key,"LEFT_WINDOW")==0){
-		return 0;
-	}else if (strcmp(key,"RIGHT_WINDOW")==0){
-		return 0;
+	}else if (strcmp(key,"LSUPER")==0){
+		return XK_Super_L;
+	}else if (strcmp(key,"RSUPER")==0){
+		return XK_Super_R;
 	}else if (strcmp(key,"SELECT")==0){
 		return XK_Select;
 	}else if (strcmp(key,"PAGE_UP")==0){
@@ -450,7 +450,18 @@ KeyCode LinuxInputs::createCustomKeyUnicode(int uc) {
 	return 0;
 }
 
-void LinuxInputs::ctrlaltshift(bool ctrl, bool alt, bool shift){
+void LinuxInputs::ctrlaltshift(bool ctrl, bool alt, bool shift, bool command){
+
+	if ((command) && (!commandDown)){
+		commandDown=true;
+		KeyCode kc = XKeysymToKeycode(xdpy, XK_Super_L);
+		XTestFakeKeyEvent(xdpy, kc, True, CurrentTime);
+	}else if ((!command) && (commandDown)){
+		commandDown=false;
+		KeyCode kc = XKeysymToKeycode(xdpy, XK_Super_L);
+		XTestFakeKeyEvent(xdpy, kc, False, CurrentTime);
+	}
+
 	if ((ctrl) && (!ctrlDown)){
 		ctrlDown=true;
 		KeyCode kc = XKeysymToKeycode(xdpy, XK_Control_L);

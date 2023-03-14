@@ -263,9 +263,9 @@ CGKeyCode MacInputs::getCGKeyCode(const char* key){
 	}else if (strcmp(key,"BACKSPACE")==0){
 		return 0x33;
 	}else if (strcmp(key,"CLEAR")==0){
-
+		return 0x53;
 	}else if (strcmp(key,"PAUSE")==0){
-
+		return 0x48;
 	}else if (strcmp(key,"ESCAPE")==0){
 		return 0x35;
 	}else if (strcmp(key,"SPACE")==0){
@@ -273,12 +273,10 @@ CGKeyCode MacInputs::getCGKeyCode(const char* key){
 	}else if (strcmp(key,"DELETE")==0){
 		return 0x75;
 	}else if (strcmp(key,"INSERT")==0){
-
+		return 0x49;
 	}else if (strcmp(key,"HELP")==0){
 		return 0x72;
-	}else if (strcmp(key,"LEFT_WINDOW")==0){
-		return 0x37;
-	}else if (strcmp(key,"RIGHT_WINDOW")==0){
+	}else if (strcmp(key,"COMMAND")==0){
 		return 0x37;
 	}else if (strcmp(key,"SELECT")==0){
 

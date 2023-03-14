@@ -70,6 +70,7 @@ D3D_FEATURE_LEVEL minD3Dlevel = D3D_FEATURE_LEVEL_10_0;
 UINT gNumFeatureLevels = ARRAYSIZE(gFeatureLevels);
 
 struct MonitorInternalInfo{
+	int rotatedDegrees;
 	HMONITOR hMonitor;
 };
 

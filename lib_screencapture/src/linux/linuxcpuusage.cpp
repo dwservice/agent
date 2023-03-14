@@ -10,19 +10,18 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 LinuxCPUUsage::LinuxCPUUsage(){
 	percentCpu = 0;
-	lastCPU = 0;
-	lastSysCPU = 0;
-	lastUserCPU = 0;
 	firstGetCpu=true;
 	cpuCounter.reset();
-	//read process number
-	FILE* file = fopen("/proc/cpuinfo", "r");
-	char line[128];
-	numProcessors = 0;
-	while(fgets(line, 128, file) != NULL){
-		if (strncmp(line, "processor", 9) == 0) numProcessors++;
+	numCores = sysconf(_SC_NPROCESSORS_ONLN);
+	if (numCores<=0){
+		FILE* file = fopen("/proc/cpuinfo", "r");
+		char line[128];
+		numCores = 0;
+		while(fgets(line, 128, file) != NULL){
+			if (strncmp(line, "processor", 9) == 0) numCores++;
+		}
+		fclose(file);
 	}
-	fclose(file);
 }
 
 LinuxCPUUsage::~LinuxCPUUsage(){
@@ -33,31 +32,20 @@ float LinuxCPUUsage::getValue(){
 	if ((!firstGetCpu) && (cpuCounter.getCounter()<1000)){
 		return percentCpu;
 	}
-
-	struct tms timeSample;
-	clock_t now;
-
-	now = times(&timeSample);
 	if (firstGetCpu){
-		firstGetCpu=false;
-		percentCpu = 0.0;
+		clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &prevTime);
+		percentCpu=0;
 	}else{
-		if (now <= lastCPU || timeSample.tms_stime < lastSysCPU ||
-			timeSample.tms_utime < lastUserCPU){
-			percentCpu = 0.0;
-		}else{
-			percentCpu = (timeSample.tms_stime - lastSysCPU) +
-				(timeSample.tms_utime - lastUserCPU);
-			percentCpu /= (now - lastCPU);
-			percentCpu /= numProcessors;
-			percentCpu *=100;
-		}
+		timespec curTime;
+		clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &curTime);
+		double elapsedTime = curTime.tv_sec - prevTime.tv_sec +
+							  (curTime.tv_nsec - prevTime.tv_nsec) / 1e9;
+
+		percentCpu = 100.0 * elapsedTime / numCores;
+		prevTime = curTime;
 	}
-	lastCPU = now;
-	lastSysCPU = timeSample.tms_stime;
-	lastUserCPU = timeSample.tms_utime;
+	firstGetCpu=false;
 	cpuCounter.reset();
-	//printf("CPU: %f\n",percent);
 	return percentCpu;
 }
 
