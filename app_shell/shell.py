@@ -24,11 +24,13 @@ try:
 except Exception as ex:
     None
 
-try:
+try:    
+    import pwd
+    import crypt
     import termios
     import pty
     import fcntl
-    import select
+    import select    
 except:
     None
 
@@ -219,14 +221,14 @@ class ShellManager(threading.Thread):
                                     print("*****************************************************************************\n")
                                     print("*****************************************************************************\n")
                                     print("SEND: len:" + str(len(appsend)) + "  time:" + str(int(time.time() * 1000)-apptm) + "\n")'''
+                                if self._shell_list[idx].is_terminate():
+                                    raise Exception("Process terminated.") 
                             except Exception:
                                 er=utils.get_exception()
                                 try:
                                     snd = {}
                                     snd["id"]=idx
-                                    if not self._shell_list[idx].is_terminate():
-                                        snd["error"]=True
-                                    snd["terminate"]=True
+                                    snd["data"]="\r\n" + str(er)
                                     appsend = json.dumps(snd)
                                     self._websocket.send_string(appsend)
                                 except:
@@ -280,6 +282,117 @@ class ShellManager(threading.Thread):
             self._semaphore.release()
         return ret
 
+class LoginRequest():
+    
+    def __init__(self, prt):
+        self._parent=prt
+        self._wait_counter=None
+        self._clear()  
+
+    def _clear(self):
+        self._key="user"
+        self._val=""
+        self._user=None
+        self._password=None
+        self._pos=0
+        self._soutput="\x1B[2J\x1B[HUser: "
+    
+    def read_update(self):
+        if self._key=="complete":
+            return None
+        if self._key=="waitAndClear":
+            if self._wait_counter.is_elapsed(3):
+                self._wait_counter=None
+                self._clear()
+            else:
+                return None
+        s=self._soutput
+        self._soutput=None
+        if self._key=="loginIncorrect" and self._wait_counter.is_elapsed(1):            
+            self._key="waitAndClear" 
+            s="\r\nLogin incorrect"            
+        if self._key=="openSession":
+            self._key="complete"
+            self._parent.open_session(self._user,self._password)
+        return s
+    
+    def _append_to_output(self,c):
+        if self._soutput is None:
+            self._soutput=c
+        else:
+            self._soutput+=c
+    
+    def write_inputs(self,c):
+        if self._key=="loginIncorrect" or self._key=="waitAndClear" or self._key=="openSession" or self._key=="complete":
+            return
+        if len(c)==1:
+            if ord(c)==13:
+                if self._key=="user" and len(self._val)>0:
+                    self._user=self._val
+                    self._key="password"
+                    self._val=""
+                    self._pos=0
+                    self._soutput="\r\nPassword: "
+                elif self._key=="password":
+                    self._password=self._val
+                    if self._parent.check_login(self._user,self._password):
+                        self._soutput="\x1B[2J\x1B[H"
+                        self._key="openSession"
+                    else:
+                        self._key="loginIncorrect"
+                        self._soutput="\r\n"
+                        self._wait_counter=utils.Counter()
+            elif ord(c)>=32:
+                if ord(c)==127:
+                    if self._pos>0 and len(self._val)>0:
+                        lpart=self._val[0:self._pos-1]
+                        rpart=self._val[self._pos:]
+                        self._val=lpart+rpart  
+                        self._pos-=1
+                        self._append_to_output("\x1b[1D\x1b[K"+rpart)
+                        rl = len(rpart)
+                        if rl>0:
+                            self._append_to_output("\x1b[" + str(rl) + "D")
+                else:
+                    cv=c
+                    if self._key=="password":
+                        cv="*"
+                    lpart=self._val[0:self._pos]
+                    rpart=self._val[self._pos:]
+                    self._val=lpart + c + rpart
+                    self._pos+=1
+                    self._append_to_output("\x1b[K"+cv+rpart)
+                    rl = len(rpart)
+                    if rl>0:
+                        self._append_to_output("\x1b[" + str(rl) + "D")
+        elif self._key=="user" and ord(c[0])==27:
+            sep=c[1:]
+            if sep=="[D": #LEFT
+                if self._pos>0:
+                    self._append_to_output(c)
+                    self._pos-=1                    
+            elif sep=="[C": #RIGHT
+                if self._pos<len(self._val):
+                    self._append_to_output(c)
+                    self._pos+=1
+            elif sep=="[H": #START
+                if self._pos>0:
+                    self._append_to_output("\x1b[" + str(self._pos) + "D")
+                    self._pos=0
+            elif sep=="[F": #END
+                if self._pos<len(self._val):
+                    self._append_to_output("\x1b[" + str(len(self._val)-self._pos) + "C")
+                    self._pos=len(self._val)
+            elif sep=="[3~": #CANC
+                if self._pos<len(self._val):
+                    lpart=self._val[0:self._pos]
+                    rpart=self._val[self._pos+1:]
+                    self._val=lpart+rpart
+                    self._append_to_output("\x1b[K"+rpart)
+                    rl = len(rpart)
+                    if rl>0:
+                        self._append_to_output("\x1b[" + str(rl) + "D")
+
 class LinuxMac():
     
     def __init__(self, mgr, sid, col, row):
@@ -287,26 +400,72 @@ class LinuxMac():
         self._id=sid
         self._cols=col
         self._rows=row
-        if utils.is_linux():
-            self._path="/bin/bash"
-            if not utils.path_exists(self._path):
-                self._path="/bin/sh"
-        else:
-            self._path="/bin/zsh"
-            if not utils.path_exists(self._path): 
-                self._path="/bin/bash"
-                if not utils.path_exists(self._path):
-                    self._path="/bin/sh"
-        
-            
         self._bterm = False
         self._semaphore = threading.Condition()
         self._rwenc="utf8"
+        self._login_request=None
+        self._ppid=-1
+        self._pio=None
+        self._reader=None
+        self._writer=None        
     
     def get_id(self):
         return self._id
     
-    ##### TO REMOVE 20/08/2022 (moved into native)
+    def initialize(self):
+        try:
+            if os.getuid()==0:
+                self._login_request = LoginRequest(self)
+            else:
+                self.open_session(None,None)
+        except:
+            self.terminate() 
+        
+    
+    def check_login(self,u,p):
+        if agent.is_mac():
+            return self._check_login_mac(u,p)
+        else:
+            return self._check_login_linux(u,p)
+    
+    def _check_login_linux(self,u,p):        
+        try:
+            phash = None
+            if utils.path_exists("/etc/shadow"):
+                with utils.file_open("/etc/shadow", "r") as sfile:
+                    scontents = sfile.readlines()                
+                for line in scontents:
+                    if u in line:
+                        sentry = line.strip().split(":")
+                        phash = sentry[1]
+            else:
+                try:
+                    uinfo = pwd.getpwnam(u)
+                    if uinfo is not None:
+                        phash=uinfo.pw_passwd
+                except:
+                    None                    
+            if phash is not None:
+                return crypt.crypt(p, phash) == phash
+            return False
+        except:
+            e = utils.get_exception()
+            self._manager._shlmain._agent_main.write_except(e)            
+        return False
+    
+    def _check_login_mac(self,u,p):
+        try:
+            cmd = ["/usr/bin/dscl", ".", "auth", u, p]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = process.communicate()            
+            return process.returncode == 0         
+        except:
+            e = utils.get_exception()
+            self._manager._shlmain._agent_main.write_except(e)            
+        return False
+    
+    
+    ##### TO REMOVE 20/08/2022 (moved into native); 15/03/2023 TODO FORM MAC AS WELL
     def _getutf8lang(self):
         altret=None
         try:
@@ -350,131 +509,207 @@ class LinuxMac():
         return altret
     ##### TO REMOVE 20/08/2022 (moved into native)
     
-    def initialize(self):        
-        ppid, pio = pty.fork()
-        if ppid == 0: #Processo figlo
-            
-            stdin = 0
-            stdout = 1
-            stderr = 2
-            
-            env = {}
-            env["TERM"] = "xterm"
-            
-            env["SHELL"] = self._path
-            env["PATH"] = os.environ['PATH']
-            applng=os.environ.get('LANG')
-            if applng is not None:
-                if not (applng.upper().endswith(".UTF8") or applng.upper().endswith(".UTF-8")):
-                    applng=None                    
-            if applng is None:
-                ##### TO FIX 20/08/2022                
-                if hasattr(native.get_instance(), "get_utf8_lang"):
-                    applng = native.get_instance().get_utf8_lang()
-                else:
-                    applng = self._getutf8lang()
-                ##### TO FIX 20/08/2022
-            if applng is not None:                
-                env["LANG"] = applng
-            env["PYTHONIOENCODING"] = "utf_8"
-            
-            attrs = termios.tcgetattr(stdout)
-            iflag, oflag, cflag, lflag, ispeed, ospeed, cc = attrs
-            if 'IUTF8' in termios.__dict__:
-                iflag |= (termios.IXON | termios.IXOFF | termios.__dict__['IUTF8'])                
-            else:
-                iflag |= (termios.IXON | termios.IXOFF | 0x40000)                
-            oflag |= (termios.OPOST | termios.ONLCR | termios.INLCR)
-            attrs = [iflag, oflag, cflag, lflag, ispeed, ospeed, cc]
-            termios.tcsetattr(stdout, termios.TCSANOW, attrs)
-            attrs = termios.tcgetattr(stdin)
-            iflag, oflag, cflag, lflag, ispeed, ospeed, cc = attrs
-            if 'IUTF8' in termios.__dict__:
-                iflag |= (termios.IXON | termios.IXOFF | termios.__dict__['IUTF8'])
-            else:
-                iflag |= (termios.IXON | termios.IXOFF | 0x40000)
-            oflag |= (termios.OPOST | termios.ONLCR | termios.INLCR)
-            attrs = [iflag, oflag, cflag, lflag, ispeed, ospeed, cc]
-            termios.tcsetattr(stdin, termios.TCSANOW, attrs)
-            
-            os.dup2(stderr, stdout) 
-            os.chdir("/")
-            arapp = self._path.split("/")            
-            nargv=[arapp[len(arapp)-1]]
-            os.execvpe(self._path, nargv, env)
-            os._exit(0)
-
-        
-        fl = fcntl.fcntl(sys.stdin, fcntl.F_GETFL)
-        fcntl.fcntl(pio, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-         
-        fcntl.ioctl(pio, termios.TIOCSWINSZ, struct.pack("hhhh", self._rows, self._cols, 0, 0))
-                   
-        self.ppid = ppid
-        self.pio = pio
-        
-        self._reader = io.open(pio, 'rb', closefd=False)
-        self._writer = io.open(pio, 'wb', closefd=False)
-                
+    def open_session(self,u,p):
         try:
-            self._manager._cinfo.inc_activities_value("shellSession")
+            ppid, pio = pty.fork()
+            if ppid == 0: #Child process
+                try:
+                    stdin = 0
+                    stdout = 1
+                    stderr = 2
+                    attrs = termios.tcgetattr(stdout)
+                    iflag, oflag, cflag, lflag, ispeed, ospeed, cc = attrs
+                    if 'IUTF8' in termios.__dict__:
+                        iflag |= (termios.IXON | termios.IXOFF | termios.__dict__['IUTF8'])
+                    else:
+                        iflag |= (termios.IXON | termios.IXOFF | 0x40000)                
+                    oflag |= (termios.OPOST | termios.ONLCR | termios.INLCR)
+                    attrs = [iflag, oflag, cflag, lflag, ispeed, ospeed, cc]
+                    termios.tcsetattr(stdout, termios.TCSANOW, attrs)
+                    attrs = termios.tcgetattr(stdin)
+                    iflag, oflag, cflag, lflag, ispeed, ospeed, cc = attrs
+                    if 'IUTF8' in termios.__dict__:
+                        iflag |= (termios.IXON | termios.IXOFF | termios.__dict__['IUTF8'])
+                    else:
+                        iflag |= (termios.IXON | termios.IXOFF | 0x40000)
+                    oflag |= (termios.OPOST | termios.ONLCR | termios.INLCR)
+                    attrs = [iflag, oflag, cflag, lflag, ispeed, ospeed, cc]
+                    termios.tcsetattr(stdin, termios.TCSANOW, attrs)
+                    os.dup2(stderr, stdout)
+                    uid=None
+                    udir=None
+                    upshell=None
+                    if u is None:
+                        uinfo = pwd.getpwuid(os.getuid())
+                    else:
+                        uinfo = pwd.getpwnam(u)
+                    uid=uinfo.pw_uid
+                    udir=uinfo.pw_dir
+                    upshell=uinfo.pw_shell            
+                    if uid is None:
+                        uid=os.getuid()
+                    if udir is None:
+                        udir="/"            
+                    if upshell is None or not utils.path_exists(upshell):
+                        upshell="/bin/bash"
+                        if not utils.path_exists(upshell):
+                            upshell="/bin/zsh"
+                        if not utils.path_exists(upshell):
+                            upshell="/bin/tcsh"
+                        if not utils.path_exists(upshell):
+                            upshell="/bin/csh"
+                        if not utils.path_exists(upshell):
+                            upshell="/bin/ksh"
+                        if not utils.path_exists(upshell):
+                            upshell="/bin/dash"
+                        if not utils.path_exists(upshell):
+                            upshell="/bin/ash"
+                        if not utils.path_exists(upshell):
+                            upshell="/bin/sh"
+
+                    os.setuid(uid)
+                    os.chdir(udir)
+                    env = {}
+                    env["TERM"] = "xterm"
+                    env["SHELL"] = upshell
+                    env["HOME"] = udir
+                    env["PATH"] = os.environ['PATH']
+                    applng=os.environ.get('LANG')
+                    if applng is not None:
+                        if not (applng.upper().endswith(".UTF8") or applng.upper().endswith(".UTF-8")):
+                            applng=None
+                    if applng is None:
+                        ##### TO FIX 20/08/2022
+                        if hasattr(native.get_instance(), "get_utf8_lang"):
+                            applng = native.get_instance().get_utf8_lang()
+                        else:
+                            applng = self._getutf8lang()
+                        ##### TO FIX 20/08/2022
+                    if applng is not None:
+                        env["LANG"] = applng
+                    env["PYTHONIOENCODING"] = "utf_8"
+                    arapp = upshell.split("/")
+                    nargv=[arapp[len(arapp)-1]]
+                    if upshell=="/bin/bash" or upshell=="/bin/zsh" or upshell=="/bin/sh":
+                        nargv.append("--login")
+                    if upshell=="/bin/tcsh" or upshell=="/bin/csh" or upshell=="/bin/dash":
+                        nargv.append("-l")
+                    os.execvpe(upshell, nargv, env)
+                    os._exit(0)
+                except:
+                    os._exit(1)
+
+            fl = fcntl.fcntl(sys.stdin, fcntl.F_GETFL)
+            fcntl.fcntl(pio, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+            fcntl.ioctl(pio, termios.TIOCSWINSZ, struct.pack("hhhh", self._rows, self._cols, 0, 0))
+            self._ppid = ppid
+            self._pio = pio
+            self._reader = io.open(pio, 'rb', closefd=False)
+            self._writer = io.open(pio, 'wb', closefd=False)
+            try:
+                self._manager._cinfo.inc_activities_value("shellSession")
+            except:
+                None
+            self._login_request = None
         except:
-            None
+            self.terminate()
 
     def _processIsAlive(self):
         try:
-            os.waitpid(self.ppid, os.WNOHANG)
-            os.kill(self.ppid, 0) # kill -0 tells us it's still alive
-            return True
+            if self._ppid>=0:
+                os.waitpid(self._ppid, os.WNOHANG)
+                os.kill(self._ppid, 0) # kill -0 tells us it's still alive
+                return True
+            else:
+                return False
         except OSError:
             return False
         
     def terminate(self):
+        self._login_request=None        
         try:
             self._manager._cinfo.dec_activities_value("shellSession")
         except:
             None
-        self._bterm=True
-        self._reader.close()
-        self._writer.close()
-        if self._processIsAlive():
-            os.kill(self.ppid, signal.SIGTERM)
-            time.sleep(0.5)
-        if self._processIsAlive():
-            os.kill(self.ppid, signal.SIGKILL)
-            os.waitpid(self.ppid, 0)
+        self._bterm=True        
+        if self._reader is not None:
+            try:
+                self._reader.close()
+            except:
+                None
+        if self._writer is not None:
+            try:
+                self._writer.close()
+            except:
+                None
+        if self._ppid>=0:
+            if self._processIsAlive():
+                try:
+                    os.kill(self._ppid, signal.SIGTERM)
+                except:
+                    None
+                time.sleep(0.5)
+            if self._processIsAlive():
+                try:
+                    os.kill(self._ppid, signal.SIGKILL)
+                    os.waitpid(self._ppid, 0)
+                except:
+                    None
+            self._ppid=-1
         
     def is_terminate(self):
+        if self._login_request is not None:
+            return False
         if not self._processIsAlive():
             self._bterm=True
             return True
         return self._bterm
     
     def change_rows_cols(self, rows, cols):
-        fcntl.ioctl(self.pio, termios.TIOCSWINSZ, struct.pack("hhhh", rows, cols, 0, 0))
+        if self._bterm == True:
+            return        
+        if self._login_request is not None:
+            return
+        try:
+            fcntl.ioctl(self._pio, termios.TIOCSWINSZ, struct.pack("hhhh", rows, cols, 0, 0))
+        except:
+            self.terminate() 
         
     def write_inputs(self, c):        
-        if self._bterm == None:
-            return
-        if self._bterm == None:
-            return
-        self._writer.write(utils.str_to_bytes(c,self._rwenc))
-        self._writer.flush()
+        if self._bterm==True:
+            return        
+        try:
+            if self._login_request is not None:
+                return self._login_request.write_inputs(c)
+            self._writer.write(utils.str_to_bytes(c,self._rwenc))
+            self._writer.flush()
+        except:
+            self._writer=None #MAC fix exit
+            self.terminate() 
 
     def read_update(self):
-        #inpSet = [ self.pio ]
-        #inpReady, outReady, errReady = select.select(inpSet, [], [], 0)
-        #if self.pio in inpReady:
-        #reader = io.open(self.pio, 'rb', closefd=False,buffering=1024)
-        #output=reader.read(self._rows*self._cols*16)
-        #output=reader.read(128)
-        #reader.close()
-        #output=self._reader.read(self._rows*self._cols)
-        s = self._reader.read()
-        if s is not None:
-            return utils.bytes_to_str(s,self._rwenc)
-        else:
-            return s        
+        if self._bterm==True:
+            return None
+        try:
+            if self._login_request is not None:
+                return self._login_request.read_update()
+        
+        
+            #inpSet = [ self._pio ]
+            #inpReady, outReady, errReady = select.select(inpSet, [], [], 0)
+            #if self._pio in inpReady:
+            #reader = io.open(self._pio, 'rb', closefd=False,buffering=1024)
+            #output=reader.read(self._rows*self._cols*16)
+            #output=reader.read(128)
+            #reader.close()
+            #output=self._reader.read(self._rows*self._cols)
+            s = self._reader.read()
+            if s is not None:
+                return utils.bytes_to_str(s,self._rwenc)
+            else:
+                return s
+        except:
+            self.terminate() 
 
 
 class Windows():
@@ -489,6 +724,7 @@ class Windows():
         self._cmd = "cmd.exe"
         self._pty = None
         self._rwenc="utf8"
+        self._login_request=None
 
     def _write_err(self,m):
         self._manager._shlmain._agent_main.write_err("AppShell:: " + m)
@@ -500,45 +736,75 @@ class Windows():
         return self._id
 
     def initialize(self):
-        self._write_debug("setting up ConPty")
-        self._pty = conpty.ConPty(self._cmd, self._col, self._row, self._write_err)
-        self._pty.open()
-        self._write_debug("ConPty setup")
-        try:
-            self._manager._cinfo.inc_activities_value("shellSession")
+        self._login_request = LoginRequest(self)                
+
+    def check_login(self,u,p):
+        try:        
+            return conpty.check_login(u,p)
         except:
-            None        
+            return False
+
+    def open_session(self,u,p):
+        try:
+            self._pty = conpty.ConPty(self._cmd, self._col, self._row, self._write_err)
+            self._pty.open()        
+            try:
+                self._manager._cinfo.inc_activities_value("shellSession")
+            except:
+                None
+            self._login_request=None
+        except:
+            self.terminate()
 
     def terminate(self):
         try:
             self._manager._cinfo.dec_activities_value("shellSession")
         except:
             None
-        self._bterm = True
-        self._pty.close()
-        self._write_debug("ConPty closed")
+        try:
+            self._bterm = True
+            self._pty.close()
+        except:
+            None
 
     def is_terminate(self):
         return self._bterm
 
     def write_inputs(self, c):
-        if self._bterm == None:
+        if self._bterm == True:
             return
-        if c == '\r':
-            c = '\r\n'
-        self._pty.write(c)        
+        try:
+            if self._login_request is not None:
+                return self._login_request.write_inputs(c)
+            
+            if c == '\r':
+                c = '\r\n'
+            self._pty.write(c)
+        except:
+            self.terminate()       
 
     def read_update(self):
-        #return self._pty.read()
-        bt = self._pty.read()
-        if bt is not None and len(bt)>0:
-            return utils.bytes_to_str(bt, self._rwenc)            
-        else:
-            return bt
+        if self._bterm==True:
+            return None
+        try:
+            if self._login_request is not None:
+                return self._login_request.read_update()        
+            #return self._pty.read()
+            bt = self._pty.read()
+            if bt is not None and len(bt)>0:
+                return utils.bytes_to_str(bt, self._rwenc)            
+            else:
+                return bt
+        except:
+            self.terminate()
         
         
     def change_rows_cols(self, rows, cols):
-        self._pty.resize(rows, cols)
-
+        if self._bterm == True:
+            return
+        try:
+            self._pty.resize(rows, cols)
+        except:
+            self.terminate() 
     
 
