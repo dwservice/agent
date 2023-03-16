@@ -851,7 +851,7 @@ class DesktopSession(threading.Thread):
                 tp = self._struct_h.unpack(sdata[0:2])[0]                
                 if tp==common.TOKEN_FRAME:
                     #SEND PING
-                    if self._ping_counter is None or (self._ping_counter.is_elapsed(5) and self._stats_frame_sent_time==self._stats_frame_received_time):
+                    if self._ping_check==False and (self._ping_counter is None or self._ping_counter.is_elapsed(5)) and self._stats_cur_frame_size==0 and self._stats_frame_sent_time==self._stats_frame_received_time:
                         if self._ping_counter is None:
                             self._ping_counter = utils.Counter()
                         else:
