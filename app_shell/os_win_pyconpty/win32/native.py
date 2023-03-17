@@ -5,7 +5,7 @@ This Source Code Form is subject to the terms of the Mozilla
 Public License, v. 2.0. If a copy of the MPL was not distributed
 with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
-from ctypes import Structure, POINTER, windll, c_void_p, c_char_p, c_size_t, HRESULT, WinError, wintypes
+from ctypes import Structure, POINTER, windll, c_void_p, c_char_p, c_size_t, c_uint, HRESULT, WinError, wintypes
 from ctypes.wintypes import *
 
 PVOID = LPVOID
@@ -72,7 +72,6 @@ class COORD(Structure):
     _fields_ = [("X", SHORT),
                 ("Y", SHORT)]
 
-
 ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
 DISABLE_NEWLINE_AUTO_RETURN = 0x0008
 PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE = 0x00020016
@@ -130,22 +129,6 @@ UpdateProcThreadAttribute.argtype = [
 UpdateProcThreadAttribute.restype = BOOL
 UpdateProcThreadAttribute.errcheck = _errcheck_bool
 
-# BOOL CreateProcessA(
-#   LPCTSTR                 lpApplicationName,
-#   LPTSTR                  lpCommandLine,
-#   LPSECURITY_ATTRIBUTES   lpProcessAttributes,
-#   LPSECURITY_ATTRIBUTES   lpThreadAttributes,
-#   BOOL                    bInheritHandles,
-#   DWORD                   dwCreationFlags,
-#   LPVOID                  lpEnvironment,
-#   LPCTSTR                 lpCurrentDirectory,
-#   LPSTARTUPINFO           lpStartupInfo,
-#   LPPROCESS_INFORMATION   lpProcessInformation,
-#   );
-CreateProcess = windll.kernel32.CreateProcessA
-CreateProcess.restype = BOOL
-CreateProcess.errcheck = _errcheck_bool
-
 # BOOL CreateProcessW(
 #   LPCWSTR               lpApplicationName,
 #   LPWSTR                lpCommandLine,
@@ -158,9 +141,26 @@ CreateProcess.errcheck = _errcheck_bool
 #   LPSTARTUPINFOW        lpStartupInfo,
 #   LPPROCESS_INFORMATION lpProcessInformation
 # );
-CreateProcessW = windll.kernel32.CreateProcessW  # <-- Unicode version!
+CreateProcessW = windll.kernel32.CreateProcessW
 CreateProcessW.restype = BOOL
 CreateProcessW.errcheck = _errcheck_bool
+
+# BOOL CreateProcessAsUserW(
+#   HANDLE                hToken,
+#   LPCWSTR               lpApplicationName,
+#   LPWSTR                lpCommandLine,
+#   LPSECURITY_ATTRIBUTES lpProcessAttributes,
+#   LPSECURITY_ATTRIBUTES lpThreadAttributes,
+#   BOOL                  bInheritHandles,
+#   DWORD                 dwCreationFlags,
+#   LPVOID                lpEnvironment,
+#   LPCWSTR               lpCurrentDirectory,
+#   LPSTARTUPINFOW        lpStartupInfo,
+#   LPPROCESS_INFORMATION lpProcessInformation
+# );
+CreateProcessAsUserW = windll.kernel32.CreateProcessAsUserW
+CreateProcessAsUserW.restype = BOOL
+CreateProcessAsUserW.errcheck = _errcheck_bool
 
 # BOOL TerminateProcess(
 #   INTPTR  hProcess,
@@ -396,10 +396,123 @@ ShowWindow.restype = BOOL
 GetConsoleWindow = windll.kernel32.GetConsoleWindow
 GetConsoleWindow.restype = HANDLE
 
-GetModuleHandle = windll.kernel32.GetModuleHandleA
-GetModuleHandle.argtype = [LPCWSTR]
-GetModuleHandle.restype = HANDLE
 
-GetProcAddress = windll.kernel32.GetProcAddress
-GetProcAddress.argtype = [HANDLE, LPCWSTR]
-GetProcAddress.restype = HANDLE
+LogonUserW = windll.advapi32.LogonUserW
+LogonUserW.argtypes = [LPCWSTR, LPCWSTR, LPCWSTR, DWORD, DWORD, HANDLE]
+LogonUserW.restype = BOOL
+
+
+class LUID(Structure):
+    _fields_ = [
+        ('low_part', wintypes.DWORD),
+        ('high_part', wintypes.LONG),
+        ]
+
+    def __eq__(self, other):
+        return (
+            self.high_part == other.high_part and
+            self.low_part == other.low_part
+            )
+
+    def __ne__(self, other):
+        return not (self==other)
+
+SE_PRIVILEGE_ENABLED            = (0x00000002)
+LookupPrivilegeValueW = windll.advapi32.LookupPrivilegeValueW
+LookupPrivilegeValueW.argtypes = [LPWSTR, LPWSTR, POINTER(LUID)]
+LookupPrivilegeValueW.restype = wintypes.BOOL
+
+class LUID_AND_ATTRIBUTES(Structure):
+    _fields_ = [
+        ('LUID', LUID),
+        ('attributes', wintypes.DWORD),
+        ]
+
+    def is_enabled(self):
+        return bool(self.attributes & SE_PRIVILEGE_ENABLED)
+
+    def enable(self):
+        self.attributes |= SE_PRIVILEGE_ENABLED
+
+    def get_name(self):
+        size = wintypes.DWORD(10240)
+        buf = create_unicode_buffer(size.value)
+        res = LookupPrivilegeValueW(None, self.LUID, buf, size)
+        if res == 0: raise RuntimeError
+        return buf[:size.value]
+
+    def __str__(self):
+        res = self.get_name()
+        if self.is_enabled(): res += ' (enabled)'
+        return res
+
+class TOKEN_PRIVILEGES(Structure):
+    _fields_ = [
+        ('count', wintypes.DWORD),
+        ('privileges', LUID_AND_ATTRIBUTES*0),
+        ]
+
+    def get_array(self):
+        array_type = LUID_AND_ATTRIBUTES*self.count
+        privileges = cast(self.privileges, POINTER(array_type)).contents
+        return privileges
+
+    def __iter__(self):
+        return iter(self.get_array())
+
+PTOKEN_PRIVILEGES = POINTER(TOKEN_PRIVILEGES)
+
+PSID = LPVOID
+
+class SID_AND_ATTRIBUTES(Structure):
+    _fields_ = [
+               ('sid',         PSID),
+               ('attributes',  DWORD)
+               ]     
+
+class TOKEN_USER(Structure):
+    _fields_ = [
+        ('user', SID_AND_ATTRIBUTES)
+        ]
+
+
+GetCurrentProcess = windll.kernel32.GetCurrentProcess
+GetCurrentProcess.restype = HANDLE
+
+NtQueryInformationProcess = windll.ntdll.NtQueryInformationProcess
+NtQueryInformationProcess.argtypes = [HANDLE, INT, PVOID, ULONG, POINTER(ULONG)]
+
+
+TOKEN_QUERY = 0x0008
+TOKEN_ADJUST_PRIVILEGES = 0x0020
+OpenProcessToken = windll.advapi32.OpenProcessToken
+OpenProcessToken.argtypes = [HANDLE, DWORD, HANDLE]
+OpenProcessToken.restype = BOOL
+
+GetTokenInformation = windll.advapi32.GetTokenInformation
+GetTokenInformation.argtypes = [wintypes.HANDLE, c_uint, c_void_p, wintypes.DWORD, POINTER(wintypes.DWORD)]
+GetTokenInformation.restype = wintypes.BOOL
+
+class TOKEN_INFORMATION_CLASS:
+    TokenUser = 1
+    TokenGroups = 2
+    TokenPrivileges = 3
+
+WinLocalSystemSid = 22
+WinLocalServiceSid = 23
+
+IsWellKnownSid = windll.advapi32.IsWellKnownSid
+IsWellKnownSid.argtypes = [PSID, c_uint]
+IsWellKnownSid.restype = wintypes.BOOL
+
+LookupPrivilegeValueW = windll.advapi32.LookupPrivilegeValueW
+LookupPrivilegeValueW.argtypes = [LPWSTR, LPWSTR, POINTER(LUID)]
+LookupPrivilegeValueW.restype = wintypes.BOOL
+
+
+AdjustTokenPrivileges = windll.advapi32.AdjustTokenPrivileges
+AdjustTokenPrivileges.restype = wintypes.BOOL
+AdjustTokenPrivileges.argtypes = [HANDLE, BOOL, PTOKEN_PRIVILEGES, DWORD, PTOKEN_PRIVILEGES, POINTER(DWORD)]
+
+
+

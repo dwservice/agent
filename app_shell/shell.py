@@ -131,6 +131,42 @@ class ShellManager(threading.Thread):
     def get_idses(self):
         return self._idses
     
+    
+    def _is_user_match(self, word, n, pattern, m):
+        if m == len(pattern):
+            return n == len(word)
+        if n == len(word):
+            for i in range(m, len(pattern)):
+                if pattern[i] != '*':
+                    return False
+     
+            return True
+        if pattern[m] == '?' or pattern[m] == word[n]:
+            return self._is_user_match(word, n + 1, pattern, m + 1)
+        if pattern[m] == '*':
+            return self._is_user_match(word, n + 1, pattern, m) or self._is_user_match(word, n, pattern, m + 1)
+        return False
+ 
+    def _is_user_matching(self, word, pattern):
+        return self._is_user_match(word, 0, pattern, 0)
+    
+    def is_user_allowed(self, u):
+        try:
+            uaw = self._shlmain._agent_main.get_config("shell.users_allowed",None)
+            if uaw is not None:
+                for itm in uaw:
+                    if agent.is_windows():
+                        if self._is_user_matching(u.lower(),itm["name"].lower()):
+                            return itm["enable"]
+                    else:                     
+                        if self._is_user_matching(u,itm["name"]):
+                            return itm["enable"]
+                return False
+            return True
+        except Exception as ex:
+            self._shlmain._agent_main.write_except(ex,"AppShell:: shell manager " + self._id + ":")
+        return False
+    
     def _on_data(self,websocket,tpdata,data):
         self._semaphore.acquire()
         try:
@@ -414,7 +450,8 @@ class LinuxMac():
     
     def initialize(self):
         try:
-            if os.getuid()==0:
+            bdisauth = self._manager._shlmain._agent_main.get_config('shell.disable_authentication', False)            
+            if not bdisauth and os.getuid()==0:
                 self._login_request = LoginRequest(self)
             else:
                 self.open_session(None,None)
@@ -423,10 +460,12 @@ class LinuxMac():
         
     
     def check_login(self,u,p):
-        if agent.is_mac():
-            return self._check_login_mac(u,p)
-        else:
-            return self._check_login_linux(u,p)
+        if self._manager.is_user_allowed(u):
+            if agent.is_mac():
+                return self._check_login_mac(u,p)
+            else:
+                return self._check_login_linux(u,p)
+        return False
     
     def _check_login_linux(self,u,p):        
         try:
@@ -590,9 +629,7 @@ class LinuxMac():
                     env["PYTHONIOENCODING"] = "utf_8"
                     arapp = upshell.split("/")
                     nargv=[arapp[len(arapp)-1]]
-                    if upshell=="/bin/bash" or upshell=="/bin/zsh" or upshell=="/bin/sh":
-                        nargv.append("--login")
-                    if upshell=="/bin/tcsh" or upshell=="/bin/csh" or upshell=="/bin/dash":
+                    if upshell=="/bin/bash" or upshell=="/bin/zsh" or upshell=="/bin/sh" or upshell=="/bin/tcsh" or upshell=="/bin/csh" or upshell=="/bin/dash":
                         nargv.append("-l")
                     os.execvpe(upshell, nargv, env)
                     os._exit(0)
@@ -721,7 +758,8 @@ class Windows():
         self._row = row
         self._bterm = False
         self._semaphore = threading.Condition()
-        self._cmd = "cmd.exe"
+        self._cmd = u"cmd.exe"
+        #self._cmd = u"powershell.exe -NonInteractive"
         self._pty = None
         self._rwenc="utf8"
         self._login_request=None
@@ -736,17 +774,23 @@ class Windows():
         return self._id
 
     def initialize(self):
-        self._login_request = LoginRequest(self)                
+        bdisauth = self._manager._shlmain._agent_main.get_config('shell.disable_authentication', False)            
+        if not bdisauth and conpty.is_run_as_service():
+            self._login_request = LoginRequest(self)
+        else:
+            self.open_session(None,None)
 
     def check_login(self,u,p):
-        try:        
-            return conpty.check_login(u,p)
-        except:
-            return False
+        if self._manager.is_user_allowed(u):
+            try:
+                return conpty.check_login(u,p)
+            except:
+                return False
+        return False
 
     def open_session(self,u,p):
         try:
-            self._pty = conpty.ConPty(self._cmd, self._col, self._row, self._write_err)
+            self._pty = conpty.ConPty(self._cmd, u, p, self._col, self._row, self._write_err)
             self._pty.open()        
             try:
                 self._manager._cinfo.inc_activities_value("shellSession")
@@ -779,7 +823,8 @@ class Windows():
             
             if c == '\r':
                 c = '\r\n'
-            self._pty.write(c)
+            if self._pty.get_status()=="OPEN":
+                self._pty.write(c)
         except:
             self.terminate()       
 
@@ -788,8 +833,10 @@ class Windows():
             return None
         try:
             if self._login_request is not None:
-                return self._login_request.read_update()        
-            #return self._pty.read()
+                return self._login_request.read_update()
+                    
+            if self._pty.get_status()!="INIT" and self._pty.get_status()!="OPEN":
+                raise Exception("")                
             bt = self._pty.read()
             if bt is not None and len(bt)>0:
                 return utils.bytes_to_str(bt, self._rwenc)            
