@@ -574,7 +574,7 @@ class LinuxMac():
         return False
     
     
-    ##### TO REMOVE 20/08/2022 (moved into native); 15/03/2023 TODO FORM MAC AS WELL
+    # Fallback when the native implementation does not provide get_utf8_lang.
     def _getutf8lang(self):
         altret=None
         try:
