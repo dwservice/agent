@@ -7,6 +7,7 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 
 import threading
+import errno
 import os
 import sys
 import struct
@@ -37,12 +38,120 @@ SHELL_TIMEOUT_CONNECTION = 40; #Seconds
 SHELL_TIMEOUT_RECOVERY = 20; #Seconds
 SHELL_VERSION = 1
 
+# Poll only while cleaning up a child. There is no idle periodic worker.
+SHELL_PROCESS_TERM_GRACE = 0.5
+SHELL_PROCESS_KILL_GRACE = 0.5
+SHELL_PROCESS_REAP_INTERVAL = 1.0
+
+
+def _shell_process_exited(pid):
+    try:
+        waited, status = os.waitpid(pid, os.WNOHANG)
+        return waited == pid
+    except OSError as ex:
+        if ex.errno == errno.ECHILD:
+            return True
+        if ex.errno == errno.EINTR:
+            return False
+        raise
+
+
+def _wait_shell_process(pid, grace):
+    deadline = time.monotonic() + grace
+    while True:
+        if _shell_process_exited(pid):
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(0.05, remaining))
+
+
+def _stop_shell_foreground(pid, pio):
+    # Signal only the foreground job of this still-open, owned PTY. Root
+    # shells need explicit job cleanup too; terminal hangup alone is not
+    # sufficient in every launch context. Never signal our own group.
+    if pid < 1 or pio is None:
+        return
+    try:
+        group = os.tcgetpgrp(pio)
+        if group <= 1 or group == os.getpgrp():
+            return
+        if os.getsid(group) != pid:
+            return
+        os.killpg(group, signal.SIGTERM)
+        deadline = time.monotonic() + SHELL_PROCESS_TERM_GRACE
+        while os.tcgetpgrp(pio) == group:
+            try:
+                os.killpg(group, 0)
+            except OSError as ex:
+                if ex.errno == errno.ESRCH:
+                    return
+                raise
+            if time.monotonic() >= deadline:
+                # Recheck terminal ownership after the grace period, so a
+                # foreground change cannot make us signal a stale group.
+                if os.tcgetpgrp(pio) == group:
+                    os.killpg(group, signal.SIGKILL)
+                return
+            time.sleep(0.05)
+    except OSError:
+        # No foreground group yet, job already gone or PTY already hung up.
+        # Continue the bounded cleanup of the directly owned shell process.
+        return
+
+
+class ShellProcessReaper:
+    """One lazy worker per Agent, shared across shell app reloads.
+
+    Only this registry owns deferred child PIDs. It never sends signals and
+    never uses a blocking waitpid. It exits as soon as the registry is empty.
+    """
+    def __init__(self, agent_main):
+        self._agent_main = agent_main
+        self._condition = threading.Condition()
+        self._pending = set()
+        self._thread = None
+
+    def add(self, pid):
+        with self._condition:
+            self._pending.add(pid)
+            if self._thread is None:
+                self._thread = threading.Thread(target=self._run, name="ShellProcessReaper")
+                self._thread.daemon = True
+                self._thread.start()
+
+    def _run(self):
+        while True:
+            with self._condition:
+                if not self._pending:
+                    self._thread = None
+                    return
+                pending = list(self._pending)
+            for pid in pending:
+                try:
+                    if _shell_process_exited(pid):
+                        with self._condition:
+                            self._pending.discard(pid)
+                except OSError:
+                    # Keep ownership and retry; the initial deferral was logged.
+                    pass
+            with self._condition:
+                if self._pending:
+                    self._condition.wait(SHELL_PROCESS_REAP_INTERVAL)
+
+
 class Shell():
     
     def __init__(self, agent_main):
         self._agent_main=agent_main
         self._list = {}
         self._list_semaphore = threading.Condition()
+        # App construction is serialized by Agent.get_app. Retain the registry
+        # on the Agent so an app reload cannot create one reaper per generation.
+        if not hasattr(agent_main, '_shell_process_reaper'):
+            agent_main._shell_process_reaper = ShellProcessReaper(agent_main)
+        self._process_reaper = agent_main._shell_process_reaper
     
     def destroy(self,bforce):
         if not bforce:
@@ -515,6 +624,8 @@ class LinuxMac():
         self._reader=None
         self._writer=None
         self._libcrypt=None
+        self._cleanup_started=False
+        self._activity_registered=False
     
     def get_id(self):
         return self._id
@@ -745,6 +856,9 @@ class LinuxMac():
                 except:
                     os._exit(1)
 
+            # Take ownership before operations that can fail.
+            self._ppid = ppid
+            self._pio = pio
             fl = fcntl.fcntl(sys.stdin, fcntl.F_GETFL)
             fcntl.fcntl(pio, fcntl.F_SETFL, fl | os.O_NONBLOCK)
             fcntl.ioctl(pio, termios.TIOCSWINSZ, struct.pack("hhhh", self._rows, self._cols, 0, 0))
@@ -754,6 +868,7 @@ class LinuxMac():
             self._writer = io.open(pio, 'wb', closefd=False)
             try:
                 self._manager._cinfo.inc_activities_value("shellSession")
+                self._activity_registered=True
             except:
                 None
             self._login_request = None
@@ -761,47 +876,76 @@ class LinuxMac():
             self.terminate()
 
     def _processIsAlive(self):
-        try:
-            if self._ppid>=0:
-                os.waitpid(self._ppid, os.WNOHANG)
-                os.kill(self._ppid, 0) # kill -0 tells us it's still alive
-                return True
-            else:
+        with self._semaphore:
+            if self._cleanup_started or self._ppid < 0:
                 return False
-        except OSError:
-            return False
-        
+            try:
+                if _shell_process_exited(self._ppid):
+                    self._ppid = -1
+                    return False
+                return True
+            except OSError:
+                # Let terminate retain ownership and retry cleanup on an OS error.
+                return True
+
     def terminate(self):
-        self._login_request=None        
+        with self._semaphore:
+            if self._cleanup_started:
+                return
+            self._cleanup_started = True
+            self._login_request = None
+            self._bterm = True
+            pid, pio = self._ppid, self._pio
+            reader, writer = self._reader, self._writer
+            registered = self._activity_registered
+            self._ppid, self._pio = -1, None
+            self._reader, self._writer = None, None
+            self._activity_registered = False
+        _stop_shell_foreground(pid, pio)
+        if registered:
+            try:
+                self._manager._cinfo.dec_activities_value("shellSession")
+            except:
+                self._manager._shlmain._agent_main.write_except(utils.get_exception())
+        # io.open(..., closefd=False) does not close the PTY master. Close it
+        # explicitly too, releasing the terminal and hanging up foreground jobs.
+        for stream in (reader, writer):
+            if stream is not None:
+                try:
+                    stream.close()
+                except:
+                    pass
+        if pio is not None:
+            try:
+                os.close(pio)
+            except OSError:
+                pass
+        if pid < 0:
+            return
+        reaped = False
         try:
-            self._manager._cinfo.dec_activities_value("shellSession")
-        except:
-            None
-        self._bterm=True        
-        if self._reader is not None:
-            try:
-                self._reader.close()
-            except:
-                None
-        if self._writer is not None:
-            try:
-                self._writer.close()
-            except:
-                None
-        if self._ppid>=0:
-            if self._processIsAlive():
+            reaped = _shell_process_exited(pid)
+            if not reaped:
                 try:
-                    os.kill(self._ppid, signal.SIGTERM)
-                except:
-                    None
-                time.sleep(0.5)
-            if self._processIsAlive():
+                    os.kill(pid, signal.SIGTERM)
+                except OSError as ex:
+                    if ex.errno != errno.ESRCH:
+                        raise
+                reaped = _wait_shell_process(pid, SHELL_PROCESS_TERM_GRACE)
+            if not reaped:
                 try:
-                    os.kill(self._ppid, signal.SIGKILL)
-                    os.waitpid(self._ppid, 0)
-                except:
-                    None
-            self._ppid=-1
+                    os.kill(pid, signal.SIGKILL)
+                except OSError as ex:
+                    if ex.errno != errno.ESRCH:
+                        raise
+                reaped = _wait_shell_process(pid, SHELL_PROCESS_KILL_GRACE)
+        except OSError:
+            self._manager._shlmain._agent_main.write_except(utils.get_exception())
+        finally:
+            if not reaped:
+                self._manager._shlmain._process_reaper.add(pid)
+                self._manager._shlmain._agent_main.write_err(
+                    "AppShell:: process %s not reaped within cleanup grace; deferring collection" % pid)
         
     def is_terminate(self):
         if self._login_request is not None:
