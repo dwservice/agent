@@ -82,6 +82,16 @@ def is_linux():
 def is_mac():
     return _bismac
 
+def is_windows_10_or_later():
+    if is_windows():
+        try:            
+            win = sys.getwindowsversion()
+            return win.major == 10
+        except:
+            return platform.release() == '10' or platform.release() == '11'
+    else:
+        return False
+
 def exception_to_string(e):
     bamsg=False;
     try:
