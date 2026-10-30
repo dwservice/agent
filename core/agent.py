@@ -196,6 +196,7 @@ class Agent():
         self._http_socket_pool=None 
         self._agent_conn = None
         self._sessions={}
+        self._sessions_closing=set()
         self._sessions_update_status=""
         self._sessions_semaphore = threading.Condition()
         self._libs={}
@@ -1982,36 +1983,48 @@ class Agent():
         finally:
             self._libs_apps_semaphore.release()
             
+    def _unload_apps_if_idle(self):
+        # Same lock order as session publication: apps -> sessions. Release the
+        # sessions lock before calling app destroy methods, retaining the app
+        # registry lock so a new session cannot race with the idle unload.
+        with self._libs_apps_semaphore:
+            with self._sessions_semaphore:
+                if self._sessions:
+                    return
+            self._unload_apps()
+
     def _fire_close_conn_apps(self, idconn):
-        for k in self._apps:
-            md = self._apps[k]
+        # Snapshot app instances, but never run their callbacks under either
+        # the app registry lock or the global sessions lock.
+        with self._libs_apps_semaphore:
+            apps = list(self._apps.values())
+        for md in apps:
             try:
-                func = None
-                try:
-                    func = getattr(md, 'on_conn_close')
-                except AttributeError:
-                    None
+                func = getattr(md, 'on_conn_close', None)
                 if func is not None:
                     func(idconn)
             except:
-                e = utils.get_exception()
-                self.write_except(e)
+                self.write_except(utils.get_exception())
     
     def _close_all_sessions(self):
-        self._sessions_semaphore.acquire()
-        try:
-            for sid in self._sessions.keys():
+        with self._sessions_semaphore:
+            sessions = [(sid, ses) for sid, ses in self._sessions.items()
+                        if sid not in self._sessions_closing]
+            self._sessions_closing.update(sid for sid, ses in sessions)
+        for sid, ses in sessions:
+            try:
                 try:
-                    ses = self._sessions[sid]
                     ses.close()
+                finally:
                     self._fire_close_conn_apps(sid)
-                except:
-                    ex = utils.get_exception()
-                    self.write_err(utils.exception_to_string(ex))
-            self._sessions={}
-        finally:
-            self._sessions_semaphore.release()        
-        self._unload_apps()
+            except:
+                self.write_err(utils.exception_to_string(utils.get_exception()))
+            finally:
+                with self._sessions_semaphore:
+                    if self._sessions.get(sid) is ses:
+                        del self._sessions[sid]
+                    self._sessions_closing.discard(sid)
+        self._unload_apps_if_idle()
 
     def open_session(self, msg):
         resp = {}
@@ -2019,6 +2032,7 @@ class Agent():
         conn_rcr = None 
         appconn = None
         try:
+            iconntimeout = None
             if "connectionTimeout" in msg:
                 try:
                     iconntimeout=utils.Counter(int(msg["connectionTimeout"])-2)
@@ -2046,26 +2060,32 @@ class Agent():
                     conn_rcr.set_max_attempt(int(msg["connRecoveryMaxAttempt"]))
             appconn = Connection(self, None, prop_conn, self.get_proxy_info())
             sinfo=None
-            self._sessions_semaphore.acquire()
-            try:
-                while self._sessions_update_status=="INPROGRESS" and iconntimeout.is_elapsed():
-                    self._sessions_semaphore.wait(1) #WAIT FOR COMPLETE UPDATE
-                if self._sessions_update_status!="":
-                    raise Exception("Open session failed: Update in progress.")                    
-                while True:
-                    sid = generate_key(30)
-                    if sid not in self._sessions:
-                        sinfo=Session(self,appconn,sid,msg)
-                        self._sessions[sid]=sinfo
-                        resp["idSession"]=sid
-                        resp["waitAccept"]=sinfo.get_wait_accept()
-                        resp["passwordRequest"]=sinfo.get_password_request()      
-                        if conn_rcr is not None:
-                            conn_rcr.set_msg_log("session (id: " + sinfo.get_idsession() + ", node: " + sinfo.get_host()+")")
-                            appconn.set_recovery_conf(conn_rcr)
-                        break
-            finally:
-                self._sessions_semaphore.release()
+            while True:
+                with self._sessions_semaphore:
+                    while (self._sessions_update_status == "INPROGRESS"
+                           and not iconntimeout.is_elapsed()):
+                        self._sessions_semaphore.wait(0.1)
+                    if self._sessions_update_status != "":
+                        raise Exception("Open session failed: Update in progress.")
+                with self._libs_apps_semaphore:
+                    with self._sessions_semaphore:
+                        if self._sessions_update_status == "INPROGRESS":
+                            continue
+                        if self._sessions_update_status != "":
+                            raise Exception("Open session failed: Update in progress.")
+                        while True:
+                            sid = generate_key(30)
+                            if sid not in self._sessions:
+                                sinfo=Session(self,appconn,sid,msg)
+                                self._sessions[sid]=sinfo
+                                resp["idSession"]=sid
+                                resp["waitAccept"]=sinfo.get_wait_accept()
+                                resp["passwordRequest"]=sinfo.get_password_request()
+                                if conn_rcr is not None:
+                                    conn_rcr.set_msg_log("session (id: " + sinfo.get_idsession() + ", node: " + sinfo.get_host()+")")
+                                    appconn.set_recovery_conf(conn_rcr)
+                                break
+                    break
         except:
             ee = utils.get_exception()
             if appconn is not None:
@@ -2077,19 +2097,21 @@ class Agent():
         return resp        
 
     def close_session(self, ses):
-        bcloseapps=False
-        self._sessions_semaphore.acquire()
+        sid = ses.get_idsession()
+        with self._sessions_semaphore:
+            if self._sessions.get(sid) is not ses or sid in self._sessions_closing:
+                return
+            # Keep closing sessions registered until callbacks finish. Updates
+            # and app unloading must not mistake in-flight cleanup for idle.
+            self._sessions_closing.add(sid)
         try:
-            sid = ses.get_idsession()
-            if sid in self._sessions:
-                del self._sessions[sid]                
-                self._fire_close_conn_apps(sid)
-            if len(self._sessions)==0:
-                bcloseapps=True
+            self._fire_close_conn_apps(sid)
         finally:
-            self._sessions_semaphore.release()
-        if bcloseapps:
-            self._unload_apps()
+            with self._sessions_semaphore:
+                if self._sessions.get(sid) is ses:
+                    del self._sessions[sid]
+                self._sessions_closing.discard(sid)
+        self._unload_apps_if_idle()
         
     
     def get_app_permission(self,cinfo,name):
