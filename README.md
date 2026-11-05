@@ -1,7 +1,7 @@
 # DWService - Agent
 
 This is [DWService](https://www.dwservice.net) agent for operative systems Linux, Mac and Windows.
-The code is written in python2 and several libraries are written c++. 
+The code is written in Python 3 and maintains a compatibility layer for Python 2; several libraries are written in C++.
 
 ## Start the agent
 
