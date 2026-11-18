@@ -1761,7 +1761,21 @@ class Process():
             self._process=subprocess.Popen(args, env=libenv)
             self._ppid=self._process.pid
         else:
-            self._process=subprocess.Popen(args)
+            if utils.is_windows():
+                # A forced Windows subprocess does not inherit Python's DLL
+                # directory handles. Re-register the portable native DLL
+                # folders before agent.py imports the native modules.
+                script_path = os.path.abspath(args[1])
+                bootstrap = (
+                    "import os,runpy; "
+                    "[os.add_dll_directory(p) for p in os.environ.get('DWAS_DLL_DIRS','').split(os.pathsep) "
+                    "if p and os.path.isdir(p)]; "
+                    "runpy.run_path(" + repr(script_path) + ", run_name='__main__')"
+                )
+                child_args = [args[0], "-c", bootstrap] + args[2:]
+                self._process=subprocess.Popen(child_args)
+            else:
+                self._process=subprocess.Popen(args)
             self._ppid=self._process.pid
     
     def _start_ipc(self):
@@ -2389,7 +2403,18 @@ class ProcessInActiveConsole(Process):
         if utils.is_windows():
             if self._forcesubprocess:
                 self._currentconsole=None
-                self._process=subprocess.Popen(args)
+                # A forced Windows subprocess does not inherit Python's
+                # os.add_dll_directory registrations. Bootstrap the child
+                # before agent.py imports native DLLs.
+                script_path = os.path.abspath(args[1])
+                bootstrap = (
+                    "import os,runpy; "
+                    "[os.add_dll_directory(p) for p in os.environ.get('DWAS_DLL_DIRS','').split(os.pathsep) "
+                    "if p and os.path.isdir(p)]; "
+                    "runpy.run_path(" + repr(script_path) + ", run_name='__main__')"
+                )
+                child_args = [args[0], "-c", bootstrap] + args[2:]
+                self._process=subprocess.Popen(child_args, env=os.environ.copy())
                 self._ppid=self._process.pid
             else:
                 '''
