@@ -943,8 +943,14 @@ class ProcessCapture(ipc.ChildProcessThread):
                 None
             self._screen_thread.start()
             
-            self._sound_thread=ProcessCaptureSound(self, self.get_arguments())
-            self._sound_thread.start()
+            # Do not create a sound-capture worker when audio is disabled.
+            # This also prevents accidental loading of incompatible RtAudio DLLs.
+            if self._sound_enable:
+                self._sound_thread=ProcessCaptureSound(self, self.get_arguments())
+                self._sound_thread.start()
+            else:
+                self._sound_thread=None
+                self._write_debug("Sound capture disabled by configuration.")
             
             self._write_debug("Ready to accept requests")   
             self._stream.set_read_timeout_function(self._strm_read_timeout)            
@@ -995,11 +1001,18 @@ class ProcessCapture(ipc.ChildProcessThread):
                 ex = utils.get_exception()
                 self._write_err(utils.exception_to_string(ex))
         
-        #TMP PRIVACY MODE
-        self._screen_thread.set_privacy_mode(False)
-        self._screen_thread.destroy()
-        self._screen_thread.join(2)
-        self._sound_thread.destroy()
-        self._sound_thread.join(2)        
+        # Shut down only workers that were successfully created.
+        if self._screen_thread is not None:
+            try:
+                self._screen_thread.set_privacy_mode(False)
+            except:
+                pass
+            self._screen_thread.destroy()
+            self._screen_thread.join(2)
+
+        if self._sound_thread is not None:
+            self._sound_thread.destroy()
+            self._sound_thread.join(2)
+
         self._write_debug("Term capture process.")
 

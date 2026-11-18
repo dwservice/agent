@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 
 '''
 This Source Code Form is subject to the terms of the Mozilla
@@ -7,6 +7,8 @@ with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 '''
 import os
 import utils
+ARCH_X86_64="x86_64"
+ARCH_X86_32="x86_32"
 
 '''
 ### TO CHECK
@@ -134,3 +136,4 @@ class Compile():
         
         
         
+

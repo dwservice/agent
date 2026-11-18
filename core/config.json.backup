@@ -1,0 +1,31 @@
+{
+ "debug_indentation_max": 0,
+ "debug_mode": true,
+ "develop_mode": true,
+ "enabled": true,
+ "key": "QVwUEjAQtHQdkdMyWwtF",
+ "nodes": [
+  {
+   "id": "ND172578",
+   "port": "443",
+   "server": "node172578.dwservice.net"
+  },
+  {
+   "id": "ND181874",
+   "port": "443",
+   "server": "node181874.dwservice.net"
+  },
+  {
+   "id": "ND430148",
+   "port": "443",
+   "server": "node430148.dwservice.net"
+  }
+ ],
+ "password": "eJzLjUgNdizwdkp3r8xOrgx1d68qL69MK09PygsKcSwAAKz5C1k=",
+ "proxy_host": "",
+ "proxy_password": "",
+ "proxy_port": 0,
+ "proxy_type": "SYSTEM",
+ "proxy_user": "",
+ "url_primary": "https://www.dwservice.net/"
+}
