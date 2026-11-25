@@ -72,7 +72,6 @@ else:
     sys_maxsize=sys.maxsize
     os_getcwd=os.getcwd
 
-
 def is_windows():
     return _biswindows
 
@@ -84,9 +83,13 @@ def is_mac():
 
 def is_windows_10_or_later():
     if is_windows():
-        try:            
+        try:
             win = sys.getwindowsversion()
-            return win.major == 10
+            try:
+                v=int(platform.release())
+            except:
+                v=0
+            return win.major >= 10 or v>=10
         except:
             return platform.release() == '10' or platform.release() == '11'
     else:

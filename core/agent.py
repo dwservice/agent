@@ -211,7 +211,8 @@ class Agent():
         self._agent_password = None        
         self._agent_server = None
         self._agent_server_state = ""
-        self._agent_distr = None        
+        self._agent_distr = None
+        self._agent_distr_update_first_check = True
         self._agent_versions=None
         self._agent_port= None
         self._agent_native_suffix=None
@@ -1448,6 +1449,7 @@ class Agent():
             self.write_except(ex, "AGENT: ")
 
         self._close_all_sessions()
+        self._unload_apps()
         self._task_pool.destroy()
         self._task_pool = None
         if self._http_socket_pool is not None:
@@ -1652,8 +1654,9 @@ class Agent():
         return prop_conn
 
     def _run_agent(self):
-        if self._check_and_update_distr(True):
+        if self._check_and_update_distr(self._agent_distr_update_first_check):
             return False
+        self._agent_distr_update_first_check=False
         self._agent_last_error=None
         if self._runonfly:
             self.write_info("Initializing agent (node: " + self._agent_server + ")..." )
@@ -1704,8 +1707,7 @@ class Agent():
             try:
                 self._sessions_update_status=""
             finally:
-                self._sessions_semaphore.release()
-            self._unload_apps()
+                self._sessions_semaphore.release()            
             #ready agent
             self._suppapps=";".join(self.get_supported_applications())
             self._update_supported_apps(True)
@@ -1927,21 +1929,6 @@ class Agent():
                 for ap in conf["app_dependencies"]:
                     self._init_app(ap)
     
-    def _unload_app(self, name, bforce):
-        try:
-            md = self._apps[name]        
-            func_destroy = getattr(md, 'destroy')
-            bret = func_destroy(bforce)
-            if bret:
-                self.write_info("App " + name + " unloaded.")
-            return bret
-        except AttributeError:
-            return True
-        except:
-            e = utils.get_exception()
-            self.write_except("App " + name + " unload error: " + utils.exception_to_string(e))
-            return False
-                   
     def _init_app(self,name):
         if name not in self._apps:
             self._update_libs_apps("app",name)
@@ -1971,24 +1958,42 @@ class Agent():
             raise e
         finally:
             self._libs_apps_semaphore.release()
-    
-    
+        
     def _unload_apps(self):
+        ar=[]
         self._libs_apps_semaphore.acquire()
         try:
             for k in self._apps:
-                self._unload_app(k,True)
+                ar.append((k,self._apps[k]))
             self._apps={}
         finally:
             self._libs_apps_semaphore.release()
+        for kv in ar:
+            name=kv[0]
+            md=kv[1]
+            try:
+                func_destroy = getattr(md, "destroy")
+                func_destroy(True) #TO REMOVE True 
+                self.write_info("App " + name + " unloaded.")                
+            except AttributeError:
+                None
+            except:
+                e = utils.get_exception()
+                self.write_except("App " + name + " unload error: " + utils.exception_to_string(e))                
             
     def _fire_close_conn_apps(self, idconn):
-        for k in self._apps:
-            md = self._apps[k]
+        ar=[]
+        self._libs_apps_semaphore.acquire()
+        try:
+            for k in self._apps:
+                ar.append(self._apps[k])
+        finally:
+            self._libs_apps_semaphore.release()
+        for md in ar:
             try:
                 func = None
                 try:
-                    func = getattr(md, 'on_conn_close')
+                    func = getattr(md, "on_conn_close")
                 except AttributeError:
                     None
                 if func is not None:
@@ -1996,29 +2001,38 @@ class Agent():
             except:
                 e = utils.get_exception()
                 self.write_except(e)
+
     
     def _close_all_sessions(self):
         self._sessions_semaphore.acquire()
+        aridfirclose=[]
         try:
             for sid in self._sessions.keys():
                 try:
                     ses = self._sessions[sid]
                     ses.close()
-                    self._fire_close_conn_apps(sid)
+                    aridfirclose.append(sid)
                 except:
                     ex = utils.get_exception()
                     self.write_err(utils.exception_to_string(ex))
             self._sessions={}
         finally:
-            self._sessions_semaphore.release()        
-        self._unload_apps()
+            self._sessions_semaphore.release()
+        if len(aridfirclose)>0:
+            for sid in aridfirclose:
+                try:
+                    self._fire_close_conn_apps(sid)
+                except:
+                    ex = utils.get_exception()
+                    self.write_err(utils.exception_to_string(ex))            
 
     def open_session(self, msg):
         resp = {}
-        supp_rcr = self.get_config('recovery_session',True)
+        supp_rcr = self.get_config("recovery_session",True)
         conn_rcr = None 
         appconn = None
         try:
+            iconntimeout = None
             if "connectionTimeout" in msg:
                 try:
                     iconntimeout=utils.Counter(int(msg["connectionTimeout"])-2)
@@ -2077,20 +2091,21 @@ class Agent():
         return resp        
 
     def close_session(self, ses):
-        bcloseapps=False
+        sidfirclose=None
         self._sessions_semaphore.acquire()
         try:
             sid = ses.get_idsession()
             if sid in self._sessions:
-                del self._sessions[sid]                
-                self._fire_close_conn_apps(sid)
-            if len(self._sessions)==0:
-                bcloseapps=True
+                del self._sessions[sid]
+                sidfirclose=sid
         finally:
             self._sessions_semaphore.release()
-        if bcloseapps:
-            self._unload_apps()
-        
+        if sidfirclose is not None:
+            try:
+                self._fire_close_conn_apps(sidfirclose)
+            except:
+                ex = utils.get_exception()
+                self.write_err(utils.exception_to_string(ex))
     
     def get_app_permission(self,cinfo,name):
         prms = cinfo.get_permissions()
@@ -2753,13 +2768,13 @@ class Session(Message):
             self._wait_accept=False
             self._log_open()            
 
-
     def reject(self):
         if self._wait_accept:
             m = {
                 'name':  'sessionRejected' 
             }
             self.send_message(m)
+        self.close()
 
     def get_idsession(self):
         return self._idsession
@@ -2810,7 +2825,7 @@ class Session(Message):
             msg_name = msg["name"]
             if self._password is not None and msg_name!="keepalive" and msg_name!="checkpassword":
                 if 'requestKey' in msg:
-                    self.send_response(msg,"P:null")                    
+                    self.send_response(msg,"P:null")
                 else:
                     raise Exception("session not accepted")
             if msg_name=="checkpassword":
@@ -2831,7 +2846,9 @@ class Session(Message):
                     'requestKey':  msg['requestKey'] , 
                     'content':  sresp
                 }
-                self.send_message(m)                
+                self.send_message(m)
+                if sresp=="D":
+                    self.close()
             elif self._wait_accept and msg_name!="keepalive":
                 if 'requestKey' in msg:
                     self.send_response(msg,"W:null")                    
@@ -2941,7 +2958,7 @@ class Session(Message):
         resp['name']='response'
         resp['requestKey']=msg['requestKey']
         return resp
-    
+
     def _websocketOLD(self, msg):        
         rid=msg["idRaw"]
         conn = self._cpool.get_connection(rid) 
@@ -3110,6 +3127,7 @@ class WebSocket:
         self._bclose=False
         self._app_on_close=None
         self._app_on_data=None
+        self._app_on_except=None
         self._wsock=None
         self._simulate=self._props["simulate"]
     
@@ -3119,7 +3137,8 @@ class WebSocket:
                 self._app_on_close = events["on_close"]
             if "on_data" in events:
                 self._app_on_data = events["on_data"]
-        
+            if "on_except" in events:
+                self._app_on_except = events["on_except"]
         hds = {}
         self._agent._set_header_authorization(hds,self._props)
         opts={}
@@ -3128,9 +3147,9 @@ class WebSocket:
         opts["events"]={"on_data": self._on_data, "on_close": self._on_close, "on_except" : self._on_except}        
         opts["bandwidth_calculator_send"]=self._parent._bwsendcalc
         opts["http_socket_pool"]=self._agent._http_socket_pool
-        if not self._simulate:        
+        if not self._simulate:
             self._wsock = communication.WebSocket(self._props["url"],hds,opts)
-        else:            
+        else:
             self._wsock = communication.WebSocketSimulate(self._props["url"],hds,opts)
         self._wsock.open()        
         self._baccept=True
@@ -3145,14 +3164,17 @@ class WebSocket:
     def _on_data(self, tp, dt):
         self._parent._set_last_activity_time()
         if self._app_on_data is not None:
-            self._app_on_data(self, tp, dt)            
+            self._app_on_data(self, tp, dt)
     
     def _on_close(self):
         if self._app_on_close is not None:
             self._app_on_close()
     
     def _on_except(self, e):
-        self._agent.write_except(e)        
+        if self._app_on_except is not None:
+            self._app_on_except(e)
+        else:
+            self._agent.write_except(e)        
     
     def get_send_buffer_size(self):
         bsz = self._parent.get_send_buffer_size()
@@ -3172,10 +3194,10 @@ class WebSocket:
     
     def send_string(self,data):
         self._parent._set_last_activity_time()
-        self._wsock.send_string(data)        
+        self._wsock.send_string(data)
     
     def send_bytes(self,data):
-        self._parent._set_last_activity_time()        
+        self._parent._set_last_activity_time()
         self._wsock.send_bytes(data)
     
     def is_close(self):
@@ -3514,7 +3536,6 @@ class WebSocketSimulate:
             if self._conn is not None:
                 self._conn.close()
                 self._conn = None
-                
 
 class Download():
     
@@ -3603,7 +3624,7 @@ class Upload():
         
     def accept(self, path):
         try:
-            sprnpath=utils.path_dirname(path)    
+            sprnpath=utils.path_dirname(path)
             while True:
                 r="".join([random.choice("0123456789") for x in utils.nrange(6)])            
                 self._tmppath=sprnpath + utils.path_sep + "temporary" + r + ".dwsupload"
@@ -3611,10 +3632,9 @@ class Upload():
                     utils.file_open(self._tmppath, 'wb').close() #Crea il file per imposta i permessi
                     self._agent.get_osmodule().fix_file_permissions("CREATE_FILE",self._tmppath)
                     break
-            
             self._path=path
             self._name=utils.path_basename(self._path)
-            self._status="T"
+            self._status="T"            
             self._baccept=True
             hds = {}
             self._agent._set_header_authorization(hds,self._props)
@@ -3811,7 +3831,7 @@ class UploadOLD():
         self._calcbps=communication.BandwidthCalculator() 
         self._cnt_send_status=None
         try:
-            sprnpath=utils.path_dirname(path)    
+            sprnpath=utils.path_dirname(path)
             while True:
                 r="".join([random.choice("0123456789") for x in utils.nrange(6)])            
                 self._tmpname=sprnpath + utils.path_sep + "temporary" + r + ".dwsupload"
