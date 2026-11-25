@@ -324,7 +324,6 @@ class NativeLinux:
         except:
             return False
         
-        
     def remove_shortcuts(self) :
         try:
             #RIMUOVE /etc/dwagent
@@ -1086,7 +1085,7 @@ class Install:
         self._install_path=ui.VarString()
         self._install_log_path=None
         self._install_log=None
-        self._inatall_agent_mode=None
+        self._insatall_agent_mode=None
         self._install_code=ui.VarString()
         self._run_code=ui.VarString()
         self._install_newag_user=ui.VarString()
@@ -1844,6 +1843,8 @@ class Install:
             raise Exception(self._get_message("installShortcutsErr"))
         self._uinterface.wait_message(msg,  None, pend)
     
+    '''
+    #No longer maintained
     def step_config_init(self, curui):
         chs = ui.Chooser()
         m=self._get_message("configureInstallAgent")
@@ -1857,16 +1858,20 @@ class Install:
         if "installputcode" in self._options and self._options["installputcode"]:
             return self.step_config(chs)
         return chs
+    '''
     
     def step_config(self, curui):
         if curui.get_param("tryAgain",False):
             if curui.get_variable().get()=="configureLater":
                 return ui.Message(self._get_message("endInstallConfigLater"))
         
+        '''
+        #No longer maintained
         if curui.get_key() is not None and curui.get_key()=="chooseInstallMode":
-            self._inatall_agent_mode=curui.get_variable().get()
-        
-        if self._inatall_agent_mode=="installNewAgent":
+            self._insatall_agent_mode=curui.get_variable().get()        
+        '''
+            
+        if self._insatall_agent_mode=="installNewAgent":
             ipt = ui.Inputs()
             ipt.set_key("configure")
             ipt.set_param("firstConfig",curui.get_param("firstConfig",False))
@@ -1891,8 +1896,11 @@ class Install:
                 self._install_code.set("")
             ipt.set_message(self._get_message("enterInstallCode"))
             ipt.add("code", self._get_message("code"), self._install_code, True)
+        '''
+        #No longer maintained
         if not ("installputcode" in self._options and self._options["installputcode"]):            
             ipt.prev_step(self.step_config_init)
+        '''
         ipt.next_step(self.step_config_install_request)
         return ipt
     
@@ -2024,10 +2032,10 @@ class Install:
             if gdi.is_mac():
                 time.sleep(14) #silent install on Mac 
             if "key" in self._options:
-                self._inatall_agent_mode="installCode"
+                self._insatall_agent_mode="installCode"
                 self._install_code.set(self._options["key"])
             elif "user" in self._options and "password" in self._options:
-                self._inatall_agent_mode="installNewAgent"
+                self._insatall_agent_mode="installNewAgent"
                 self._install_newag_user.set(self._options["user"])
                 self._install_newag_password.set(self._options["password"])
                 if "agentGroup" in self._options:
@@ -2040,7 +2048,7 @@ class Install:
                 self._append_log(u"End Installation.")
                 return ui.Message(self._get_message("endInstall"))
             
-        if self._inatall_agent_mode=="installNewAgent":
+        if self._insatall_agent_mode=="installNewAgent":
             self._append_log(u"Create new Agent ...")
             msg=self._get_message("createNewAgent")
         else:
@@ -2059,7 +2067,7 @@ class Install:
                         self._append_log(u"Error Configure: " + s)
                         return ui.ErrorDialog(s)
             s = None
-            if self._inatall_agent_mode=="installNewAgent":
+            if self._insatall_agent_mode=="installNewAgent":
                 prminst={"user": self._install_newag_user.get(), "password": self._install_newag_password.get(), "name":self._install_newag_name.get()}
                 if self._install_newag_group.get() is not None and self._install_newag_group.get().strip()!="":
                     prminst["group"]=self._install_newag_group.get().strip()
@@ -2566,9 +2574,10 @@ class Install:
                     utils.path_makedirs(pthlic)
                     #if not self._runWithoutInstall:
                     utils.path_copy(u"LICENSES" + utils.path_sep + u"README", self._install_path.get() + utils.path_sep + u"README")
-                    utils.path_copy(u"LICENSES" + utils.path_sep + u"runtime", pthlic + utils.path_sep + u"runtime")
                     utils.path_copy(u"LICENSES" + utils.path_sep + u"core", pthlic + utils.path_sep + u"core")
                     utils.path_copy(u"LICENSES" + utils.path_sep + u"ui", pthlic + utils.path_sep + u"ui")
+                    if utils.path_exists(u"LICENSES" + utils.path_sep + u"runtime"):
+                        utils.path_copy(u"LICENSES" + utils.path_sep + u"runtime", pthlic + utils.path_sep + u"runtime")                    
             #Download file
             try:
                 self._append_log(u"Download files...")
@@ -2644,7 +2653,12 @@ class Install:
                 
                 if not self._silent:
                     curui.set_param("firstConfig",True)
+                    '''
+                    #No longer maintained
                     return self.step_config_init(curui)
+                    '''
+                    self._insatall_agent_mode="installCode"
+                    return self.step_config(curui)
                 else:
                     curui.set_param("firstConfig",False)
                     if self._proxy is not None:
