@@ -157,7 +157,7 @@ def initialize():
 
 def terminate():
     process_manager.destroy()
-    process_manager.join(5)
+    process_manager.join(40)
 
 #2024-10-04 Fix Mac
 def _mac_clear_path(bforce=False):
@@ -173,10 +173,19 @@ def _mac_clear_path(bforce=False):
 
 def clear_path(checkpid=False):
     if utils.path_exists(IPC_PATH):
+        pconf=ProcessConfig()
         lst=utils.path_list(IPC_PATH);
         for fname in lst:
             try:
-                if fname.endswith(".mmp") or fname.endswith(".cfg"):
+                if fname.endswith(".cfg"):
+                    if utils.path_exists(IPC_PATH + utils.path_sep + fname):
+                        cid = pconf._get_pid_child_by_path(IPC_PATH + utils.path_sep + fname)
+                        if cid<=0 or not native.get_instance().is_task_running(cid):
+                            utils.path_remove(IPC_PATH + utils.path_sep + fname)
+            except:
+                None     
+            try:
+                if fname.endswith(".mmp"):
                     if utils.path_exists(IPC_PATH + utils.path_sep + fname):
                         utils.path_remove(IPC_PATH + utils.path_sep + fname)
             except:
@@ -185,7 +194,7 @@ def clear_path(checkpid=False):
                 if not utils.is_windows():
                     if fname.endswith(".rls"):
                         bdelfile=True                        
-                        if is_load_libbase():                        
+                        if is_load_libbase():
                             spid = fname[0:len(fname)-4].split("_")[1]
                             if checkpid==True:
                                 try:
@@ -249,9 +258,9 @@ def is_load_libbase():
         else:
             try:
                 _libbase = native.get_instance().get_library()
-                if _libbase is not None:                    
+                if _libbase is not None:
                     _ipcmap["libbase"]=_libbase
-                    return True                                
+                    return True
             except:
                 None            
     finally:
@@ -845,15 +854,16 @@ class StreamIPC():
     
     def close(self):
         if self._binit==False or self._cond is None or self._mmap is None:
-            return
+            return True
         try:
             self._cond.acquire()
             try:
                 self._close_nosync()
             finally:
                 self._cond.release()
+            return True
         except:
-            self._close_nosync()
+            return False
     
     def is_closed(self):
         return self._bclose
@@ -1475,6 +1485,7 @@ class Property():
 
 
 class ProcessManager(threading.Thread):
+    
     def __init__(self):
         threading.Thread.__init__(self,name="IPCProcessManager")
         self.daemon=True                
@@ -1482,6 +1493,7 @@ class ProcessManager(threading.Thread):
         #self._list_release_obj=[]
         self._list_process=[]
         self._bdestroy=False
+        self._kill_later=None
             
     def _get_release_path(self,name,path=None):
         if path is None:
@@ -1506,18 +1518,16 @@ class ProcessManager(threading.Thread):
             return IPC_PATH + utils.path_sep + name + ".shm"
         else:
             return path + utils.path_sep + IPC_PATH + utils.path_sep + name + ".shm"
-    
-    
+        
     def _destroy_process_by_shared_obj(self, obj):
         tocloselist=[]
         with self._lock:
             for prc in self._list_process:
                 if prc._contains_shared_object(obj):
                     tocloselist.append(prc)
-        
         for prc in tocloselist:
             try:
-                prc.close()                
+                prc.close()
             except:
                 e = utils.get_exception()
                 print("IPC manager _destroy_process_by_shared_obj error: " + utils.exception_to_string(e))
@@ -1528,21 +1538,29 @@ class ProcessManager(threading.Thread):
     
     def destroy(self):
         self._bdestroy=True
+        if self._kill_later is None:
+            self._kill_later=utils.Counter()
             
     def run(self):
         try:
-            while not self._bdestroy:
+            while True:
                 time.sleep(1)
                 if is_load_libbase():
+                    if (self._kill_later is not None and self._kill_later.is_elapsed(30)):
+                        break
+                
                     #CHECK PROCESS
                     remlist=[]
                     lstprcs={}
                     with self._lock:
                         lstprcs=copy.copy(self._list_process)
-                        
+                    
+                    if self._bdestroy and len(lstprcs)==0:
+                        break
+                                            
                     for prc in lstprcs:
                         try:
-                            if prc._check_close():
+                            if prc._check_close(self._kill_later is not None and self._kill_later.is_elapsed(10)):
                                 remlist.append(prc)                        
                         except:
                             e = utils.get_exception()
@@ -1554,11 +1572,12 @@ class ProcessManager(threading.Thread):
                         for prc in remlist:
                             self._list_process.remove(prc)
                             #print("PROCES REMOVED " + str(prc))                
-                
+                elif self._bdestroy:
+                    break
         except:
-            #ex = utils.get_exception()
-            #print(utils.exception_to_string(ex))
-            None #Sometime shutdown error (most likely raised during interpreter shutdown) errore: <type 'exceptions.TypeError'>: 'NoneType' object is not callable
+            ex = utils.get_exception()
+            print(utils.exception_to_string(ex))
+            #None #Sometime shutdown error (most likely raised during interpreter shutdown) errore: <type 'exceptions.TypeError'>: 'NoneType' object is not callable
         
 process_manager=ProcessManager()
     
@@ -1628,7 +1647,12 @@ class ProcessConfig():
         with utils.file_open(pth, "r+b") as f:
             f.seek(self.POS_STATUS_CHILD)
             f.write(s)            
-        
+    
+    def _get_pid_child_by_path(self,pth):
+        with utils.file_open(pth, "r+b") as f:
+            f.seek(self.POS_PID_CHILD)
+            return struct.unpack("!I",f.read(4))[0]
+    
     def get_pid_child(self):
         pth = process_manager._get_config_path(self._key)
         with utils.file_open(pth, "r+b") as f:
@@ -1693,7 +1717,7 @@ class ProcessConfig():
         return self._key
 
 class Process():
-    
+
     def __init__(self, pkg, cls, args=None, fixperm=None,forcesubprocess=False):
         self._process=None
         self._ppid=None
@@ -1707,7 +1731,7 @@ class Process():
         self._stream=None
         self._binit=False
         self._bclose=False
-        self._tdclose=None
+        self._kill_later=None
         self._config=None
         self._lock=threading.RLock()
         self._list_shared_obj=[]
@@ -1836,10 +1860,10 @@ class Process():
             except:
                 ex1 = utils.get_exception()
                 print("_start_ipc close config file - err: " + str(ex1))
-            self._kill()
-            if self._stream is not None:
-                self._stream.close()
-                self._stream=None
+            self._kill(self._stream,self._process,self._ppid)
+            self._stream=None
+            self._process=None
+            self._ppid=None
             raise ex    
     
     def _start_thp(self):
@@ -1898,7 +1922,7 @@ class Process():
             cnt=utils.Counter() 
             while self.is_running():
                 if timeout is not None and cnt.is_elapsed(timeout):
-                    return
+                    raise Exception("timeout.")
                 time.sleep(0.5)
             self._stream=None
             self._process=None
@@ -1913,7 +1937,8 @@ class Process():
             self._bclose=True
             if self.is_running():
                 if is_load_libbase():
-                    if self._tdclose is None:
+                    if self._kill_later is None:
+                        self._kill_later=utils.Counter()
                         try:
                             if self._config is not None:
                                 self._config.set_status_parent(b"C")
@@ -1921,15 +1946,14 @@ class Process():
                             None
                         if self._stream is not None: 
                             self._stream.close()
-                            self._stream=None
-                        self._tdclose=threading.Thread(target=self._close_wait, name="IPCProcessClose")
-                        self._tdclose.start()
+                            self._stream=None                                                                        
                 else:
                     if self._stream is not None: 
                         self._stream.close()
                         self._stream=None
-                    self._tdchild.join(2)
-                    self._tdchild=None
+                    if self._tdchild is not None:
+                        self._tdchild.join(2)
+                        self._tdchild=None
             else:
                 if self._stream is not None: 
                     self._stream.close()
@@ -1937,23 +1961,26 @@ class Process():
                 self._process=None
                 self._ppid=None   
                 self._tdchild=None
-        
-    def _close_wait(self):
-        cnt=utils.Counter() 
-        while self.is_running():
-            if cnt.is_elapsed(5):
-                break
-            time.sleep(1)
-        self._kill()
     
-    def _check_close(self):
+    def _check_close(self,bkill=False):        
         if self._config is None:
             return True
         if self.is_running():
-            self._config.set_alive_time()
+            if bkill or (self._kill_later is not None and self._kill_later.is_elapsed(5)):
+                self._kill(self._stream,self._process,self._ppid)
+                self._stream=None
+                self._process=None
+                self._ppid=None
+                self._kill_later=None
+            else:
+                self._config.set_alive_time()                
         else:
             self._bclose=True
-            stcl=self._config.get_status_child()
+            stcl=""
+            try:
+                stcl=self._config.get_status_child()
+            except:
+                None
             try:
                 self._config.close()
             except:
@@ -1992,19 +2019,24 @@ class Process():
             return True
         return False
 
-    def _kill(self):
-        if self.is_running():
-            if self._stream is not None:
-                self._stream.close()
-                self._stream=None
-            if self._process!=None:
-                self._process.kill()
-                self._process.poll()
-                time.sleep(1)
-            if self._ppid!=None:
-                native.get_instance().task_kill(self._ppid)
-        self._process=None
-        self._ppid=None
+    def _kill(self, strm, prc, ppid):
+        if strm is not None:
+            try:
+                strm.close()
+            except:
+                None
+        if prc!=None:
+            prc.terminate()
+            try:
+                prc.wait(timeout=3)
+            except:
+                prc.kill()
+                try:
+                    prc.wait(timeout=2)
+                except:
+                    None                            
+        if ppid!=None:
+            native.get_instance().task_kill(ppid)        
         
 
 class ProcessInActiveConsole(Process):
@@ -2015,8 +2047,7 @@ class ProcessInActiveConsole(Process):
         self._currentconsole=None
         self._currentconsolecounter=utils.Counter()
         if utils.is_mac():
-            self._bmaclac=(os.getuid()==0 and utils.path_exists("native/dwaglac.plist"))        
-        
+            self._bmaclac=(os.getuid()==0 and utils.path_exists("native/dwaglac.plist"))
     
     def _process_fix_perm(self):
         jo={}
@@ -2490,9 +2521,9 @@ class ProcessInActiveConsole(Process):
                                     if utils.path_exists("runtime"):
                                         sdypth=" DYLD_LIBRARY_PATH=" + utils.path_absname("runtime/lib") + " "
                                     elif "DYLD_LIBRARY_PATH" in os.environ:
-                                        sdypth=" DYLD_LIBRARY_PATH=" + os.environ["DYLD_LIBRARY_PATH"] + " "                                    
+                                        sdypth=" DYLD_LIBRARY_PATH=" + os.environ["DYLD_LIBRARY_PATH"] + " "
                                     argsAA.append("(cd " + os.getcwd() + " &&" + sdypth + " ".join(args) + ")")
-                                    self._process=subprocess.Popen(argsAA)                            
+                                    self._process=subprocess.Popen(argsAA)
                                 self._ppid=self._process.pid
                                 bfaultback=False
                             except:
@@ -2509,7 +2540,6 @@ class ProcessInActiveConsole(Process):
                     libenv["DYLD_LIBRARY_PATH"]=os.environ["DYLD_LIBRARY_PATH"]
                 self._process=subprocess.Popen(args, env=libenv)
                 self._ppid=self._process.pid
-                
             
     def _start_ipc(self):
         try:            
@@ -2547,15 +2577,13 @@ class ChildProcessThread(threading.Thread):
         return self._args
     
     def is_destroy(self):
-        return self._destroy or self._stream.is_closed()
+        return self._destroy
     
     def destroy(self):
         self._destroy=True
-        self._stream.close()
 
 def ctrlHandler(ctrlType):    
     return 1
-
 
 def fmain(args): #SERVE PER MACOS APP
     if utils.is_windows():
@@ -2580,8 +2608,8 @@ def fmain(args): #SERVE PER MACOS APP
             appst, apptm = conf.get_status_parent_and_alive_time()
             apptm = apptm*1000.0
             if parentAliveTime is None or parentAliveTime!=apptm:
-                    parentAliveTime=apptm
-                    parentAliveCounter.reset()
+                parentAliveTime=apptm
+                parentAliveCounter.reset()
             if tdchild is None and appst==b"O":
                 oconf=conf.get_run_info()            
                 pkn = oconf["package"].rsplit('.',1)[0]
@@ -2605,17 +2633,34 @@ def fmain(args): #SERVE PER MACOS APP
     except:
         ex = utils.get_exception()
         print(utils.exception_to_string(ex))
+    
     if tdchild is not None:
         try:
             tdchild.destroy()
-            tdchild.join(5)
         except:
-            None
+            None    
+    killprc=False
+    icheck=0
+    icheckrun=True
+    while icheckrun:
+        icheck+=1
+        icheckrun=False
+        for t in threading.enumerate():
+            if t.name != "MainThread":
+                if icheck>10:
+                    killprc=True
+                else:
+                    icheckrun=True
+                    time.sleep(1)
+                break        
+        
     _destroy_child_shared_obj()
     if not conf.is_close():
         conf.set_status_child(b"C")
     conf.close()
-    
-    
-     
+    if killprc:
+        try:
+            os._exit(1)
+        except:
+            None
     
