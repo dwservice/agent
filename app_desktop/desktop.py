@@ -11,12 +11,9 @@ import threading
 import json
 import time
 import struct
-import os
-import stat
 import utils
 import ctypes
 import native
-import subprocess
 import ipc
 from . import common
 
@@ -24,25 +21,41 @@ class Desktop():
 
     def __init__(self, agent_main):
         self._agent_main=agent_main
-        self._process = None
         self._list = {}
-        self._list_semaphore = threading.Condition()        
+        self._list_semaphore = threading.Condition()
+        self._process = DesktopProcessCapture(self)
+        self._process.start()        
                     
-    def destroy(self, bforce):
+    def destroy(self,bforce):
         lstcopy=None
         self._list_semaphore.acquire()
         try:
-            if not bforce and len(self._list)>0:
-                return False
             lstcopy=self._list.copy()
         finally:
             self._list_semaphore.release()
-        for k in lstcopy.keys():
-            dm = lstcopy[k]
-            dm.destroy()
+        if len(lstcopy)>0:
+            for k in lstcopy.keys():
+                dm = lstcopy[k]
+                try:
+                    dm.destroy()
+                except:
+                    e = utils.get_exception()
+                    self._agent_main.write_except(e,"AppDesktop:: capture destroy error:")
+            #WAIT CLOSING ALL
+            for _ in range(10):
+                if self._count_desktop_manager()==0:
+                    break
+                time.sleep(1)
+                
         if not self._process is None:
-            self._process.destroy()
-            self._process=None            
+            try:
+                self._process.destroy()
+                self._process.join(10)
+                self._process=None
+            except:
+                e = utils.get_exception()
+                self._agent_main.write_except(e,"AppDesktop:: process destroy error:")
+                
         return True
         
     def on_conn_close(self, idses):
@@ -73,17 +86,14 @@ class Desktop():
             while True:
                 key = agent.generate_key(10) 
                 if key not in self._list:
-                    if self._process is None:
-                        self._process = DesktopProcessCapture(self._agent_main)
-                        self._process.start()
+                    self._process.set_active(True)
                     itm = DesktopSession(self, cinfo, key, wsock)
                     self._list[key]=itm                    
                     break
         except Exception as e:
             if self._process is not None:
-                if len(self._list)==0 and not self._process is None:
-                    self._process.destroy()
-                    self._process=None
+                if len(self._list)==0:
+                    self._process.set_active(False)
             raise e
         finally:
             self._list_semaphore.release()        
@@ -95,10 +105,8 @@ class Desktop():
         try:
             if sid in self._list:
                 del self._list[sid]
-                if len(self._list)==0 and not self._process is None:
-                    self._process.destroy()
-                    self._process=None
-                
+                if len(self._list)==0:
+                    self._process.set_active(False)                
         finally:
             self._list_semaphore.release()
     
@@ -110,6 +118,13 @@ class Desktop():
         finally:
             self._list_semaphore.release()
         return None
+    
+    def _count_desktop_manager(self):
+        self._list_semaphore.acquire()
+        try:
+            return len(self._list)
+        finally:
+            self._list_semaphore.release()
     
     def _get_desktop_manager_check_permissions(self,cinfo,sid):
         dm=self._get_desktop_manager(sid)
@@ -145,68 +160,87 @@ class Desktop():
 
 class DesktopProcessCapture(threading.Thread):
     
-    def __init__(self, agent_main):
+    DEACTIVE_TIMEOUT=30
+    
+    def __init__(self, dskmain):
         threading.Thread.__init__(self,  name="DesktopProcessCapture")
         self._struct_Q=struct.Struct("!Q")
         self._bdestroy=False
-        self._agent_main=agent_main
+        self._dskmain=dskmain
+        self._agent_main=self._dskmain._agent_main
+        self._lock = threading.RLock()
         self._screen_module=None
         self._sound_module=None
         self._sound_status=None
         self._supported_frame=None
-        self._semaphore = threading.Condition()
         self._strm=None
         self._process=None
         self._process_init=False
         self._process_status="stopped"
         self._process_last_error=None
-        self._current_clipboard={"id":0,"type":0,"size":0}        
-        self._id=0        
-        self._monitors=None 
-        self._monitorsid=0       
+        self._is_active=False
+        self._deactive_later=None
+        self._current_clipboard={"id":0,"type":0,"size":0}
+        self._id=0
+        self._monitors=None
+        self._monitorsid=0
         #self._cpdebug=None
         self._debug_forcesubprocess=False
         try:
             self._debug_forcesubprocess=self._agent_main.get_config("desktop.debug_forcesubprocess",False)
         except:
-            None        
+            None
         
     def is_destroy(self):
         return self._bdestroy
     
     def destroy(self):
         self._bdestroy=True
-        
-    def get_supported_frame(self):
-        self._semaphore.acquire()
+    
+    def get_id(self):
+        return self._id
+    
+    def is_active(self):
+        self._lock.acquire()
         try:
-            if self._supported_frame is None:
-                self._supported_frame=[]
-                v = self._screen_module.DWAScreenCaptureTJPEGEncoderVersion()
-                if v>=2:
-                    self._supported_frame.append(common.TYPE_FRAME_TJPEG_V2)
-                if v>=1:
-                    self._supported_frame.append(common.TYPE_FRAME_TJPEG_V1)
-                v = self._screen_module.DWAScreenCapturePaletteEncoderVersion()
-                if v>=1:
-                    self._supported_frame.append(common.TYPE_FRAME_PALETTE_V1)
+            if self._deactive_later is not None and self._deactive_later.is_elapsed(DesktopProcessCapture.DEACTIVE_TIMEOUT):
+                self._is_active=False
+            return self._is_active
+        finally:
+            self._lock.release()
+        
+    def set_active(self,v):
+        self._lock.acquire()
+        try:
+            if v:
+                self._is_active=v
+                self._deactive_later=None
+            else:
+                if self._deactive_later is None:
+                    self._deactive_later=utils.Counter()                
+        finally:
+            self._lock.release()
+    
+    def get_supported_frame(self):
+        self._lock.acquire()
+        try:
             return self._supported_frame
         finally:
-            self._semaphore.release()
+            self._lock.release()
     
     def get_sound_status(self):
-        self._semaphore.acquire()
+        self._lock.acquire()
         try:
             return self._sound_status
         finally:
-            self._semaphore.release()    
+            self._lock.release()    
     
     def get_monitors(self):
-        self._semaphore.acquire()
+        self._lock.acquire()
         try:
             return self._monitors
         finally:
-            self._semaphore.release()
+            self._lock.release()
     
     def get_last_error(self):
         return self._process_last_error;
@@ -248,9 +282,6 @@ class DesktopProcessCapture(threading.Thread):
             self._agent_main.unload_lib("soundcapture")
             self._sound_module=None;
     
-    def get_id(self):
-        return self._id
-    
     def get_status(self):
         return self._process_status
     
@@ -264,7 +295,7 @@ class DesktopProcessCapture(threading.Thread):
                     memmap.close()
             except:
                 None
-            self._sound_status=None        
+        self._sound_status=None        
         
     def _destroy_monitors_nosync(self):
         if self._monitors is not None:
@@ -276,15 +307,44 @@ class DesktopProcessCapture(threading.Thread):
                     memmap.close()
             except:
                 None
-            self._monitors=None
+        self._monitors=None
+        self._monitorsid=0
+        self._current_clipboard={"id":0,"type":0,"size":0}
             
+    def _create_process(self):
+        self._init_screen_module()
+        self._init_sound_module()
+        self._lock.acquire()
+        try:
+            self._supported_frame=[]
+            v = self._screen_module.DWAScreenCaptureTJPEGEncoderVersion()
+            if v>=2:
+                self._supported_frame.append(common.TYPE_FRAME_TJPEG_V2)
+            if v>=1:
+                self._supported_frame.append(common.TYPE_FRAME_TJPEG_V1)
+            v = self._screen_module.DWAScreenCapturePaletteEncoderVersion()
+            if v>=1:
+                self._supported_frame.append(common.TYPE_FRAME_PALETTE_V1)
+        finally:
+            self._lock.release()
+        prcargs=[]         
+        if hasattr(self._agent_main, "_app_desktop_capture_fallback_lib") and self._agent_main._app_desktop_capture_fallback_lib is not None:
+            prcargs.append("capture_fallback_lib=" + self._agent_main._app_desktop_capture_fallback_lib)
+        self._process=ipc.ProcessInActiveConsole("app_desktop.capture", "ProcessCapture", prcargs, forcesubprocess=self._debug_forcesubprocess)                            
+        self._strm=self._process.start()
+        self._strm.set_read_timeout_function(self._strm_read_timeout)
+        self._process_last_error=None
+        self._id+=1
+        self._process_status="started"
+    
     def _destroy_process(self):
-        self._semaphore.acquire()
+        self._process_status="stopped"
+        self._lock.acquire()
         try:
             self._destroy_sound_nosync()
             self._destroy_monitors_nosync()
         finally:
-            self._semaphore.release()
+            self._lock.release()
         try:
             if self._strm!=None:
                 try:
@@ -298,19 +358,18 @@ class DesktopProcessCapture(threading.Thread):
         self._strm=None
         if self._process is not None:
             self._process.close()
-            self._process.join(2)
             self._process=None
-        self._process_status="stopped"
+        self._term_screen_module()
+        self._term_sound_module()
     
     def _write_obj(self, obj):
-        st = self.get_status()
-        if st=="started":
+        if self._process_status=="started":
             self._strm.write_obj(obj)
         else:
             raise Exception("Process not started.")
     
     def _must_destroy_process(self):
-        return ((self._process is not None and (not self._process.is_running() or self._process.is_change_console())) 
+        return (not self.is_active() or (self._process is not None and (not self._process.is_running() or self._process.is_change_console())) 
                 or (self._strm is not None and self._strm.is_closed())) 
     
     def _strm_read_timeout(self, strm):
@@ -319,10 +378,6 @@ class DesktopProcessCapture(threading.Thread):
         return self.is_destroy()
     
     def run(self):        
-        #DOWNLOAD SCREEN LIB
-        self._init_screen_module()
-        #DOWNLOAD AUDIO LIB
-        self._init_sound_module()        
         try:
             while not self.is_destroy():
                 try:
@@ -330,15 +385,8 @@ class DesktopProcessCapture(threading.Thread):
                         self._destroy_process()                    
                     if self._process_status=="stopped":
                         if self._process is None or not self._process.is_running():
-                            prcargs=[]         
-                            if hasattr(self._agent_main, "_app_desktop_capture_fallback_lib") and self._agent_main._app_desktop_capture_fallback_lib is not None:
-                                prcargs.append("capture_fallback_lib=" + self._agent_main._app_desktop_capture_fallback_lib)
-                            
-                            self._process=ipc.ProcessInActiveConsole("app_desktop.capture", "ProcessCapture", prcargs, forcesubprocess=self._debug_forcesubprocess)                            
-                            self._strm=self._process.start()
-                            self._strm.set_read_timeout_function(self._strm_read_timeout)
-                            self._process_last_error=None
-                            self._process_status="started"
+                            if self.is_active():
+                                self._create_process()                                
                     if self._process_status=="started":
                         jo = self._strm.read_obj()
                         if jo==None:
@@ -346,7 +394,7 @@ class DesktopProcessCapture(threading.Thread):
                         sreq = jo["request"]
                         if sreq==u"MONITORS_CHANGED":
                             bwrite=False
-                            self._semaphore.acquire()
+                            self._lock.acquire()
                             try:
                                 self._destroy_monitors_nosync()
                                 if "error_code" in jo:
@@ -381,12 +429,12 @@ class DesktopProcessCapture(threading.Thread):
                                     self._monitors["cond"]=ipc.Condition(fixperm=self._process.get_fixperm())
                                     bwrite=True
                             finally:
-                                self._semaphore.release()
+                                self._lock.release()
                             if bwrite:
                                 self._write_obj({u"request":u"INIT_SCREEN_CAPTURE",u"monitors":self._monitors})                                
                         elif sreq==u"SOUND_STATUS":
                             bwrite=False
-                            self._semaphore.acquire()
+                            self._lock.acquire()
                             try:
                                 self._destroy_sound_nosync()
                                 self._sound_status=jo
@@ -400,7 +448,7 @@ class DesktopProcessCapture(threading.Thread):
                                     self._sound_status["cond"]=ipc.Condition(fixperm=self._process.get_fixperm())
                                     bwrite=True
                             finally:
-                                self._semaphore.release()
+                                self._lock.release()
                             if bwrite:
                                 self._write_obj({u"request":u"INIT_SOUND_CAPTURE",u"cond":self._sound_status["cond"],u"memmap":self._sound_status["memmap"]})
                         elif sreq==u"CLIPBOARD_CHANGED":
@@ -427,13 +475,13 @@ class DesktopProcessCapture(threading.Thread):
                         time.sleep(1)
                 except:
                     e = utils.get_exception()
-                    strmsg=utils.exception_to_string(e)                    
+                    strmsg=utils.exception_to_string(e)
                     self._process_last_error=strmsg
                     if "Wayland" in strmsg:
                         self.destroy()                    
                     self._destroy_process()
-                    if not self.is_destroy():
-                        self._agent_main.write_err("AppDesktop:: Process capture error: " + self._process_last_error)
+                    if self.is_active() and not self.is_destroy(): 
+                        self._agent_main.write_err("AppDesktop:: Process capture error: " + self._process_last_error)                    
                     time.sleep(1)
         except:
             try:
@@ -444,10 +492,7 @@ class DesktopProcessCapture(threading.Thread):
         
         self.destroy()
         self._destroy_process()
-            
-        #UNLOAD DLL
-        self._term_screen_module()
-        self._term_sound_module()
+        
                 
         
     def inputs(self, mon, sinps):
@@ -741,8 +786,8 @@ class DesktopSession(threading.Thread):
                     finally:
                         self._clipboard_data_condition.release()
             except:
-                ex = utils.get_exception()
                 if self._process.get_status()=="started":
+                    ex = utils.get_exception()
                     self._dskmain._agent_main.write_err("AppDesktop:: on_websoket_data error. ID: " + self._id + " - Error:" + utils.exception_to_string(ex))            
             
    
@@ -866,7 +911,6 @@ class DesktopSession(threading.Thread):
                 None
             if self._process_encoder is not None:
                 self._process_encoder.close()
-                self._process_encoder.join(1)
                 self._process_encoder=None
             self._process_encoder_init=False        
         self._process_encoder_monitorsid=-1        
@@ -880,104 +924,109 @@ class DesktopSession(threading.Thread):
                 None
             if sdata==None:
                 break
-            self._init_counter=None
-            if len(sdata)>0:
-                tp = self._struct_h.unpack(sdata[0:2])[0]
-                if tp==common.TOKEN_FRAME:
-                    #SEND PING
-                    if self._ping_check==False and (self._ping_counter is None or self._ping_counter.is_elapsed(5)) and self._stats_cur_frame_size==0 and self._stats_frame_sent_time==self._stats_frame_received_time:
-                        if self._ping_counter is None:
-                            self._ping_counter = utils.Counter()
-                        else:
-                            self._ping_counter.reset()
-                        self._ping_check=True
-                        self._send_bytes(self._struct_h.pack(common.TOKEN_FRAME_TIME)+utils.str_to_bytes(utils.str_new(time.time())))
-                        self._send_bytes(self._struct_hb.pack(2,1))
-                        
-                    bsend=True
-                    self._semaphore_st.acquire()
-                    try:
-                        self._stats_cur_frame_size+=int(len(sdata))
-                        if utils.bytes_get(sdata,2)==1:
-                            self._frame_distance+=1
-                            self._stats_calc.inc("bps",self._stats_cur_frame_size)
-                            if self._stats_cur_frame_size==3:                           
-                                self._received_frame_nosync()
-                                bsend=False
+            try:
+                self._init_counter=None
+                if len(sdata)>0:
+                    tp = self._struct_h.unpack(sdata[0:2])[0]
+                    if tp==common.TOKEN_FRAME:
+                        #SEND PING
+                        if self._ping_check==False and (self._ping_counter is None or self._ping_counter.is_elapsed(5)) and self._stats_cur_frame_size==0 and self._stats_frame_sent_time==self._stats_frame_received_time:
+                            if self._ping_counter is None:
+                                self._ping_counter = utils.Counter()
                             else:
-                                tm=time.time() 
-                                if tm>self._stats_frame_sent_time:
-                                    self._stats_frame_sent_time=tm
-                                else: 
-                                    self._stats_frame_received_time=0
-                            self._stats_cur_frame_size=0
-                    finally:
-                        self._semaphore_st.release()
-                        
-                    if bsend:
-                        if utils.bytes_get(sdata,2)==1:                            
-                            self._send_bytes(self._struct_h.pack(common.TOKEN_FRAME_TIME)+utils.str_to_bytes(utils.str_new(self._stats_frame_sent_time)))
-                        self._send_bytes(sdata)                        
-                        
-                elif tp==common.TOKEN_CURSOR:
-                    if self._cursor_visible==True:
-                        self._send_bytes(sdata)
-                elif tp==common.TOKEN_AUDIO_DATA: #TOKEN AUDIO
-                    if self._audio_type_to_send==False:
-                        self._send_bytes(sdata)
-                elif tp==common.TOKEN_FRAME_NEXT:
-                    #NEXT FRAME
-                    fiw=0
-                    self._semaphore_st.acquire()                
-                    try:
-                        arToken = self._struct_Q.unpack(sdata[2:2+self._struct_Q.size])
-                        self._stats_calc.inc("capfps", arToken[0])                                                
-                        if self._slow_mode:
-                            self._slow_mode_counter.reset()
-                            while self._slow_mode and not self._slow_mode_counter.is_elapsed(4):
-                                self._semaphore_st.wait(0.2)
-                            self._quality_detect_down_check.reset()
-                            self._quality_detect_down_wait_tm=0
-                            self._quality_detect_up_check.reset()                                                
-                        else:
-                            bdwait=False
-                            tm=time.time()
-                            while self._process_id==cpid and not (self._stats_frame_received_time==0 or self._stats_frame_sent_time-self._stats_frame_received_time<1+self._ping):
-                                bdwait=True
-                                self._semaphore_st.wait(0.5) 
-                            elp = time.time()-tm
-                            self._qa_detect(elp)
-                            while self._process_id==cpid and self._stats_frame_pending>0:
-                                self._semaphore_st.wait(0.5)    
-                            self._calc_stats()                            
-                            if self._quality_request!=-1:
-                                self._quality=self._quality_request
-                            else:
-                                self._quality=self._quality_detect_value
-                            if self._stats_frame_sent_time==0 and self._stats_frame_received_time==0:
-                                fiw=0
-                            else:
-                                arstats=self._frame_intervall_stats_calc.check(1.0+self._ping)
-                                if arstats is not None:
-                                    self._frame_intervall_fps = int(arstats["fps"])
-                                    #print(str(self._frame_intervall_fps))
-                                if bdwait:
-                                    ifps=self._frame_intervall_fps
-                                    if ifps==0:
-                                        ifps=self._frame_intervall_fps_min
+                                self._ping_counter.reset()
+                            self._ping_check=True
+                            self._send_bytes(self._struct_h.pack(common.TOKEN_FRAME_TIME)+utils.str_to_bytes(utils.str_new(time.time())))
+                            self._send_bytes(self._struct_hb.pack(2,1))
+                            
+                        bsend=True
+                        self._semaphore_st.acquire()
+                        try:
+                            self._stats_cur_frame_size+=int(len(sdata))
+                            if utils.bytes_get(sdata,2)==1:
+                                self._frame_distance+=1
+                                self._stats_calc.inc("bps",self._stats_cur_frame_size)
+                                if self._stats_cur_frame_size==3:                           
+                                    self._received_frame_nosync()
+                                    bsend=False
                                 else:
-                                    ifps=self._frame_intervall_fps+self._frame_intervall_fps_inc
-                                fiw=1.0/ifps                            
-                    finally:
-                        self._semaphore_st.release()
-                    w = fiw-self._frame_intervall_time_counter.get_value()
-                    if w>0:
-                        self._frame_intervall_event.wait(w)
-                    self._frame_intervall_time_counter.reset()
-                    self._frame_intervall_event.set()                                        
-                else:
-                    self._send_bytes(sdata)
-
+                                    tm=time.time() 
+                                    if tm>self._stats_frame_sent_time:
+                                        self._stats_frame_sent_time=tm
+                                    else: 
+                                        self._stats_frame_received_time=0
+                                self._stats_cur_frame_size=0
+                        finally:
+                            self._semaphore_st.release()
+                            
+                        if bsend:
+                            if utils.bytes_get(sdata,2)==1:                            
+                                self._send_bytes(self._struct_h.pack(common.TOKEN_FRAME_TIME)+utils.str_to_bytes(utils.str_new(self._stats_frame_sent_time)))
+                            self._send_bytes(sdata)                        
+                            
+                    elif tp==common.TOKEN_CURSOR:
+                        if self._cursor_visible==True:
+                            self._send_bytes(sdata)
+                    elif tp==common.TOKEN_AUDIO_DATA: #TOKEN AUDIO
+                        if self._audio_type_to_send==False:
+                            self._send_bytes(sdata)
+                    elif tp==common.TOKEN_FRAME_NEXT:
+                        #NEXT FRAME
+                        fiw=0
+                        self._semaphore_st.acquire()                
+                        try:
+                            arToken = self._struct_Q.unpack(sdata[2:2+self._struct_Q.size])
+                            self._stats_calc.inc("capfps", arToken[0])                                                
+                            if self._slow_mode:
+                                self._slow_mode_counter.reset()
+                                while self._slow_mode and not self._slow_mode_counter.is_elapsed(4):
+                                    self._semaphore_st.wait(0.2)
+                                self._quality_detect_down_check.reset()
+                                self._quality_detect_down_wait_tm=0
+                                self._quality_detect_up_check.reset()                                                
+                            else:
+                                bdwait=False
+                                tm=time.time()
+                                while self._process_id==cpid and not (self._stats_frame_received_time==0 or self._stats_frame_sent_time-self._stats_frame_received_time<1+self._ping):
+                                    bdwait=True
+                                    self._semaphore_st.wait(0.5) 
+                                elp = time.time()-tm
+                                self._qa_detect(elp)
+                                while self._process_id==cpid and self._stats_frame_pending>0:
+                                    self._semaphore_st.wait(0.5)    
+                                self._calc_stats()                            
+                                if self._quality_request!=-1:
+                                    self._quality=self._quality_request
+                                else:
+                                    self._quality=self._quality_detect_value
+                                if self._stats_frame_sent_time==0 and self._stats_frame_received_time==0:
+                                    fiw=0
+                                else:
+                                    arstats=self._frame_intervall_stats_calc.check(1.0+self._ping)
+                                    if arstats is not None:
+                                        self._frame_intervall_fps = int(arstats["fps"])
+                                        #print(str(self._frame_intervall_fps))
+                                    if bdwait:
+                                        ifps=self._frame_intervall_fps
+                                        if ifps==0:
+                                            ifps=self._frame_intervall_fps_min
+                                    else:
+                                        ifps=self._frame_intervall_fps+self._frame_intervall_fps_inc
+                                    fiw=1.0/ifps                            
+                        finally:
+                            self._semaphore_st.release()
+                        w = fiw-self._frame_intervall_time_counter.get_value()
+                        if w>0:
+                            self._frame_intervall_event.wait(w)
+                        self._frame_intervall_time_counter.reset()
+                        self._frame_intervall_event.set()                                        
+                    else:
+                        self._send_bytes(sdata)
+            except:
+                ex = utils.get_exception()
+                if not self.is_destroy():
+                    self._dskmain._agent_main.write_err("AppDesktop:: process_encoder_read error. ID: " + self._id + " - Error:" + utils.exception_to_string(ex))
+                break
                     
     def _calc_stats(self):
         arstats=self._stats_calc.check(1.0+self._ping)
@@ -1187,25 +1236,26 @@ class DesktopSession(threading.Thread):
         except:
             self._dskmain._agent_main.write_err("AppDesktop:: session id: " + self._id + " error: destroy_clipboard_handler")        
         
-        bsndmsg = not (self._process_encoder is not None and not self._process_encoder.is_running())
-        self._destroy_process_encoder(True)
-        if not self.is_destroy():
-            if bsndmsg:            
-                if self._init_err_msg is None:
-                    appmsg = self._process.get_last_error()
-                    if appmsg is None:
-                        appmsg="Process not started."
-                    self._init_err_msg=appmsg
-                try:
-                    self._send_bytes(self._struct_h.pack(common.TOKEN_SESSION_ERROR) + self._init_err_msg.encode("ascii", errors='replace'))
-                except:
-                    None
-            self.destroy()
-        if self._websocket is not None:
-            self._websocket.close()
-            self._websocket=None
-        
-        self._dskmain._rem_desktop_manager(self._id)
+        try:
+            bsndmsg = not (self._process_encoder is not None and not self._process_encoder.is_running())
+            self._destroy_process_encoder(True)
+            if not self.is_destroy():
+                if bsndmsg:            
+                    if self._init_err_msg is None:
+                        appmsg = self._process.get_last_error()
+                        if appmsg is None:
+                            appmsg="Process not started."
+                        self._init_err_msg=appmsg
+                    try:
+                        self._send_bytes(self._struct_h.pack(common.TOKEN_SESSION_ERROR) + self._init_err_msg.encode("ascii", errors='replace'))
+                    except:
+                        None
+                self.destroy()
+            if self._websocket is not None:
+                self._websocket.close()
+                self._websocket=None
+        finally:
+            self._dskmain._rem_desktop_manager(self._id)
         self._id=None        
     
     #TO REMOVE 2026 01 19

@@ -29,7 +29,7 @@ class ProcessCaptureScreen(threading.Thread):
         self._args = args
         self._bdestroy=False
         self._screen_module = None
-        self._screen_libver = 0        
+        self._screen_libver = 0
         self._cnt_image = utils.Counter()
         self._status = "C" # I INIT; O OPEN; C CLOSE
         self._capture_allowed=True
@@ -65,7 +65,11 @@ class ProcessCaptureScreen(threading.Thread):
             #2026 07 22 TO REMOVE
             try:            
                 win = sys.getwindowsversion()
-                return win.major == 10
+                try:
+                    v=int(platform.release())
+                except:
+                    v=0
+                return win.major >= 10 or v>=10
             except:
                 return platform.release() == '10' or platform.release() == '11'
     
@@ -884,7 +888,7 @@ class ProcessCapture(ipc.ChildProcessThread):
             sys.stderr = ProcessCaptureStdErr(self)
     
     def get_sound_enable(self):
-        return self._sound_enable        
+        return self._sound_enable
     
     def _write_info(self,s):
         self._write_log("INFO",s)
@@ -998,8 +1002,12 @@ class ProcessCapture(ipc.ChildProcessThread):
         #TMP PRIVACY MODE
         self._screen_thread.set_privacy_mode(False)
         self._screen_thread.destroy()
-        self._screen_thread.join(2)
         self._sound_thread.destroy()
-        self._sound_thread.join(2)        
+        cntw=0
+        while self._screen_thread.is_alive() or self._sound_thread.is_alive():
+            cntw+=1
+            time.sleep(1)
+            if cntw>=5:
+                break
         self._write_debug("Term capture process.")
 
