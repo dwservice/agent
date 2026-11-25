@@ -82,7 +82,7 @@ class ConPty(Thread):
 
     def __init__(self, cmd, u, p, cols, rows, ferr=None):
         # Call the Thread class's init function
-        Thread.__init__(self)
+        Thread.__init__(self, name="ShellConPty")
 
         # Setup handles
         self._hPC = HPCON()

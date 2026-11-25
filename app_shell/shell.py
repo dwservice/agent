@@ -18,6 +18,7 @@ import io
 import agent
 import json
 import native
+import errno
 
 
 try:
@@ -45,18 +46,33 @@ class Shell():
         self._list_semaphore = threading.Condition()
     
     def destroy(self,bforce):
-        if not bforce:
-            self._list_semaphore.acquire()
-            try:
-                if len(self._list)>0:
-                    return False
-            finally:
-                self._list_semaphore.release()            
+        lstcopy=None
+        self._list_semaphore.acquire()
+        try:
+            lstcopy=self._list.copy()
+        finally:
+            self._list_semaphore.release()
+        if len(lstcopy)>0:
+            for k in lstcopy.keys():
+                sm = lstcopy[k]
+                try:
+                    sm.destroy()                
+                except Exception as e:
+                    self._agent_main.write_except(e,"AppShell:: destroy error:")
+            #WAIT CLOSING ALL
+            for _ in range(10):
+                self._list_semaphore.acquire()
+                try:
+                    if len(self._list)==0:
+                        break
+                finally:
+                    self._list_semaphore.release()
+                time.sleep(1)
         return True
     
     def on_conn_close(self, idses):
-        self._list_semaphore.acquire()
         lstcopy=None
+        self._list_semaphore.acquire()        
         try:
             lstcopy=self._list.copy()
         finally:
@@ -66,9 +82,9 @@ class Shell():
             sm = lstcopy[k]
             if sm.get_idses()==idses:
                 try:
-                    sm.terminate()
+                    sm.destroy()
                 except Exception as e:
-                    self._agent_main.write_except(e,"AppShell:: on_conn_close terminate error:")
+                    self._agent_main.write_except(e,"AppShell:: on_conn_close destroy error:")
         
     
     def has_permission(self,cinfo):
@@ -113,7 +129,7 @@ class Shell():
 class ShellManager(threading.Thread):
     
     def __init__(self, shlmain, cinfo, sid,  wsock):
-        threading.Thread.__init__(self,  name="ShellManager")
+        threading.Thread.__init__(self, name="ShellManager")
         self._shlmain=shlmain
         self._cinfo=cinfo        
         self._idses = cinfo.get_idsession()
@@ -312,9 +328,9 @@ class ShellManager(threading.Thread):
             finally:
                 self._semaphore.release()
         except Exception as e:
-            self.terminate()
+            self.destroy()
             self._shlmain._agent_main.write_except(e,"AppShell:: shell manager error " + self._id + ":")        
-        self._destroy()
+        self.terminate()
     
     def _on_close(self):
         if self._recovery_supported:
@@ -327,7 +343,7 @@ class ShellManager(threading.Thread):
             finally:
                 self._semaphore.release()
         else:            
-            self.terminate()        
+            self.destroy()        
     
     def recovery(self,wsock):
         bret=False
@@ -342,14 +358,14 @@ class ShellManager(threading.Thread):
             self._semaphore.release()
         return bret
 
-    def terminate(self):
+    def destroy(self):
         self._semaphore.acquire()
         try:
             self._bclose=True
         finally:
             self._semaphore.release()
     
-    def _destroy(self):
+    def terminate(self):
         if self._id is not None:
             for idx in self._shell_list:
                 try:
@@ -515,6 +531,8 @@ class LinuxMac():
         self._reader=None
         self._writer=None
         self._libcrypt=None
+        self._activity_notify=False
+        self._wait_status=None
     
     def get_id(self):
         return self._id
@@ -754,59 +772,105 @@ class LinuxMac():
             self._writer = io.open(pio, 'wb', closefd=False)
             try:
                 self._manager._cinfo.inc_activities_value("shellSession")
+                self._activity_notify=True
             except:
                 None
             self._login_request = None
         except:
             self.terminate()
 
-    def _processIsAlive(self):
+    def _process_is_alive(self):
+        if self._wait_status is not None:
+            return False        
+        cnt=0
+        while True:
+            try:
+                pid, status = os.waitpid(self._ppid, os.WNOHANG)
+                break
+            except OSError as ex:
+                if ex.errno == errno.EINTR:
+                    cnt += 1
+                    if cnt >= 5:
+                        raise
+                    continue
+                if ex.errno == errno.ECHILD:
+                    self._wait_status = "already-reaped"
+                    return False
+                raise
+    
+        if pid == 0:
+            return True    
+        self._wait_status = status
+        return False
+     
+    def _signal_process_or_group(self, sig, ppid, pgid=None, wt=0):
         try:
-            if self._ppid>=0:
-                os.waitpid(self._ppid, os.WNOHANG)
-                os.kill(self._ppid, 0) # kill -0 tells us it's still alive
-                return True
+            if pgid is not None:
+                os.killpg(pgid, sig)
             else:
-                return False
-        except OSError:
-            return False
-        
+                os.kill(ppid, sig)
+        except OSError as ex:
+            if ex.errno != errno.ESRCH:
+                raise
+        if wt>0:
+            deadline = time.time() + wt
+            while time.time() < deadline:
+                if not self._process_is_alive():
+                    return
+                time.sleep(0.1)
+    
     def terminate(self):
-        self._login_request=None        
+        self._login_request=None
         try:
-            self._manager._cinfo.dec_activities_value("shellSession")
+            if self._activity_notify==True:
+                self._manager._cinfo.dec_activities_value("shellSession")
+                self._activity_notify=False                
         except:
             None
-        self._bterm=True        
-        if self._reader is not None:
-            try:
-                self._reader.close()
-            except:
-                None
-        if self._writer is not None:
-            try:
-                self._writer.close()
-            except:
-                None
-        if self._ppid>=0:
-            if self._processIsAlive():
+        self._bterm=True
+        try:
+            if self._ppid>=0:
+                if self._process_is_alive():
+                    pgid = None
+                    try:
+                        tmppgid = os.getpgid(self._ppid)
+                        if tmppgid != os.getpgrp():
+                            pgid = tmppgid
+                    except OSError as ex:
+                        if ex.errno != errno.ESRCH:
+                            raise                
+                    self._signal_process_or_group(signal.SIGHUP, self._ppid, pgid, 0.5)
+                    if self._process_is_alive():
+                        self._signal_process_or_group(signal.SIGTERM, self._ppid, pgid, 1.5)
+                    if self._process_is_alive():
+                        self._signal_process_or_group(signal.SIGKILL, self._ppid, pgid, 2.0)                 
+                self._ppid=-1
+            if self._reader is not None:
                 try:
-                    os.kill(self._ppid, signal.SIGTERM)
+                    self._reader.close()
                 except:
                     None
-                time.sleep(0.5)
-            if self._processIsAlive():
+                self._reader=None
+            if self._writer is not None:
                 try:
-                    os.kill(self._ppid, signal.SIGKILL)
-                    os.waitpid(self._ppid, 0)
+                    self._writer.close()
                 except:
                     None
-            self._ppid=-1
+                self._writer=None
+            if self._pio is not None:
+                try:
+                    os.close(self._pio)
+                except:
+                    None
+                self._pio = None
+        except:
+            e = utils.get_exception()
+            self._manager._shlmain._agent_main.write_except(e)            
         
     def is_terminate(self):
         if self._login_request is not None:
             return False
-        if not self._processIsAlive():
+        if not self._process_is_alive():
             self._bterm=True
             return True
         return self._bterm
@@ -871,6 +935,7 @@ class Windows():
         self._pty = None
         self._rwenc="utf8"
         self._login_request=None
+        self._activity_notify=False
 
     def _write_err(self,m):
         self._manager._shlmain._agent_main.write_err("AppShell:: " + m)
@@ -902,6 +967,7 @@ class Windows():
             self._pty.open()        
             try:
                 self._manager._cinfo.inc_activities_value("shellSession")
+                self._activity_notify=True
             except:
                 None
             self._login_request=None
@@ -910,12 +976,17 @@ class Windows():
 
     def terminate(self):
         try:
-            self._manager._cinfo.dec_activities_value("shellSession")
+            if self._activity_notify==True:
+                self._manager._cinfo.dec_activities_value("shellSession")
+                self._activity_notify=False
         except:
             None
         try:
             self._bterm = True
-            self._pty.close()
+            if self._pty is not None:
+                self._pty.close()
+                self._pty.join(5)
+                self._pty=None
         except:
             None
 
